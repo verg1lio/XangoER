@@ -48,3 +48,90 @@ class PWT:
     >>> rotor.MM
     array(30x30)
     """
+
+    def __init__(self, n, m, Id, Ip):
+        self.n = int(n)
+        self.n_l = n
+        self.n_r = n
+
+        self.m = float(m)
+        self.Id = float(Id)
+        self.Ip = float(Ip)
+
+
+    def Battery(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Bat
+
+
+
+    def Conversor(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Conv
+
+
+
+    def Motor(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Mot
+
+
+
+    def Controller(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Cont
+
+
+
