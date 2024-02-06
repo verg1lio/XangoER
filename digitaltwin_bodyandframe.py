@@ -1,7 +1,7 @@
 class BodyAndFrame:
     """A Body And Frame object.
 
-    This class will create a power train digital twin with the springs, suspension bars, damper cylinder, brakes, tires, and transmission elements provided.
+    This class will create a Body And Frame digital twin with the springs, suspension bars, damper cylinder, brakes, tires, and transmission elements provided.
 
     Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
     ----------
