@@ -1,7 +1,7 @@
 class BodyAndFrame:
     """A Body And Frame object.
 
-    This class will create a Body And Frame digital twin with the springs, suspension bars, damper cylinder, brakes, tires, and transmission elements provided.
+    This class will create a Body And Frame digital twin with the chassis elements provided.
 
     Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
     ----------
@@ -48,3 +48,170 @@ class BodyAndFrame:
     >>> rotor.MM
     array(30x30)
     """
+
+
+
+
+    def __init__(self, n, m, Id, Ip):
+        self.n = int(n)
+        self.n_l = n
+        self.n_r = n
+
+        self.m = float(m)
+        self.Id = float(Id)
+        self.Ip = float(Ip)
+        
+
+    def Connect(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Con
+
+
+
+    def ElementMat(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Ele
+
+
+
+    def GlobalMat(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Glo
+
+    
+
+    def ShapeFun(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return SF
+
+
+
+    def WeakForm(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return WF
+
+
+
+    def Mesh(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Mesh
+
+
+
+    def EIGSolver(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return EIG
+
+
+
+    def TIMESolver(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return TIME
+
+
+
+
