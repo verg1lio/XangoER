@@ -48,3 +48,129 @@ class Dynamics:
     >>> rotor.MM
     array(30x30)
     """
+
+
+
+    def __init__(self, n, m, Id, Ip):
+        self.n = int(n)
+        self.n_l = n
+        self.n_r = n
+
+        self.m = float(m)
+        self.Id = float(Id)
+        self.Ip = float(Ip)
+        
+
+    def Spring(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Spr
+
+
+
+    def Suspension(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Sus
+
+
+
+    def Damper(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Dam
+
+    
+
+    def Brake(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Bra
+
+
+
+    def Tire(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Tir
+
+
+
+    def Transmission(self):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
+        
+        return Tra
+
+
