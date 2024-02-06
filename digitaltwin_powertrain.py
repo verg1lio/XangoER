@@ -1,7 +1,7 @@
 class PWT:
     """A PWT (Power Train) object.
 
-    This class will create a power train digital twin with the battery, power conversor, motor and controller elements provided.
+    This class will create a Power Train digital twin with the battery, power conversor, motor and controller elements provided.
 
     Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
     ----------
