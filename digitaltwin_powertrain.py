@@ -50,7 +50,7 @@ class PWT:
     """
 
     def __init__(self, time, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, cnv_input_voltage, 
-                 cnv_output_voltage, cnv_efficiency):
+                 cnv_output_voltage, cnv_efficiency, mot_type, mot_K, mot_T):
         self.bat_capacity = bat_capacity # in Ah
         self.bat_voltage = bat_voltage # in V
         self.bat_current = bat_current # in A
@@ -59,7 +59,14 @@ class PWT:
         self.bat_energy = self.bat_capacity * self.bat_voltage # in Wh
         self.cnv_input_voltage = cnv_input_voltage # in V
         self.cnv_output_voltage = cnv_output_voltage # in V
-        self.cnv_efficiency = cnv_efficiency
+        self.cnv_efficiency = cnv_efficiency # in %
+        self.mot_type = mot_type # Types = DC, Triphase, XXX, XXX
+        self.mot_K = mot_K  # Motor gain
+        self.mot_T = mot_T  # Time constant
+        self.mot_numerator = [K]
+        self.mot_denominator = [T, 1]
+        self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator)
+
 
 
     def Battery(self):
@@ -110,7 +117,7 @@ class PWT:
 
 
 
-    def Motor(self):
+    def Motor(self, input_signal, time):
         """Description.
 
         Detailed description.
@@ -124,8 +131,8 @@ class PWT:
         --------
         >>> example
         """
-        
-        return Mot
+        time, response = signal.step(self.mot_tf, T=time, X0=0.0, input=input_signal)
+        return time, response
 
 
 
