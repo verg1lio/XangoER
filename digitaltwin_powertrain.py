@@ -49,14 +49,13 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, n, m, Id, Ip):
-        self.n = int(n)
-        self.n_l = n
-        self.n_r = n
-
-        self.m = float(m)
-        self.Id = float(Id)
-        self.Ip = float(Ip)
+    def __init__(self, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, time):
+        self.bat_capacity = bat_capacity # in Ah
+        self.bat_voltage = bat_voltage # in V
+        self.bat_current = bat_current # in A
+        self.bat_p_stacks = bat_p_stacks # battery parallel stacks
+        self.bat_s_stacks = bat_s_stacks # battery series stacks
+        self.bat_energy = self.bat_capacity * self.bat_voltage # in Wh
 
 
     def Battery(self):
@@ -73,8 +72,16 @@ class PWT:
         --------
         >>> example
         """
-        
-        return Bat
+        if current <= 0:
+            return 0
+        else:
+            discharge_time = self.bat_capacity / self.bat_current # in hours
+            if discharge_time > time:
+                discharge_time = time
+            discharge_energy = self.bat_current * self.bat_voltage * discharge_time # in Wh
+            self.bat_energy -= discharge_energy
+            self.bat_capacity = self.bat_energy / self.bat_voltage # in Ah
+        return discharge_energy
 
 
 
