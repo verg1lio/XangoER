@@ -70,6 +70,20 @@ class PWT:
         self.mot_denominator = [mot_T, 1]
         self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator)
         
+    def PWT(self, ):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+            Description.
+
+        Examples
+        --------
+        >>> example
+        """
 
 
     def Battery(self):
