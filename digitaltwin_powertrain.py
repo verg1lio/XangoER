@@ -53,8 +53,7 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, time, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, cnv_input_voltage, 
-                 cnv_output_voltage, cnv_efficiency, mot_type, mot_K, mot_T):
+    def __init__(self, time, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, cnv_input_voltage, cnv_output_voltage, cnv_efficiency, mot_type, mot_K, mot_T):
         self.bat_capacity = bat_capacity # in Ah
         self.bat_voltage = bat_voltage # in V
         self.bat_current = bat_current # in A
@@ -67,8 +66,8 @@ class PWT:
         self.mot_type = mot_type # Types = DC, Triphase, XXX, XXX
         self.mot_K = mot_K  # Motor gain
         self.mot_T = mot_T  # Time constant
-        self.mot_numerator = [K]
-        self.mot_denominator = [T, 1]
+        self.mot_numerator = [mot_K]
+        self.mot_denominator = [mot_T, 1]
         self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator)
         
 
@@ -87,12 +86,12 @@ class PWT:
         --------
         >>> example
         """
-        if current <= 0:
+        if self.bat_current <= 0:
             return 0
         else:
             discharge_time = self.bat_capacity / self.bat_current # in hours
-            if discharge_time > time:
-                discharge_time = time
+            if discharge_time > self.time:
+                discharge_time = self.time
             discharge_energy = self.bat_current * self.bat_voltage * discharge_time # in Wh
             self.bat_energy -= discharge_energy
             self.bat_capacity = self.bat_energy / self.bat_voltage # in Ah
@@ -121,7 +120,7 @@ class PWT:
 
 
 
-    def Motor(self, input_signal, time):
+    def Motor(self, input_signal):
         """Description.
 
         Detailed description.
@@ -135,7 +134,7 @@ class PWT:
         --------
         >>> example
         """
-        time, response = signal.step(self.mot_tf, T=time, X0=0.0, input=input_signal)
+        time, response = signal.step(self.mot_tf, T=self.time, X0=0.0, input=input_signal)
         return time, response
 
 
