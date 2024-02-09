@@ -1,3 +1,7 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+
 class PWT:
     """A PWT (Power Train) object.
 
@@ -66,7 +70,7 @@ class PWT:
         self.mot_numerator = [K]
         self.mot_denominator = [T, 1]
         self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator)
-
+        
 
 
     def Battery(self):
@@ -153,5 +157,31 @@ class PWT:
         
         return Cont
 
+
+def example():
+    # Motor parameters
+    K = 1.0       # Motor gain
+    T = 0.1       # Time constant
+
+    # Create the DC motor model
+    mot_tf = signal.TransferFunction([K], [T, 1])
+
+    # Time vector for simulation
+    t = np.linspace(0, 5, 1000)
+
+    # Input voltage (step input)
+    u = np.ones_like(t)
+
+    # Simulate the motor response to the input
+    time, response = mot_tf.simulate(u, t)
+
+    # Plot the step response of the motor
+    plt.figure()
+    plt.plot(time, response)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Angular Velocity')
+    plt.title('Step Response of the DC Motor')
+    plt.grid(True)
+    plt.show()
 
 
