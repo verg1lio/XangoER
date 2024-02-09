@@ -49,13 +49,17 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, time):
+    def __init__(self, time, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, cnv_input_voltage, 
+                 cnv_output_voltage, cnv_efficiency):
         self.bat_capacity = bat_capacity # in Ah
         self.bat_voltage = bat_voltage # in V
         self.bat_current = bat_current # in A
         self.bat_p_stacks = bat_p_stacks # battery parallel stacks
         self.bat_s_stacks = bat_s_stacks # battery series stacks
         self.bat_energy = self.bat_capacity * self.bat_voltage # in Wh
+        self.cnv_input_voltage = cnv_input_voltage # in V
+        self.cnv_output_voltage = cnv_output_voltage # in V
+        self.cnv_efficiency = cnv_efficiency
 
 
     def Battery(self):
@@ -85,7 +89,7 @@ class PWT:
 
 
 
-    def Conversor(self):
+    def Conversor(self, discharge_energy):
         """Description.
 
         Detailed description.
@@ -99,8 +103,10 @@ class PWT:
         --------
         >>> example
         """
-        
-        return Conv
+        input_power = discharge_energy / self.cnv_efficiency
+        cnv_input_current = input_power / self.cnv_input_voltage
+        cnv_output_current = discharge_energy / self.cnv_output_voltage
+        return cnv_input_current, cnv_output_current
 
 
 
