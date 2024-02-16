@@ -10,25 +10,25 @@ class PWT:
     Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
     ----------
     shaft_elements : list
-        List with the shaft elements.
+    List with the shaft elements.
     disk_elements : list
-        List with the disk elements.
+    List with the disk elements.
     bearing_elements : list
-        List with the bearing elements.
+    List with the bearing elements.
     automeshing : boolean
-        Set it True to use the automeshing method. Default is False.
-        If automeshing is True, the previous shaft_elements parameter is now defined by:
-            shaft_elements : list
-                List with the length, inner and outter diameter and material of each element, as follows:
-                    [[length, inner, outter, material],[length, inner, outter, material],...]
-        For the other parameters please check the respective bearing and disk classes for more information.
+    Set it True to use the automeshing method. Default is False.
+    If automeshing is True, the previous shaft_elements parameter is now defined by:
+    shaft_elements : list
+    List with the length, inner and outter diameter and material of each element, as follows:
+    [[length, inner, outter, material],[length, inner, outter, material],...]
+    For the other parameters please check the respective bearing and disk classes for more information.
     **kwargs : dict, optional
-        If automeshing is True, these parameters needs to be informed.
-        The possible arguments are:
-            alpha : float
-                Proportional damping coefficient, associated to the element Mass matrix
-            beta : float
-                Proportional damping coefficient, associated to the element Stiffness matrix
+    If automeshing is True, these parameters needs to be informed.
+    The possible arguments are:
+    alpha : float
+    Proportional damping coefficient, associated to the element Mass matrix
+    beta : float
+    Proportional damping coefficient, associated to the element Stiffness matrix
 
     Returns
     -------
@@ -37,13 +37,13 @@ class PWT:
     Attributes
     ----------
     MM : array
-        Global mass matrix.
+    Global mass matrix.
     KK : array
-        Global stiffness matrix.
+    Global stiffness matrix.
     CCgyros: array
-        Global gyroscopic matrix.
+    Global gyroscopic matrix.
     CCtotal: array
-        Global damping matrix
+    Global damping matrix
 
     Examples
     --------
@@ -53,7 +53,11 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, time, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, cnv_input_voltage, cnv_output_voltage, cnv_efficiency, mot_type, mot_K, mot_T):
+    def __init__(self, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, 
+    cnv_input_voltage, cnv_output_voltage, cnv_efficiency, 
+    mot_type, mot_K, mot_T, 
+    time=None):
+    # time):
         self.bat_capacity = bat_capacity # in Ah
         self.bat_voltage = bat_voltage # in V
         self.bat_current = bat_current # in A
@@ -64,26 +68,32 @@ class PWT:
         self.cnv_output_voltage = cnv_output_voltage # in V
         self.cnv_efficiency = cnv_efficiency # in %
         self.mot_type = mot_type # Types = DC, Triphase, XXX, XXX
-        self.mot_K = mot_K  # Motor gain
-        self.mot_T = mot_T  # Time constant
+        self.mot_K = mot_K # Motor gain
+        self.mot_T = mot_T # Time constant
         self.mot_numerator = [mot_K]
-        self.mot_denominator = [mot_T, 1]
-        self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator)
-        
+        self.mot_denominator = [mot_T, 1] 
+        self.mot_tf = signal.TransferFunction(self.mot_numerator, self.mot_denominator) # Usado na função de exemplo
+
+    #Podemos entrar com a variável time, ou utilizar valores da capacidade/corrente da bateria.
+        if time == None:
+            self.time = self.bat_capacity / self.bat_current #A*h/A = h
+        else:
+            self.time = time #Talvez esse seja a única versão "correta"
+
     def PWT(self, ):
         """Description.
 
-        Detailed description.
+    Detailed description.
 
-        Returns
-        -------
-        Bat : variable type
-            Description.
+    Returns
+    -------
+    Bat : variable type
+    Description.
 
-        Examples
-        --------
-        >>> example
-        """
+    Examples
+    --------
+    >>> example
+    """
 
 
     def Battery(self):
@@ -94,7 +104,7 @@ class PWT:
         Returns
         -------
         Bat : variable type
-            Description.
+        Description.
 
         Examples
         --------
@@ -104,11 +114,11 @@ class PWT:
             return 0
         else:
             discharge_time = self.bat_capacity / self.bat_current # in hours
-            if discharge_time > self.time:
-                discharge_time = self.time
-            discharge_energy = self.bat_current * self.bat_voltage * discharge_time # in Wh
-            self.bat_energy -= discharge_energy
-            self.bat_capacity = self.bat_energy / self.bat_voltage # in Ah
+        if discharge_time > self.time:
+            discharge_time = self.time
+        discharge_energy = self.bat_current * self.bat_voltage * discharge_time # in Wh
+        self.bat_energy -= discharge_energy
+        self.bat_capacity = self.bat_energy / self.bat_voltage # in Ah
         return discharge_energy
 
 
@@ -121,7 +131,7 @@ class PWT:
         Returns
         -------
         Bat : variable type
-            Description.
+        Description.
 
         Examples
         --------
@@ -134,7 +144,8 @@ class PWT:
 
 
 
-    def Motor(self, input_signal):
+    # def Motor(self, input_signal): Original
+    def Motor(self):
         """Description.
 
         Detailed description.
@@ -142,13 +153,15 @@ class PWT:
         Returns
         -------
         Bat : variable type
-            Description.
+        Description.
 
         Examples
         --------
         >>> example
         """
-        time, response = signal.step(self.mot_tf, T=self.time, X0=0.0, input=input_signal)
+
+
+        time, response = signal.step(self.mot_tf, T = np.linspace(0,self.time,10000), X0=0.0)
         return time, response
 
 
@@ -161,20 +174,19 @@ class PWT:
         Returns
         -------
         Bat : variable type
-            Description.
+        Description.
 
         Examples
         --------
         >>> example
         """
-        
+
         return Cont
-
-
+    
 def example():
     # Motor parameters
-    K = 1.0       # Motor gain
-    T = 0.1       # Time constant
+    K = 1.0 # Motor gain
+    T = 0.1 # Time constant
 
     # Create the DC motor model
     mot_tf = signal.TransferFunction([K], [T, 1])
@@ -196,5 +208,25 @@ def example():
     plt.title('Step Response of the DC Motor')
     plt.grid(True)
     plt.show()
+    powertrain = PWT(bat_capacity = 10, 
+    bat_voltage = 2, 
+    bat_current = 1, 
+    bat_p_stacks = 1, 
+    bat_s_stacks = 1, 
+    cnv_input_voltage = 1, 
+    cnv_output_voltage = 1, 
+    cnv_efficiency = 1, 
+    mot_type = "ACREDITO SER UMA STRING", #Tipo do motor, DC/Triphase/Etc (Corrente Direta/Trifásico)
+    mot_K = 20, # Velocidade Angular do Motor 
+    mot_T = 10) # Constante de tempo
 
+    tempo_motor = powertrain.Motor()[0]
+    resposta_motor = powertrain.Motor()[1]
 
+    plt.figure()
+    plt.plot(tempo_motor, resposta_motor)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Angular Velocity')
+    plt.title('Step Response of the DC Motor')
+    plt.grid(True)
+    plt.show()
