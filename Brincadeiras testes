@@ -27,3 +27,7 @@ if deformacoes <= 0:
     print("Condição: Aprovada (deformação elástica).")
 else:
     print("Condição: Reprovada (deformação plástica).")
+
+# Revisar as formulas
+# Condição de teste para 500N: Ok!
+# A titulo de informação a força está em N, o tubo é de perfil circular dado em polegadas, mas converto para metros logo no começo.
