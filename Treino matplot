@@ -1,0 +1,55 @@
+#Esse codigo gera um gráfico de um trabalho meu em que eu tento fazer a aproximação linear e quadrática(polinomios de taylor) da F(x,y)=(x+y)e^y no ponto (1,0)
+
+import sympy as sp
+import numpy as np
+import matplotlib.pyplot as plt
+
+x, y = sp.symbols('x y')
+f = (x + y) * sp.exp(y)
+
+a = 1
+b = 0
+
+df_dx = sp.diff(f, x)
+df_dy = sp.diff(f, y)
+
+L = f.subs({x: a, y: b}) + df_dx.subs({x: a, y: b}) * (x - a) + df_dy.subs({x: a, y: b}) * (y - b)
+
+df_dx2 = sp.diff(df_dx, x)
+df_dy2 = sp.diff(df_dy, y)
+df_dxdy = sp.diff(df_dx, y)
+
+df_dx2_a_b = df_dx2.subs({x: a, y: b})
+df_dy2_a_b = df_dy2.subs({x: a, y: b})
+df_dxdy_a_b = df_dxdy.subs({x: a, y: b})
+
+Q = L + (df_dx2_a_b * (x - a)**2) / 2 + df_dxdy_a_b * (x - a) * (y - b) + (df_dy2_a_b * (y - b)**2) / 2
+
+approximation_L = sp.lambdify((x, y), L, 'numpy')
+approximation_Q = sp.lambdify((x, y), Q, 'numpy')
+
+X = np.linspace(0.5, 1.5, 100)
+Y = np.linspace(-0.5, 0.5, 100)
+X, Y = np.meshgrid(X, Y)
+Z = (X + Y) * np.exp(Y)
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(X, Y, Z, cmap='viridis', color='pink' , alpha=0.5)
+
+Z_L = approximation_L(X, Y)
+ax.plot_surface(X, Y, Z_L, color='r', alpha=0.5)
+
+Z_Q = approximation_Q(X, Y)
+ax.plot_surface(X, Y, Z_Q, color='g', alpha=0.5)
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+legend1 = ax.legend(['Função Original: f(x,y)=(x+y)e^y', 'Aproximação de 1º Grau', 'Aproximação de 2º Grau'], loc='upper left')
+#legend2 = ax.legend(['A aproximação é perfeitamente coincidente em ambos os polinomios, denotado por até 15 casas decimais igual'], loc='upper right') DESATIVADA POR MOTIVOS DE ESTOU PENSANDO EM O QUE USAR
+
+ax.add_artist(legend1)
+#ax.add_artist(legend2)
+
+plt.show()
