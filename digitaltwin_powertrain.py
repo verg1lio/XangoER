@@ -9,8 +9,8 @@ class PWT:
 
     Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
     ----------
-    shaft_elements : list
-    List with the shaft elements.
+    bat_type : string
+    String descevendo modelo usado para a bateria. No momento temos implementado:
     disk_elements : list
     List with the disk elements.
     bearing_elements : list
@@ -53,17 +53,24 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, bat_capacity, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, 
+    def __init__(self, bat_type, bat_Idis, bat_t, bat_Es, bat_K, bat_Q, bat_A, bat_B, bat_Iast, bat_R, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, 
     cnv_input_voltage, cnv_output_voltage, cnv_efficiency, 
     mot_type, mot_K, mot_T, 
     time=None):
     # time):
-        self.bat_capacity = bat_capacity # in Ah
-        self.bat_voltage = bat_voltage # in V
-        self.bat_current = bat_current # in A
-        self.bat_p_stacks = bat_p_stacks # battery parallel stacks
-        self.bat_s_stacks = bat_s_stacks # battery series stacks
-        self.bat_energy = self.bat_capacity * self.bat_voltage # in Wh
+        if bat_type == None:
+            self.bat_type = 'Modified Shepherd'
+        else:
+            self.bat_type = bat_type 
+        self.bat_Idis = bat_Idis # Idis is the current discharge
+        self.bat_t = bat_t # Depicts the sampling time
+        self.bat_Es = bat_Es # Es represents the open-circuit voltage
+        self.bat_K = bat_K # K indicates the change in polarization resistance factor in (mΩ A/h)
+        self.bat_Q = bat_Q # Q: is the battery nominal capacity (Ah)
+        self.bat_A = bat_A # A: voltage factor
+        self.bat_B = bat_B # B: capacity factor.
+        self.bat_Iast = bat_Iast # depicts the filtered current
+        self.bat_R = bat_R # R is the internal resistance 
         self.cnv_input_voltage = cnv_input_voltage # in V
         self.cnv_output_voltage = cnv_output_voltage # in V
         self.cnv_efficiency = cnv_efficiency # in %
