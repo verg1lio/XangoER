@@ -1,1 +1,33 @@
 
+
+modulo_elasticidade_aco_1020 = 200e9  # Pa (módulo de elasticidade do aço 1020)
+
+
+diametro_polegadas = 1  # Diâmetro em polegadas
+espessura_polegadas = 1.6  # Espessura em polegadas
+
+diametro_metros = diametro_polegadas * 0.0254  # Convertendo polegadas para metros
+espessura_metros = espessura_polegadas * 0.0254  # Convertendo polegadas para metros
+
+
+
+momento_inercia = (np.pi / 64) * (diametro_metros**4 - (diametro_metros - 2 * espessura_metros)**4)
+
+
+comprimento_viga = 5.0  # 5 metros
+
+
+forca = 500  # 500N aplicados na extremidade
+
+
+posicao_carga = comprimento_viga / 2
+momento_fletor = forca * posicao_carga
+
+
+deformacoes = calcular_deformacoes(momento_fletor, comprimento_viga, modulo_elasticidade_aco_1020, momento_inercia)
+
+
+if deformacoes <= 0:
+    print("Condição: Aprovada (deformação elástica).")
+else:
+    print("Condição: Reprovada (deformação plástica).")
