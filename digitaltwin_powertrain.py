@@ -53,7 +53,7 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, bat_type, bat_Idis, bat_t, bat_Es, bat_K, bat_Q, bat_A, bat_B, bat_Iast, bat_R, bat_voltage, bat_current, bat_p_stacks, bat_s_stacks, 
+    def __init__(self, bat_type, bat_Idis, bat_t, bat_Es, bat_K, bat_Q, bat_A, bat_B, bat_Iast, bat_R,
     cnv_input_voltage, cnv_output_voltage, cnv_efficiency, 
     mot_type, mot_K, mot_T, 
     time=None):
@@ -117,16 +117,10 @@ class PWT:
         --------
         >>> example
         """
-        if self.bat_current <= 0:
-            return 0
-        else:
-            discharge_time = self.bat_capacity / self.bat_current # in hours
-        if discharge_time > self.time:
-            discharge_time = self.time
-        discharge_energy = self.bat_current * self.bat_voltage * discharge_time # in Wh
-        self.bat_energy -= discharge_energy
-        self.bat_capacity = self.bat_energy / self.bat_voltage # in Ah
-        return discharge_energy
+        if self.bat_type == 'Modified Shepherd':
+            V_dis = self.bat_Es - self.bat_R * self.bat_Idis - self.bat_K * (self.bat_Q / (self.bat_Q - (self.bat_Idis * self.bat_t))) * ((self.bat_Idis * self.bat_t) + self.bat_Iast) + self.bat_A  * np.exp(- self.bat_B * self.bat_Idis * self.bat_t) 
+
+        return V_dis
 
 
 
