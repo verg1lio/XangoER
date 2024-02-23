@@ -28,8 +28,8 @@ Q = L + (df_dx2_a_b * (x - a)**2) / 2 + df_dxdy_a_b * (x - a) * (y - b) + (df_dy
 approximation_L = sp.lambdify((x, y), L, 'numpy')
 approximation_Q = sp.lambdify((x, y), Q, 'numpy')
 
-X = np.linspace(0.5, 1.5, 100)
-Y = np.linspace(-0.5, 0.5, 100)
+X = np.linspace(0.5, 1.5, 10)
+Y = np.linspace(-0.5, 0.5, 10)
 X, Y = np.meshgrid(X, Y)
 Z = (X + Y) * np.exp(Y)
 
