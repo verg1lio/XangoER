@@ -1,13 +1,13 @@
 
 
-modulo_elasticidade_aco_1020 = 200e9  # Pa (módulo de elasticidade do aço 1020)
+modulo_elasticidade_aco_1020 = 200e9 
 
 
 diametro_polegadas = 1  # Diâmetro em polegadas
 espessura_polegadas = 1.6  # Espessura em polegadas
 
-diametro_metros = diametro_polegadas * 0.0254  # Convertendo polegadas para metros
-espessura_metros = espessura_polegadas * 0.0254  # Convertendo polegadas para metros
+diametro_metros = diametro_polegadas * 0.0254  
+espessura_metros = espessura_polegadas * 0.0254  
 
 
 
