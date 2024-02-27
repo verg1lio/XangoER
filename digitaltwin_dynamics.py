@@ -51,14 +51,10 @@ class Dynamics:
 
 
 
-    def __init__(self, n, m, Id, Ip):
-        self.n = int(n)
-        self.n_l = n
-        self.n_r = n
-
-        self.m = float(m)
-        self.Id = float(Id)
-        self.Ip = float(Ip)
+    def __init__(self, spring_type, spring_k, spring_F):
+        self.spring_type = spring_type # Hooke, 
+        self.spring_k = spring_k # rigidez da mola [N/m]
+        self.spring_F = spring_F # força que a mola recebe [N]
         
 
     def Spring(self):
@@ -75,8 +71,10 @@ class Dynamics:
         --------
         >>> example
         """
-        
-        return Spr
+        if self.spring_type == 'Hooke':
+            spring_x = self.spring_F/self.spring_k
+
+        return spring_x
 
 
 
