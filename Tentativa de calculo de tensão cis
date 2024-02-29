@@ -1,17 +1,3 @@
-# MONTANDO ELEMENTOS DO AÇO 1020
-# rho = int(7810)
-# E = int(205e9) esses eram os parametros do Ross da petro.
-# G_s = int(80e9)
-# resistencia_tracao = Tr     
-# resistencia_cisalhamento = Cis
-# dureza_brinell = Dbr
-# densidade = Dens
-# modulo_elasticidade = ME 
-# Q= momento estático da área A’ em relação à LN (linha neutra)
-# τ = tensão de cisalhamento no elemento
-# V = força de cisalhamento interna resultante
-# I = momento de inércia da área da seção transversal inteira
-# t = largura da área da seção transversal do elemento
 class Material:
     def __init__(self, tensao_type=None, rho=None, E=None, G_s=None, V=None, Q=None, I=None, t=None, Tr=None, Cis=None,
                  Dbr=None, Dens=None, ME=None):
@@ -35,17 +21,32 @@ class Material:
 
     def tensão_cisalhamento(self):
         if self.tensao_type == 'Tensão de cisalhamento':
-            tensão = (self.V * self.Q) / (self.I * self.t)
+            tensão = (self.V * self.Q) / (self.I * self.t) # Tensão de cisalhamento dada por VQ/It
             return tensão
 
     def resmat(self):
         if self.tensão_cisalhamento() > self.Cis:
-            return "reprovado"
+            return "Reprovado"
         else:
-            return "aprovado"
+            return "Aprovado"
 
 
-Parametros = Material(V=450e9, Q=50, I=200, t=10) 
+Parametros = Material(V=450e9, Q=50, I=200, t=10)
 
 print("Tensão de cisalhamento:", Parametros.tensão_cisalhamento())
 print("Resultado da avaliação do material:", Parametros.resmat())
+
+#Legenda:
+# [rho = int(7810)
+# E = int(205e9)
+# G_s = int(80e9)]
+# resistencia_tracao = Tr     
+# resistencia_cisalhamento = Cis
+# dureza_brinell = Dbr
+# densidade = Dens
+# modulo_elasticidade = ME 
+# Q= momento estático da área A’ em relação à LN (linha neutra)
+# τ = tensão de cisalhamento no elemento
+# V = força de cisalhamento interna resultante
+# I = momento de inércia da área da seção transversal inteira
+# t = largura da área da seção transversal do elemento
