@@ -21,25 +21,32 @@ class Material:
 
     def tensão_cisalhamento(self):
         if self.tensao_type == 'Tensão de cisalhamento':
-            tensão = (self.V * self.Q) / (self.I * self.t) # Tensão de cisalhamento dada por VQ/It
+            tensão = (self.V * self.Q) / (self.I * self.t)
             return tensão
 
     def resmat(self):
         if self.tensão_cisalhamento() > self.Cis:
-            return "Reprovado"
+            return "reprovado"
         else:
-            return "Aprovado"
+            return "aprovado"
 
 
-Parametros = Material(V=450e9, Q=50, I=200, t=10)
+Parametros1 = Material(V=370e6, Q=50, I=100, t=10) 
+Parametros2 = Material(V=370e6, Q=50, I=100, t=10)
 
-print("Tensão de cisalhamento:", Parametros.tensão_cisalhamento())
-print("Resultado da avaliação do material:", Parametros.resmat())
+print("Tensão de cisalhamento viga 1:", Parametros1.tensão_cisalhamento())
+print("Resultado da avaliação do material da viga 1:", Parametros1.resmat())
+print()
+print()
+print("Tensão de cisalhamento viga 2:", Parametros2.tensão_cisalhamento())
+print("Resultado da avaliação do material da viga 2:", Parametros2.resmat())
 
-#Legenda:
-# [rho = int(7810)
-# E = int(205e9)
-# G_s = int(80e9)]
+
+
+# MONTANDO ELEMENTOS DO AÇO 1020
+# rho = int(7810)
+# E = int(205e9) esses eram os parametros do Ross da petro.
+# G_s = int(80e9)
 # resistencia_tracao = Tr     
 # resistencia_cisalhamento = Cis
 # dureza_brinell = Dbr
