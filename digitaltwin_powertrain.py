@@ -125,8 +125,8 @@ class PWT:
             V_dis = self.bat_Es - self.bat_R * self.bat_Idis - self.bat_K * (self.bat_Q / (self.bat_Q - (self.bat_Idis * self.bat_t))) * ((self.bat_Idis * self.bat_t) + self.bat_Iast) + self.bat_A  * np.exp(- self.bat_B * self.bat_Idis * self.bat_t) 
             V_ch = self.bat_Es - self.bat_R * self.bat_Ich - self.bat_K * (self.bat_Q / ( (self.bat_Ich * self.bat_t) - 0.1*self.bat_Q )) * self.bat_Iast - self.bat_K*(((self.bat_Q)/(self.bat_Q-(self.bat_Ich*self.bat_t))) * (self.bat_Ich* self.bat_t)) + self.bat_A  * np.exp(- self.bat_B * self.bat_Ich * self.bat_t)
         elif self.bat_type == 'Rint model':
-            V_dis = 27 - self.bat_R * self.bat_Idis 
-            V_ch =  27 - self.bat_R * self.bat_Ich 
+            V_dis = self.bat_Es - self.bat_R * self.bat_Idis 
+            V_ch =  self.bat_Es - self.bat_R * self.bat_Ich 
         return V_dis, V_ch
 
 
@@ -197,7 +197,7 @@ def example():
     T = 0.1 # Time constant
 
     # Create the DC motor model
-    mot_tf = signal.TransferFunction([K], [T, 1])
+    mot_tf = signal.TransferFunction([K], [T, 100])
 
     # Time vector for simulation
     t = np.linspace(0, 5, 1000)
@@ -206,7 +206,7 @@ def example():
     u = np.ones_like(t)
 
     # Simulate the motor response to the input
-    time, response = mot_tf.simulate(u, t)
+    time, response = signal.step(mot_tf, T=t)
 
     # Plot the step response of the motor
     plt.figure()
