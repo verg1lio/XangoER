@@ -53,16 +53,20 @@ class PWT:
     array(30x30)
     """
 
-    def __init__(self, bat_type, bat_Idis, bat_t, bat_Es, bat_K, bat_Q, bat_A, bat_B, bat_Iast, bat_R,
+    def __init__(self, bat_type, bat_Idis, bat_Ich, bat_t, bat_Es, bat_K, bat_Q, bat_A, bat_B, bat_Iast, bat_R,
     cnv_input_voltage, cnv_output_voltage, cnv_efficiency, 
     mot_type, mot_K, mot_T, 
     time=None):
     # time):
-        if bat_type == None:
+        model = input('Select model: S for Shepherd or R for Rint: ').strip().upper()
+        if bat_type == 'S':
             self.bat_type = 'Modified Shepherd'
+        elif bat_type == 'R':
+            self.bat_type = 'Rint model'
         else:
             self.bat_type = bat_type 
         self.bat_Idis = bat_Idis # Idis is the current discharge
+        self.bat_Ich = bat_Ich # Ich is the current charge
         self.bat_t = bat_t # Depicts the sampling time
         self.bat_Es = bat_Es # Es represents the open-circuit voltage
         self.bat_K = bat_K # K indicates the change in polarization resistance factor in (mΩ A/h)
@@ -119,8 +123,11 @@ class PWT:
         """
         if self.bat_type == 'Modified Shepherd':
             V_dis = self.bat_Es - self.bat_R * self.bat_Idis - self.bat_K * (self.bat_Q / (self.bat_Q - (self.bat_Idis * self.bat_t))) * ((self.bat_Idis * self.bat_t) + self.bat_Iast) + self.bat_A  * np.exp(- self.bat_B * self.bat_Idis * self.bat_t) 
-
-        return V_dis
+            V_ch = self.bat_Es - self.bat_R * self.bat_Ich - self.bat_K * (self.bat_Q / ( (self.bat_Ich * self.bat_t) - 0.1*self.bat_Q )) * self.bat_Iast - self.bat_K*(((self.bat_Q)/(self.bat_Q-(self.bat_Ich*self.bat_t))) * (self.bat_Ich* self.bat_t)) + self.bat_A  * np.exp(- self.bat_B * self.bat_Ich * self.bat_t)
+        elif self.bat_type == 'Rint model':
+            V_dis = 27 - self.bat_R * self.bat_Idis 
+            V_ch =  27 - self.bat_R * self.bat_Ich 
+        return V_dis, V_ch
 
 
 
@@ -182,7 +189,7 @@ class PWT:
         >>> example
         """
 
-        return Cont
+        #return Cont
     
 def example():
     # Motor parameters
@@ -231,3 +238,5 @@ def example():
     plt.title('Step Response of the DC Motor')
     plt.grid(True)
     plt.show()
+
+example()
