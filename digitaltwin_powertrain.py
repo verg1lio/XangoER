@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 
+#commit
 class PWT:
     """A PWT (Power Train) object.
 
