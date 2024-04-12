@@ -134,7 +134,8 @@ class PWT:
     def Conversor(self, discharge_energy):
         """Description.
 
-        Detailed description.
+        Simulates a power system converter that converts input power to output power
+        based on the provided conversion efficiency.
 
         Returns
         -------
