@@ -55,6 +55,7 @@ class Dynamics:
         self.spring_type = spring_type # Hooke, 
         self.spring_k = spring_k # rigidez da mola [N/m]
         self.spring_F = spring_F # força que a mola recebe [N]
+        self.spring_non_lin_coef = spring_non_lin_coef # coeficiente de ganho não-linear
         
 
     def Spring(self):
@@ -73,6 +74,8 @@ class Dynamics:
         """
         if self.spring_type == 'Hooke':
             spring_x = self.spring_F/self.spring_k
+        if self.spring_type == 'Softening'
+            spring_x = self.spring_F/(self.spring_non_lin_coef*(self.spring_k)**2)
 
         return spring_x
 
