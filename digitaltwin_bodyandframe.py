@@ -1,83 +1,42 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import math as m
+
 class BodyAndFrame:
-    """A Body And Frame object.
 
-    This class will create a Body And Frame digital twin with the chassis elements provided.
-
-    Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
-    ----------
-    shaft_elements : list
-        List with the shaft elements.
-    disk_elements : list
-        List with the disk elements.
-    bearing_elements : list
-        List with the bearing elements.
-    automeshing : boolean
-        Set it True to use the automeshing method. Default is False.
-        If automeshing is True, the previous shaft_elements parameter is now defined by:
-            shaft_elements : list
-                List with the length, inner and outter diameter and material of each element, as follows:
-                    [[length, inner, outter, material],[length, inner, outter, material],...]
-        For the other parameters please check the respective bearing and disk classes for more information.
-    **kwargs : dict, optional
-        If automeshing is True, these parameters needs to be informed.
-        The possible arguments are:
-            alpha : float
-                Proportional damping coefficient, associated to the element Mass matrix
-            beta : float
-                Proportional damping coefficient, associated to the element Stiffness matrix
-
-    Returns
-    -------
-    A rotor object.
-
-    Attributes
-    ----------
-    MM : array
-        Global mass matrix.
-    KK : array
-        Global stiffness matrix.
-    CCgyros: array
-        Global gyroscopic matrix.
-    CCtotal: array
-        Global damping matrix
-
-    Examples
-    --------
-    >>> import lmest_rotor as lm
-    >>> rotor = lm.rotor_example()
-    >>> rotor.MM
-    array(30x30)
-    """
+    """parameters
+    __________________
+    
+    A: cross section area
+    E: elastic modulos
+    L: length
+    I: second moment area"""
+    
 
 
-
-
-    def __init__(self, n, m, Id, Ip):
-        self.n = int(n)
-        self.n_l = n
-        self.n_r = n
-
-        self.m = float(m)
-        self.Id = float(Id)
-        self.Ip = float(Ip)
+     def __init__(self,A, E, L, I):
+        self.A = float(A)
+        self.E = float(E)
+        self.L = float(L)
+        self.I = float(I)
         
-
-    def Connect(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
+ def bar(self, E, A, L)
+#matriz nodal de elemento de barra
+        self.result= np.array([[E*A/L, -E*A/L],
+                               [-E*A/L, E*A/L]])
         
-        return Con
+        return bar 
+        
+        
+    def beam(self, E, I, L)
+#matriz nodal elemento de viga
+        self.result= np.array([[12*E*I/L**3, 6*E*I/L**2, -12*E*I/L**3, 6*E*L/L**2],
+                               [6*E*L/L**2, 4*E*I/L, -6*E*L/L**2, 2*E*I/L],
+                              [-12*E*I/L**3, -6*E*L/L**2, 12*E*I/L**3, -6*E*L/L**2],
+                              [6*E*I/L**2, 2*E*I/L, -6*E*L/L**2, 4*E*I/L ]])
+        
+        return beam
+    
 
 
 
