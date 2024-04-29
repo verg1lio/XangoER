@@ -22,6 +22,7 @@ class BodyAndFrame:
         
  def bar(self, E, A, L)
 #matriz nodal de elemento de barra
+#Ainda precisa integrar o angulo de torção na matriz
         self.result= np.array([[E*A/L, -E*A/L],
                                [-E*A/L, E*A/L]])
         
