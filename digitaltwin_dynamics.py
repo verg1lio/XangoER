@@ -51,7 +51,7 @@ class Dynamics:
 
 
 
-     def __init__(self, spring_type, spring_k, spring_F, spring_non_lin_coef, tire_Fz, tire_Sa, tire_Ls, tire_type):
+     def __init__(self, spring_type, spring_k, spring_F, spring_non_lin_coef, tire_Fz, tire_Sa, tire_Ls):
         # Modelo de mola
         self.spring_type = spring_type  # Hooke, Softening
         self.spring_k = spring_k  # rigidez da mola [N/m]
@@ -61,7 +61,7 @@ class Dynamics:
         self.tire_Fz = tire_Fz  # carga vertical no pneu [N]
         self.tire_Sa = tire_Sa  # slip angle do pneu [rad]
         self.tire_Ls = tire_Ls  # longitudinal slip do pneu [Admensional]
-        self.tire_type = tire_type  # Default, Admensional
+        self.tire_type = 'Default'
         
 
     def Spring(self):
@@ -144,22 +144,28 @@ class Dynamics:
 
 
 
-    def Tire(self):
-        """Description.
+     def Tire(self):
+        # Pacejka parâmetros
+        E = -1
+        Cy = 1.4  # C para força lateral
+        Cx = 1.65  # C para força longitudinal
+        Cz = 1  # C para momento de torque auto-alinhante
+        c1 = 54000
+        c2 = 6600
+        Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
 
-        Detailed description.
+        if self.tire_type == 'Default':
+            D = 1.45 * self.tire_Fz
+            Bz = Cs / (Cz * D)
+            Bx = Cs / (Cx * D)
+            By = Cs / (Cy * D)
+            tire_lateral_force = D * np.sin(Cy * np.arctan(By * self.tire_Sa - E * (By * self.tire_Sa - np.arctan(By * self.tire_Sa))))
+            tire_longitudinal_force = D * np.sin(Cx * np.arctan(Bx * self.tire_Ls - E * (Bx * self.tire_Ls - np.arctan(Bx * self.tire_Ls))))
+            tire_auto_align_moment = D * np.sin(Cz * np.arctan(Bz * self.tire_Sa - E * (Bz * self.tire_Sa - np.arctan(Bz * self.tire_Sa))))
 
-        Returns
-        -------
-        Bat : variable type
-            Description.
 
-        Examples
-        --------
-        >>> example
-        """
-        
-        return Tir
+
+        return tire_lateral_force, tire_longitudinal_force, (tire_auto_align_moment/55)
 
 
 
