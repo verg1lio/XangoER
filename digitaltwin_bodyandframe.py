@@ -1,217 +1,66 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
 class BodyAndFrame:
-    """A Body And Frame object.
-
-    This class will create a Body And Frame digital twin with the chassis elements provided.
-
-    Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
-    ----------
-    shaft_elements : list
-        List with the shaft elements.
-    disk_elements : list
-        List with the disk elements.
-    bearing_elements : list
-        List with the bearing elements.
-    automeshing : boolean
-        Set it True to use the automeshing method. Default is False.
-        If automeshing is True, the previous shaft_elements parameter is now defined by:
-            shaft_elements : list
-                List with the length, inner and outter diameter and material of each element, as follows:
-                    [[length, inner, outter, material],[length, inner, outter, material],...]
-        For the other parameters please check the respective bearing and disk classes for more information.
-    **kwargs : dict, optional
-        If automeshing is True, these parameters needs to be informed.
-        The possible arguments are:
-            alpha : float
-                Proportional damping coefficient, associated to the element Mass matrix
-            beta : float
-                Proportional damping coefficient, associated to the element Stiffness matrix
-
-    Returns
-    -------
-    A rotor object.
-
-    Attributes
-    ----------
-    MM : array
-        Global mass matrix.
-    KK : array
-        Global stiffness matrix.
-    CCgyros: array
-        Global gyroscopic matrix.
-    CCtotal: array
-        Global damping matrix
-
-    Examples
-    --------
-    >>> import lmest_rotor as lm
-    >>> rotor = lm.rotor_example()
-    >>> rotor.MM
-    array(30x30)
+    
     """
+    parameters:
+    ________________
+    
+    A: cross_section area
+    E: elastic modulos
+    L: length of beam
+    I: second momento of area 
+    
+    
+    return: elemental sitffiness beam
+    """
+    
 
 
-
-
-    def __init__(self, n, m, Id, Ip):
-        self.n = int(n)
-        self.n_l = n
-        self.n_r = n
-
-        self.m = float(m)
-        self.Id = float(Id)
-        self.Ip = float(Ip)
+    def __init__(self,A, E, L, I):
+        self.A = A
+        self.E = E
+        self.L = L
+        self.I = I
         
 
-    def Connect(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
+    def bar(self, E, A, L):
+        self.result= np.array([[E*A/L, -E*A/L],
+                               [-E*A/L, E*A/L]])
         
-        return Con
-
-
-
-    def ElementMat(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
+        return self.result
         
-        return Ele
+        
+    def beam(self, E, I, L):
+        self.result= np.array([[12*E*I/L**3, 6*E*I/L**2, -12*E*I/L**3, 6*E*L/L**2],
+                               [6*E*L/L**2, 4*E*I/L, -6*E*L/L**2, 2*E*I/L],
+                              [-12*E*I/L**3, -6*E*L/L**2, 12*E*I/L**3, -6*E*L/L**2],
+                              [6*E*I/L**2, 2*E*I/L, -6*E*L/L**2, 4*E*I/L ]])
+        
+        return self.result
+        
+
+
+    def ElementMat(self, A, E, L, I):
+        self.result=np.array([[A*E/L,0,0,-A*E/L,0,0],
+                      [0,12*E*I/L**3,6*E*I/L**2,0,-12*E*I/L**3,6*E*I/L**2],
+                      [0,6*E*I/L**2,4*E*I/L,0,-6*E*I/L**2,2*E*I/L],
+                      [-A*E/L,0,0,A*E/L,0,0],
+                      [0,-12*E*I/L**3,-6*E*I/L**2,0,12*E*I/L**3,-6*E*I/L**2],
+                      [0,6*E*I/L**2,2*E*I/L,0,-6*E*I/L**2,4*E*I/L]])
+        
+        
+        return self.result
 
 
 
     def GlobalMat(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
+        num_nodes=
+        num_liber_per_node=
+        num_liber= num_liber_per_node*num_node
+        num_elements=
+        element_conec=
         
-        return Glo
-
-    
-
-    def ShapeFun(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return SF
-
-
-
-    def WeakForm(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return WF
-
-
-
-    def Mesh(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return Mesh
-
-
-
-    def EIGSolver(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return EIG
-
-
-
-    def TIMESolver(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return TIME
-
-
-
-
+        K_global= np.zeros((num_liber, num_liber))
