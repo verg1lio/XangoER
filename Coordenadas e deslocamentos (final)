@@ -1,0 +1,39 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Coordenadas dos nós (x, y)
+nós = np.array([[0, 0],      # Nó A
+[0.5, 1],    # Nó B
+[1, 1],      # Nó C
+[1.5, 1],    # Nó D
+[2, 0.5],    # Nó E
+[2.5, 0.5],  # Nó F
+[3, 0]])     # Nó G
+
+# Deslocamentos (x, y) - Deslocamentos fictícios
+deslocamento = np.array([[0.1, 0.2],  # Deslocamento do nó A
+[0.05, 0.15],# Deslocamento do nó B
+[0.1, 0.1],  # Deslocamento do nó C
+[0.15, 0.3], # Deslocamento do nó D
+[0.2, 0.4],  # Deslocamento do nó E
+[0.25, 0.35],# Deslocamento do nó F
+[0.3, 0.5]]) # Deslocamento do nó G
+
+# exibição da Matriz
+print("Matriz de coordenadas dos nós (x, y):")
+print(nós)
+
+# Gráfico de nós e deslocamento
+plt.scatter(nós[:, 0], nós[:, 1], color='b', label='Nós')
+for i, nó in enumerate(nós):
+    plt.arrow(nó[0], nó[1], deslocamento[i][0], deslocamento[i][1],
+              head_width=0.05, head_length=0.05, fc='r', ec='r')
+    plt.text(nó[0], nó[1], "Nó " + chr(65 + i), verticalalignment='bottom', horizontalalignment='right', fontsize=10)
+
+plt.xlabel('Coordenada x')
+plt.ylabel('Coordenada y')
+plt.title('Coordenadas dos nós + deslocamentos')
+plt.legend()
+plt.grid(True)
+plt.axis('equal')
+plt.show()
