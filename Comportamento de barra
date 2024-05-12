@@ -1,0 +1,82 @@
+import numpy as np
+import scipy.linalg as la
+import matplotlib.pyplot as plt
+
+# Parâmetros físicos e geométricos
+L = 1.0          # comprimento da viga
+h = 0.01         # altura da seção
+b = 0.05         # largura da seção
+ro = 7800        # densidade
+E = 2.1e11       # módulo de Young
+nel = 10         # número de elementos finitos
+nnos = nel + 1   # número de nós
+gdl_no = 2       # número de graus de liberdade por nó
+gdl_global = nnos * gdl_no  # número total de graus de liberdade
+n_mode = 3       # número de modos a serem determinados
+
+# Preparação de variáveis
+Le = L / nel     # comprimento do elemento finito
+Ae = b * h       # área da seção
+me = Ae * ro     # massa elementar por área
+
+# Conectividades
+matgdl = np.array([[2*i-1, 2*i] for i in range(1, nnos+1)])
+conect = np.array([[2*i-1, 2*i, 2*i+1, 2*i+2] for i in range(1, nel+1)])
+
+# Montagem das matrizes globais
+M = np.zeros((gdl_global, gdl_global))
+K = np.zeros((gdl_global, gdl_global))
+IDENT = np.eye(gdl_global)
+
+for i in range(nel):
+    # Matriz de massa elementar
+    Me = (Le * me / 420) * np.array([[156, 22*Le, 54, -13*Le],
+                                      [22*Le, 4*Le*2, 13*Le, -3*Le*2],
+                                      [54, 13*Le, 156, -22*Le],
+                                      [-13*Le, -3*Le*2, -22*Le, 4*Le*2]])
+
+    # Matriz de rigidez elementar
+    I = b * h ** 3 / 12  # inércia da seção transversal
+    Ke = (E*I/(Le**3)) * np.array([[12, 6*Le, -12, 6*Le],
+                                    [6*Le, 4*Le*2, -6*Le, 2*Le*2],
+                                    [-12, -6*Le, 12, -6*Le],
+                                    [6*Le, 2*Le*2, -6*Le, 4*Le*2]])
+
+    # Matriz de transferência
+    TRANSF = np.array([IDENT[conect[i, 0]-1],
+                       IDENT[conect[i, 1]-1],
+                       IDENT[conect[i, 2]-1],
+                       IDENT[conect[i, 3]-1]])
+
+    # Matriz de rigidez global
+    K += TRANSF.T @ Ke @ TRANSF
+
+    # Matriz de massa global
+    M += TRANSF.T @ Me @ TRANSF
+
+# Engastes
+K[0, 0] *= 1e6
+K[1, 1] *= 1e6
+
+# Análise Modal
+w2, U = la.eigh(K, M)
+freqs = np.sqrt(w2) / (2 * np.pi)
+order = np.argsort(freqs)
+freqs = freqs[order]
+U = U[:, order]
+modos = U[:, :n_mode]
+
+# Plot dos Modos
+print("Frequências Naturais [Hz] =")
+print(freqs[:n_mode])
+
+plt.figure()
+plt.plot(modos[::2])
+plt.title("Modos de vibrar - gdl 'linear'")
+plt.grid(True)
+
+plt.figure()
+plt.plot(modos[1::2])
+plt.title("Modos de vibrar - gdl 'rotação'")
+plt.grid(True)
+plt.show()
