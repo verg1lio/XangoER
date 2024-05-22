@@ -1,0 +1,24 @@
+import numpy as np
+
+def bar_stiffness_matrix(A, E, L):
+    K = (A * E / L) * np.array([[1, -1], [-1, 1]])
+    return K
+
+def beam_stiffness_matrix(E, I, L):
+    K = (E * I / L**3) * np.array([[12, 6*L, -12, 6*L],
+                                   [6*L, 4*L**2, -6*L, 2*L**2],
+                                   [-12, -6*L, 12, -6*L],
+                                   [6*L, 2*L**2, -6*L, 4*L**2]])
+    return K
+
+# Example usage
+A = 0.01  # m^2
+E = 210e9  # Pa
+L = 2.0  # m
+I = 1.6667e-5  # m^4
+
+K_bar = bar_stiffness_matrix(A, E, L)
+K_beam = beam_stiffness_matrix(E, I, L)
+
+print("Bar Element Stiffness Matrix:\n", K_bar)
+print("Beam Element Stiffness Matrix:\n", K_beam)
