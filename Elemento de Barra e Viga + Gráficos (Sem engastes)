@@ -1,0 +1,102 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+class BodyAndFrame:
+    def __init__(self, A, E, L, I, G, a, B, K, y, rho, k, g, J):
+        self.A = A    # Área da seção transversal
+        self.E = E    # Módulo de elasticidade
+        self.L = L    # Comprimento da barra
+        self.I = I    # Momento de inércia
+        self.G = G    # Módulo de elasticidade transversal
+        self.a = a    # Largura da seção transversal
+        self.B = B    # Altura da seção transversal
+        self.K = K    # Constante de mola
+        self.y = y    # Deslocamento
+        self.rho = rho # Densidade
+        self.k = k    # Coeficiente de amortecimento
+        self.g = g    # Aceleração devido à gravidade
+        self.J = J    # Momento polar de inércia
+
+    def analyze(self, F):
+        # Análise axial
+        deformacao_axial = self.deformacao_axial(F)
+
+        # Análise de flexão
+        flexao = self.flexao(F)
+
+        # Análise de torção
+        torsao = self.torsao(F)
+
+        return deformacao_axial, flexao, torsao
+
+    def deformacao_axial(self, F):
+        # Equação diferencial para deformação axial
+        deformacao = (F / (self.A * self.E)) * self.L
+        return deformacao
+
+    def flexao(self, F):
+        # Equação de Euler-Bernoulli para flexão
+        x = np.linspace(0, self.L, len(F))
+        v = np.zeros_like(F)
+        for i in range(1, len(F)):
+            v[i] = (F[i] - F[i-1]) / (self.E * self.I) * (self.L ** 3 / 12)
+        return v
+
+    def torsao(self, F):
+        # Equação de torção
+        torsao = (F * self.L) / (self.G * self.J)
+        return torsao
+
+    def plot_results(self, F):
+        deformacao_axial, flexao, torsao = self.analyze(F)
+
+        x = np.linspace(0, self.L, len(F))
+
+        plt.figure(figsize=(18, 6))
+
+        # Plot deformação axial
+        plt.subplot(1, 3, 1)
+        plt.plot(x, deformacao_axial, label='Deformação Axial')
+        plt.xlabel('Posição ao longo da barra (m)')
+        plt.ylabel('Deformação Axial')
+        plt.title('Deformação Axial ao longo da barra')
+        plt.legend()
+
+        # Plot flexão
+        plt.subplot(1, 3, 2)
+        plt.plot(x, flexao, label='Flexão', color='orange')
+        plt.xlabel('Posição ao longo da barra (m)')
+        plt.ylabel('Deflexão (m)')
+        plt.title('Deflexão devido à Flexão ao longo da barra')
+        plt.legend()
+
+        # Plot torção
+        plt.subplot(1, 3, 3)
+        plt.plot(x, torsao, label='Torção', color='green')
+        plt.xlabel('Posição ao longo da barra (m)')
+        plt.ylabel('Torção')
+        plt.title('Torção ao longo da barra')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+# Exemplo de uso:
+A = 0.01    # m^2
+E = 210e9   # Pa
+L = 2.0     # m
+I = 1.6667e-5 # m^4
+G = 81.2e9  # Pa
+a = 0.1     # m
+B = 0.1     # m
+K = 1000    # N/m
+y = 0.01    # m
+rho = 7850  # kg/m^3
+k = 0.01    # Ns/m
+g = 9.81    # m/s^2
+J = 1e-6    # m^4 (momento polar de inércia)
+
+beam = BodyAndFrame(A, E, L, I, G, a, B, K, y, rho, k, g, J)
+F = np.array([0, 1000, 2000, 3000, 4000])  # Exemplo de forças aplicadas
+
+beam.plot_results(F)
