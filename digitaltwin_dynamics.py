@@ -1,67 +1,22 @@
 class Dynamics:
-    """A Vehicle Dynamics object.
-
-    This class will create a Vehicle Dynamics digital twin with the springs, suspension bars, damper cylinder, brakes, tires, and transmission elements provided.
-
-    Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
-    ----------
-    shaft_elements : list
-        List with the shaft elements.
-    disk_elements : list
-        List with the disk elements.
-    bearing_elements : list
-        List with the bearing elements.
-    automeshing : boolean
-        Set it True to use the automeshing method. Default is False.
-        If automeshing is True, the previous shaft_elements parameter is now defined by:
-            shaft_elements : list
-                List with the length, inner and outter diameter and material of each element, as follows:
-                    [[length, inner, outter, material],[length, inner, outter, material],...]
-        For the other parameters please check the respective bearing and disk classes for more information.
-    **kwargs : dict, optional
-        If automeshing is True, these parameters needs to be informed.
-        The possible arguments are:
-            alpha : float
-                Proportional damping coefficient, associated to the element Mass matrix
-            beta : float
-                Proportional damping coefficient, associated to the element Stiffness matrix
-
-    Returns
-    -------
-    A rotor object.
-
-    Attributes
-    ----------
-    MM : array
-        Global mass matrix.
-    KK : array
-        Global stiffness matrix.
-    CCgyros: array
-        Global gyroscopic matrix.
-    CCtotal: array
-        Global damping matrix
-
-    Examples
-    --------
-    >>> import lmest_rotor as lm
-    >>> rotor = lm.rotor_example()
-    >>> rotor.MM
-    array(30x30)
-    """
-
-
-
-    def __init__(self, spring_type, spring_k, spring_F, spring_non_lin_coef, tire_Fz, tire_Sa, tire_Ls):
+    
+    def __init__(self, spring_type=None, spring_k=None, spring_F=None, spring_non_lin_coef=None,tire_Fz=None, tire_Sa=None, tire_Ls=None,damper_type=None, damper_V=None, damper_F_viscous=None, damper_K_friction=None, damper_F_static=None):
         # Modelo de mola
-        self.spring_type = spring_type # Hooke, 
-        self.spring_k = spring_k # rigidez da mola [N/m]
-        self.spring_F = spring_F # força que a mola recebe [N]
-        self.spring_non_lin_coef = spring_non_lin_coef # coeficiente de ganho não-linear
+        self.spring_type = spring_type  # Hooke, Softening
+        self.spring_k = spring_k  # rigidez da mola [N/m]
+        self.spring_F = spring_F  # força que a mola recebe [N]
+        self.spring_non_lin_coef = spring_non_lin_coef  # coeficiente de ganho não-linear
         # Modelo de pneu
         self.tire_Fz = tire_Fz  # carga vertical no pneu [N]
         self.tire_Sa = tire_Sa  # slip angle do pneu [rad]
         self.tire_Ls = tire_Ls  # longitudinal slip do pneu [Admensional]
         self.tire_type = 'Default'
+        # Modelo de amortecedor
+        self.damper_type = damper_type # Coulumb, Integrated, Stribeck
+        self.damper_V = damper_V # velocidade relativa amortecedor [m/s]
+        self.damper_F_viscous = damper_F_viscous # força viscosa do fluído [N]
+        self.damper_F_static = damper_F_static # coeficiente de fricção estática de coulumb [N]
+        self.damper_K_friction = damper_K_friction # rigidez de fricção [N/m]
         
 
     def Spring(self):
@@ -95,21 +50,13 @@ class Dynamics:
 
 
     def Damper(self):
-        """Description.
 
-        Detailed description.
+        if self.damper_type == 'Coulumb':
+            damper_F = self.damper_F_static * np.tanh(self.damper_K_friction * self.damper_V)
+        if self.damper_type == 'Integrated':
+            damper_F = self.damper_F_static * np.tanh(self.damper_K_friction * self.damper_V) + np.sign(self.damper_V) * self.damper_F_viscous * (self.damper_V ** 2)
 
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
-        
-        return Dam
+        return damper_F
 
     
 
