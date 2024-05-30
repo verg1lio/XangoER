@@ -3,7 +3,7 @@ class BodyAndFrame:
 
     This class will create a Body And Frame digital twin with the chassis elements provided.
 
-    Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
+    Parameters AINDA A ALTERAR, ISSO É UM EXEMP
     ----------
     shaft_elements : list
         List with the shaft elements.
