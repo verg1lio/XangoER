@@ -62,22 +62,59 @@ class BodyAndFrame:
         self.Ip = float(Ip)
         
 
-    def Connect(self):
-        """Description.
+    import numpy as np
+import matplotlib.pyplot as plt
 
-        Detailed description.
+def matriz_conectividade(nos, elementos):
+    num_nos = len(nos)
+    matriz = np.zeros((num_nos, num_nos), dtype=int)
 
-        Returns
-        -------
-        Bat : variable type
-            Description.
+    for no1, no2 in elementos:
+        if no1 in nos and no2 in nos:
+            j1 = nos.index(no1)
+            j2 = nos.index(no2)
+            matriz[j1, j2] += 1
+            matriz[j2, j1] += 1
 
-        Examples
-        --------
-        >>> example
-        """
-        
-        return Con
+    return matriz
+
+# Definindo os nós
+nos = [1, 2, 3, 4, 5]
+
+# Definindo os elementos (arestas)
+elementos = [(1, 2), (1, 4), (2, 3), (2, 5), (3, 5), (4, 5), (1, 2), (2, 4)]
+
+# Definindo as coordenadas dos nós
+coordenadas = {
+    1: (0, 0),  # No 1 na coordenada (0, 0)
+    2: (1, 0),  # No 2 na coordenada (1, 0)
+    3: (2, 0),  # No 3 na coordenada (2, 0)
+    4: (0, 1),  # No 4 na coordenada (0, 1)
+    5: (1, 1)   # No 5 na coordenada (1, 1)
+}
+
+# Gerando a matriz de conectividade
+matriz = matriz_conectividade(nos, elementos)
+
+# Plotando o grafo
+plt.figure(figsize=(8, 6))
+
+# Plotando os nós
+for no, (x, y) in coordenadas.items():
+    plt.scatter(x, y, s=100)  # s é o tamanho do ponto
+    plt.text(x, y, str(no), fontsize=12, ha='right')
+
+# Plotando as arestas
+for no1, no2 in elementos:
+    x1, y1 = coordenadas[no1]
+    x2, y2 = coordenadas[no2]
+    plt.plot([x1, x2], [y1, y2], 'k-')  # 'k-' é a cor preta para as arestas
+
+plt.title('Grafo dos Nós e Elementos')
+plt.xlabel('Coordenada X')
+plt.ylabel('Coordenada Y')
+plt.grid(True)
+plt.show()
 
 
 
