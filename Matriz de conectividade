@@ -1,0 +1,120 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def criar_matriz_conectividade(pontos, elementos):
+
+
+    numero_pontos = len(pontos)
+    matriz_conectividade = np.zeros((numero_pontos, numero_pontos), dtype=int)
+
+    for elemento in elementos:
+        ponto_inicial, ponto_final = elemento
+        matriz_conectividade[ponto_inicial, ponto_final] += 1
+        matriz_conectividade[ponto_final, ponto_inicial] += 1
+
+    labels_pontos = [chr(65 + i) for i in range(numero_pontos)]  # Labels A, B, C, ...
+
+    return matriz_conectividade, labels_pontos
+
+def plotar_trelica(pontos, elementos, mostrar_pontos=True, mostrar_elementos=True):
+
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Desenhar pontos e numeração (com letras)
+    if mostrar_pontos:
+        letras_nos = [chr(65 + i) for i in range(len(pontos))]  # Lista de letras para representar os nós
+        for i, ponto in enumerate(pontos):
+            ax.scatter(ponto[0], ponto[1], ponto[2], color='white', edgecolors='black', s=100)
+            ax.text(ponto[0] + 0.1, ponto[1] + 0.1, ponto[2] + 0.1, letras_nos[i], ha='center', va='center', fontsize=10)
+
+    # Contagem de conexões para evitar sobreposição de linhas
+    contagem_conexoes = {}
+    for elemento in elementos:
+        ponto_inicial, ponto_final = elemento
+        if (ponto_inicial, ponto_final) in contagem_conexoes:
+            contagem_conexoes[(ponto_inicial, ponto_final)] += 1
+        else:
+            contagem_conexoes[(ponto_inicial, ponto_final)] = 1
+
+    # Desenhar barras e numeração
+    for i, elemento in enumerate(elementos):
+        ponto_inicial, ponto_final = elemento
+        x1, y1, z1 = pontos[ponto_inicial]
+        x2, y2, z2 = pontos[ponto_final]
+
+        conexoes = contagem_conexoes[(ponto_inicial, ponto_final)]
+        if conexoes > 1:
+            # Calcular curva usando uma parábola
+            t = np.linspace(0, 1, 100)
+            curva_x = (1 - t) * x1 + t * x2
+            curva_y = (1 - t) * y1 + t * y2
+            curva_z = (1 - t) * z1 + t * z2 + np.sin(t * np.pi) * 0.2 * conexoes
+
+            ax.plot(curva_x, curva_y, curva_z, 'b-')
+            contagem_conexoes[(ponto_inicial, ponto_final)] -= 1
+        else:
+            ax.plot([x1, x2], [y1, y2], [z1, z2], 'b-')
+
+        if mostrar_elementos:
+            ax.text((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2, i, ha='center', va='center', fontsize=10)
+
+    # Eixos e título
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('Treliça 3D')
+    plt.show()
+
+# aplicação
+pontos = np.array([
+    [0, 0, 0],   # Ponto A
+    [4, 0, 0],   # Ponto B
+    [8, 0, 0],   # Ponto C
+    [2, 2, 1],   # Ponto D
+    [6, 2, 1],   # Ponto E
+    [4, 4, 2],   # Ponto F
+    [4, 2, 0],   # Ponto G (centro)
+    [0, 4, 0],   # Ponto H
+    [8, 4, 0],   # Ponto I
+])
+
+elementos = [
+    (0, 1),  # Barra AB
+    (1, 2),  # Barra BC
+    (0, 3),  # Barra AD
+    (1, 3),  # Barra BD
+    (1, 4),  # Barra BE
+    (2, 4),  # Barra CE
+    (3, 4),  # Barra DE
+    (3, 5),  # Barra DF
+    (4, 5),  # Barra EF
+    (0, 6),  # Barra AG
+    (1, 6),  # Barra BG
+    (2, 6),  # Barra CG
+    (3, 6),  # Barra DG
+    (4, 6),  # Barra EG
+    (5, 6),  # Barra FG
+    (7, 3),  # Barra HD
+    (8, 4),  # Barra IE
+    (7, 5),  # Barra HF
+    (8, 5),  # Barra IF
+    (0, 1),  # Barra AB (segunda conexão)
+    (1, 4),  # Barra BE (segunda conexão)
+    (1, 3),  # Barra BD (segunda conexão)
+    (3, 4),  # Barra DE (segunda conexão)
+]
+
+# Criação da matriz de conectividade
+matriz_conectividade, labels_pontos = criar_matriz_conectividade(pontos, elementos)
+
+# Impressão da matriz de conectividade
+print("Matriz de Conectividade Nó-a-Nó:")
+print("   ", "  ".join(labels_pontos))
+for label, row in zip(labels_pontos, matriz_conectividade):
+    print(f"{label}  {row}")
+
+# Geração do gráfico da treliça
+plotar_trelica(pontos, elementos)
