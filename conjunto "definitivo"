@@ -100,6 +100,7 @@ params = {
     'red': 0.60,  # Raio efetivo do disco [m] <--- Reduzido para menor torque de frenagem
     'Mt': 250,  # Massa total do veículo [kg]
     'm_wheel': 15,  # Massa da roda [kg] <-- estimativa
+    'L': 1.5  # Distância entre eixos [m]
 }
 
 # Criação da instância do sistema de freios e aplicação da força no pedal de freio
