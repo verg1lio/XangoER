@@ -14,6 +14,7 @@ class BrakeSystem:
         self.FzF = params['FzF']  # Força de reação estática na dianteira [N]
         self.FzR = params['FzR']  # Força de reação estática na traseira [N]
         self.Rdp = params['Rdp']  # Raio do pneu [m]
+        self.Rdr = params['Rdr'] # Raio da roda [m]
         self.Dcm = params['Dcm']  # Diâmetro do cilindro mestre em metros
         self.Dwc = params['Dwc']  # Diâmetro do cilindro da roda em metros
         self.Npast = params['Npast']  # Número de pastilhas por disco
@@ -65,6 +66,7 @@ class BrakeSystem:
         # Calculando o torque do disco de freio
         torque_disco_freio = forca_atrito_pastilha * self.red
 
+
         # Calculando a força de frenagem considerando todos os fatores
         forca_frenagem = (FnF + FnR) / self.Npast  # Força normal total
         forca_frenagem *= self.atrito_coeficiente  # Força de atrito total
@@ -72,10 +74,11 @@ class BrakeSystem:
         forca_frenagem /= self.Rdp  # Força de frenagem total
 
         # Calculando a velocidade angular do pneu a partir do torque de freio
-        inertia_wheel = self.m_wheel * (self.Rdp ** 2)  # Inércia do pneu
+        inertia_wheel = 0.5 * self.m_wheel * (self.Rdp ** 2 + self.Rdr ** 2) # Inércia do pneu
         angular_deceleration = torque_disco_freio / inertia_wheel  # Desaceleração angular
-        angular_velocity = initial_speed / self.Rdp  # Velocidade angular inicial
+        angular_velocity = initial_speed / (self.Rdp + self.Rdr) # Velocidade angular inicial
         new_angular_velocity = angular_velocity - angular_deceleration  # Nova velocidade angular
+
 
         # Retornando os resultados calculados
         return resultados, forca_frenagem, new_angular_velocity
@@ -93,20 +96,21 @@ params = {
     'FzF': 1471.5,  # Força de reação estática na dianteira [N]
     'FzR': 981.0,  # Força de reação estática na traseira [N]
     'Rdp': 0.30,  # Raio do pneu [m]
+    'Rdr': 0.1651, # Raio da roda [m]
     'Dcm': 0.02,  # Diâmetro do cilindro mestre em metros
     'Dwc': 0.032,  # Diâmetro do cilindro da roda em metros
     'Npast': 2,  # Número de pastilhas por disco
-    'atrito_coeficiente': 0.25,  # Coeficiente de atrito da pastilha <--- Reduzido para menor força de frenagem
-    'red': 0.60,  # Raio efetivo do disco [m] <--- Reduzido para menor torque de frenagem
+    'atrito_coeficiente': 0.35,  # Coeficiente de atrito da pastilha
+    'red': 0.75,  # Raio efetivo do disco [m]
     'Mt': 250,  # Massa total do veículo [kg]
-    'm_wheel': 15,  # Massa da roda [kg] <-- estimativa
-    'L': 1.5  # Distância entre eixos [m]
+    'm_wheel': 88,  # Massa da roda [kg] <-- estimativa
+    'L': 1.5,  # Distância entre eixos [m]
 }
 
 # Criação da instância do sistema de freios e aplicação da força no pedal de freio
 BrakeSystem = BrakeSystem(params)
-pedal_force = 300  # N <--- Reduzido para menor força de frenagem
-initial_speed = 20  # m/s (Velocidade inicial do veículo)
+pedal_force = 445  # N
+initial_speed = 20 # m/s (Velocidade inicial do veículo)
 resultados, forca_frenagem, new_angular_velocity = BrakeSystem.apply_brake(pedal_force, initial_speed)
 
 # Exibindo os resultados calculados
@@ -182,7 +186,7 @@ forces_2 = [-2930, -2750, -2530, -2310, -2050, -1760, -1410, -990, -480, 90, 620
 torque_2 = [-48.55, -49.34, -47.81, -45.55, -46.18, -43.39, -40.66, -28.43, -9.02, 17.80, 42.97, 59.03, 64.82, 67.67, 68.95, 67.69, 67.29, 64.64, 64.16]
 
 tire_Sa = angles  # Ângulos de deslizamento lateral
-tire_Ls = new_angular_velocity / (initial_speed / params['Rdp'])  # Slip ratio baseado na nova velocidade angular
+tire_Ls = (new_angular_velocity * params['Rdp'] / initial_speed) - 1 # Slip ratio baseado na nova velocidade angular
 print("Slip Ratio Longitudinal:", tire_Ls)
 
 # Plotagem dos resultados
