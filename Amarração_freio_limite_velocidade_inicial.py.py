@@ -283,12 +283,12 @@ if initial_speed != 0:
     print(f'Força Longitudinal {forca_longitudinal:.2f}, quando aplicada uma força no pedal de {forca_pedal}N.')
     
     
-    forca_pedal = [245, 445, 665, 845, 1045]  # Exemplo de força no pedal 
-    forca_longitudinal = [2428.77, 4411.44, 6394.11, 8376.78, 10359.45]  # Exemplo de força longitudinal no pneu (em unidades fictícias)
+    forca_pedal = [120, 240, 360, 480, 500, 620, 740, 860, 980]  # Exemplo de força no pedal 
+    forca_longitudinal = [1189, 2379.21, 3568.81, 3568.81, 4956.68, 6146.28, 7335.88,  8525.48, 9715.09]  # Exemplo de força longitudinal no pneu (em unidades fictícias)
     
     # Criando o gráfico de dispersão
     plt.figure(figsize=(8, 6))
-    plt.plot(forca_pedal, forca_longitudinal, color='blue', marker='o', label='Força no pedal vs Força longitudinal no pneu')
+    plt.plot(forca_pedal, forca_longitudinal, color='red', marker='o', label='Força aplicada no pedal vs Força longitudinal no pneu')
     
     # Adicionando rótulos e título
     plt.title('Relação entre Força no Pedal e Força Longitudinal no Pneu')
