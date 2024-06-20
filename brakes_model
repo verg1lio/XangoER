@@ -72,7 +72,7 @@ params = {
     'μl': 0.45,  # Coeficiente de atrito do contato pastilha/disco
     'pi': 3.14,  # Valor de pi
     'HCG': 0.5,  # Altura do centro de gravidade [m]
-    'μ': 0.60,  # Coeficiente de atrito do pneu/solo
+    'μ': 1.5,  # Coeficiente de atrito do pneu/solo
     'FzF': 1471.5,  # Força de reação estática na dianteira [N]
     'FzR': 981.0,  # Força de reação estática na traseira [N]
     'Rdp': 0.30,  # Raio do pneu [m]
@@ -87,7 +87,7 @@ params = {
 
 # Criação da instância do sistema de freios e aplicação da força no pedal de freio
 BrakeSystem = BrakeSystem(params)
-pedal_force = 445  # N
+pedal_force = 880  # N
 resultados, forca_frenagem = BrakeSystem.apply_brake(pedal_force)
 
 # Imprimindo os resultados calculados
