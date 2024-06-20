@@ -14,12 +14,17 @@ forca_longitudinal = forca_pedal * nova_area_efetiva_dos_pistoes / area_do_pista
 
 print(f'Força Longitudinal {forca_longitudinal:.2f}, quando aplicada uma força no pedal de {forca_pedal}N.')
 
-# Força aplicada no pedal : , 245, 445, 665, 845, 1045
 
-# Força longitudinal : ,  2428.77, 4411.44, 6394.11, 8376.78, 10359.45
+''' variando 200N
+    =>Força aplicada no pedal : [245, 445, 665, 845, 1045]
+    =>Força longitudinal : [2428.77, 4411.44, 6394.11, 8376.78, 10359.45] '''
 
-forca_pedal = [245, 445, 665, 845, 1045]  # Exemplo de força no pedal 
-forca_longitudinal = [2428.77, 4411.44, 6394.11, 8376.78, 10359.45]  # Exemplo de força longitudinal no pneu 
+''' variando 120N
+    =>Força aplicada no pedal : [120, 240, 360, 480, 500, 620, 740, 860, 980]
+    =>Força longitudinal : [1189, 2379.21, 3568.81, 3568.81, 4956.68, 6146.28, 7335.88,  8525.48, 9715.09] '''
+
+forca_pedal = [120, 240, 360, 480, 500, 620, 740, 860, 980]  # Exemplo de força no pedal 
+forca_longitudinal = [1189, 2379.21, 3568.81, 3568.81, 4956.68, 6146.28, 7335.88,  8525.48, 9715.09]  # Exemplo de força longitudinal no pneu 
 # Criando o gráfico de dispersão
 plt.figure(figsize=(8, 6))
 plt.plot(forca_pedal, forca_longitudinal, color='blue', marker='o', label='Força no pedal vs Força longitudinal no pneu')
