@@ -12,8 +12,8 @@ class forcas_aerodinamicas():
         self.cl= coeficient_lift
         self.x= length
         self.ni= ni
-        self.a1= a1
-        self.a2= a2
+      #  self.a1= a1
+      #  self.a2= a2
         self.p_atm= atm_pressure
         self.alpha= attack_angle
         self.a_wing=span*chord
@@ -26,22 +26,23 @@ class forcas_aerodinamicas():
         lift=self.cl * pressao_dinamica * self.asup
         return drag,lift
     
-#    def numero_Reynolds(self,velocidade):         # Função para encontrar o numero de reynolds
+#    def numero_Reynolds(self,velocidade):                          # Função para encontrar o numero de reynolds
         return (self.x*velocidade)/self.ni
     
 #    def bernoulli(self,velocidade):
         v2=velocidade*self.a1/self.a2                                   # Equação de conservação para encontrar a velocidade embaixo do carro
         p2=self.p_atm +0.5*rho*velocidade**2 - 0.5*v2**2                # Equação de bernoulli para encontrar a pressão embaixo do carro
-        deltap=self.p_atm-p2                                            # Diferença de pressão entre a parte de baixo e a parte de cima do carro
-        return deltap
+        deltap=p2-self.p_atm                                            # Diferença de pressão entre a parte de baixo e a parte de cima do carro
+        downforce=deltap*self.asup
+        return downforce
     
-    def aerodynamics_forces_wing(self,velocidade):                         #Função para calcular as forças aerodinamicas geradas pela asa
+    def aerodynamics_forces_wing(self,velocidade):                      #Função para calcular as forças aerodinamicas geradas pela asa
         pressao_dinamica=0.5*self.rho*(velocidade**2)
         cl_alpha=(2*math.pi)/(1+(2/self.AR))
-        cl_wing=cl_alpha*self.alpha                              #Coeficiente de lift da asa
-        cd_induced=(1/(math.pi*self.AR))*cl_wing**2    #Coeficiente de arrasto induzido
-        cd_wing=cd_induced+0.05                             #Coeficiente de arrasto total da asa= Cd=Cd_induzido+Cd_forma
-        drag_wing= (cd_wing * pressao_dinamica * self.a_wing)   #Calculo da força de arrasto
+        cl_wing=cl_alpha*self.alpha                                     #Coeficiente de lift da asa
+        cd_induced=(1/(math.pi*self.AR))*(cl_wing**2)                   #Coeficiente de arrasto induzido
+        cd_wing=cd_induced+0.05                                         #Coeficiente de arrasto total da asa= Cd=Cd_induzido+Cd_forma
+        drag_wing= (cd_wing * pressao_dinamica * self.a_wing)           #Calculo da força de arrasto
         lift_wing= (cl_wing * pressao_dinamica * self.a_wing)
         return drag_wing,lift_wing
     
@@ -63,7 +64,7 @@ a2= 0.20                         #Área embaixo do carro (m^2)
 chord=0.25                          #Comprimento da asa (m)
 span=1                              #Largura da asa (m)
 thickness=0.05                      #Expessura máxima da asa (m)
-alpha=math.radians(3.75)            #Ângulo de incidencia do vento com a asa (radianos)
+alpha=math.radians(-3.75)            #Ângulo de incidencia do vento com a asa (radianos)
 
 carro=forcas_aerodinamicas(af,a_sup,rho,cd_p,cd_f,cl,length,ni,p_atm,alpha,span,chord)    #Definição do objeto 
 
