@@ -356,4 +356,14 @@ class Dynamics:
 
 info = car.CalculateOutputs(optimized_cp)
 #Retira as informações que serão entradas para a classe dynamics. É necessário criar o parâmetro otimizado primeiro
+
+print(info) 
+#Transforma em um dicioná´rio para facilitar o acesso pelas chaves
+info = dict(zip(['peso', 'rnet', 'rned', 'ftr', 'tdcl', 'cnet', 'ptet', 'cpneu', 'tpneu', 'redf', 'tpwt', 'acpr',
+                 'acfi', 'acfr', 'fti', 'tpi', 'tpwti', 'tci', 'tcr', 'cteti'], info))
 print(info)
+
+#Instancia a classe Dynamics com o parâmetro da carga vertical retirada do dict
+dynamics = Dynamics(tire_Fz = info['cpneu'])
+
+print(dynamics.tire_Fz)
