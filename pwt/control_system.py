@@ -28,22 +28,19 @@ class PWT:
     def calcular_fluxo_rotorico(self):
         # Cálculo do fluxo do rotor (integração da tensão do rotor)
         self.psi_r = np.cumsum((self.v_r - self.i_r * self.r_r)*self.dt)
-        return self.psi_r
 
     def calcular_fluxo_estatorico(self):
         # Cálculo do fluxo do estator (integração da tensão do estator)
         self.psi_s = np.cumsum((self.v_s - self.i_s * self.r_s)*self.dt)
-        return self.psi_s
 
     def calcular_torque(self):
         # Cálculo do conjugado eletromagnético
         self.ce = self.k * (self.psi_r ** 2) * (self.w1 - self.wr)
-        return self.ce
 
     def controle(self):
-        self.psi_r = self.calcular_fluxo_rotorico()
-        self.psi_s = self.calcular_fluxo_estatorico()
-        self.ce = self.calcular_torque()
+        self.calcular_fluxo_rotorico()
+        self.calcular_fluxo_estatorico()
+        self.calcular_torque()
         # Diferença entre o torque de referência e o torque calculado
         self.erro_torque = self.ref_torque - self.ce
         # Diferença entre o fluxo de referência e o fluxo rotorico calculado
