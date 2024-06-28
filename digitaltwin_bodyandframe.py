@@ -52,14 +52,11 @@ class BodyAndFrame:
 
 
 
-    def __init__(self, n, m, Id, Ip):
-        self.n = int(n)
-        self.n_l = n
-        self.n_r = n
-
-        self.m = float(m)
-        self.Id = float(Id)
-        self.Ip = float(Ip)
+    def __init__(self, nos, massa, momento_inercia_direção, momento_inercia_plano):
+        self.nos = nos #Number of chassi's nodes
+        self.massa = massa #Car mass (Kg)
+        self.momento_inercia_direção = momento_inercia_direção #Moment of inertia relative to direction (Kg.m^2)
+        self.momento_inercia_plano = momento_inercia_plano #Moment of inertia relative to the plane (Kg.m^2)
         
 
     def Connect(self):
