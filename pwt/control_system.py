@@ -52,66 +52,52 @@ class PWT:
         v_s_corrigido_estator = self.v_s + self.erro_torque * 0.1 + self.erro_fluxo_estator * 0.1 #perguntar
         return v_s_corrigido_rotor, v_s_corrigido_estator, self.erro_torque, self.erro_fluxo_rotor, self.erro_fluxo_estator
 
-# Simulação
-t = np.linspace(0, 1, 1000)
-v_s = np.sin(2 * np.pi * 50 * t)  # Tensão do estator (exemplo)
-i_s = np.sin(2 * np.pi * 50 * t)  # Corrente do estator (exemplo)
-v_r = np.sin(2 * np.pi * 50 * t)  # Tensão do rotor (exemplo)
-i_r = np.sin(2 * np.pi * 50 * t)  # Corrente do rotor (exemplo)
-ref_torque = 1  # Referência de torque
-ref_fluxo_rotor = 1  # Referência de fluxo do rotor
-ref_fluxo_estator = 1  # Referência de fluxo do estator
-
-# Instanciar o objeto PWT com os parâmetros necessários
-pwt = PWT(k=1, amp_fluxo=1, r_s=0.1, v_s=v_s, i_s=i_s, r_r=0.1, v_r=v_r, i_r=i_r, ref_torque=ref_torque, ref_fluxo_rotor=ref_fluxo_rotor, ref_fluxo_estator=ref_fluxo_estator, t=t)
-
-# Controle
-v_s_corrigido_rotor, v_s_corrigido_estator, erro_torque, erro_fluxo_rotor, erro_fluxo_estator = pwt.controle()
-
 # Plotar resultados
+def customPlot(subplot, x, y, label, xlabel, ylabel):
+    plt.subplot(5, 1, subplot)
+    plt.plot(x, y, label=label)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+    plt.grid(True)
 
-# Gráfico do erro do torque
-plt.figure()
-plt.subplot(5, 1, 1)
-plt.plot(t, erro_torque, label='Erro de Torque')
-plt.xlabel('Tempo (s)')
-plt.ylabel('Erro de Torque')
-plt.legend()
-plt.grid(True)
+def generatePlots(t, pwt, erro_torque, erro_fluxo_rotor, saveFig):
+    plt.figure()
 
-# Gráfico do erro do fluxo rotorico
-plt.subplot(5, 1, 2)
-plt.plot(t, erro_fluxo_rotor, label='Erro de Fluxo Rotorico')
-plt.xlabel('Tempo (s)')
-plt.ylabel('Erro de Fluxo Rotorico')
-plt.legend()
-plt.grid(True)
+    # Gráfico do erro do torque
+    customPlot(1, t, erro_torque, 'Erro de Torque', 'Tempo (s)', 'Erro de Torque')
+    # Gráfico do erro do fluxo rotorico
+    customPlot(2, t, erro_fluxo_rotor, 'Erro de Fluxo Rotorico', 'Tempo (s)', 'Erro de Fluxo Rotorico')
+    # Gráfico do conjugado eletromagnético
+    customPlot(3, t, pwt.ce, 'Conjugado Eletromagnético', 'Tempo (s)', 'Torque')
+    # Gráfico do fluxo do rotor
+    customPlot(4, t, pwt.psi_r, 'Fluxo do Rotor', 'Tempo (s)', 'Fluxo do Rotor')
+    # Gráfico do fluxo do estator
+    customPlot(5, t, pwt.psi_s, 'Fluxo do Estator', 'Tempo (s)', 'Fluxo do Estator')
 
-# Gráfico do conjugado eletromagnético
-plt.subplot(5, 1, 3)
-plt.plot(t, pwt.ce, label='Conjugado Eletromagnético')
-plt.xlabel('Tempo (s)')
-plt.ylabel('Torque')
-plt.legend()
-plt.grid(True)
+    plt.tight_layout()
 
-# Gráfico do fluxo do rotor
-plt.subplot(5, 1, 4)
-plt.plot(t, pwt.psi_r, label='Fluxo do Rotor')
-plt.xlabel('Tempo (s)')
-plt.ylabel('Fluxo do Rotor')
-plt.legend()
-plt.grid(True)
+    if (saveFig): 
+        plt.savefig('pwt.png')
+    else:
+        plt.show()
 
-# Gráfico do fluxo do estator
-plt.subplot(5, 1, 5)
-plt.plot(t, pwt.psi_s, label='Fluxo do Estator')
-plt.xlabel('Tempo (s)')
-plt.ylabel('Fluxo do Estator')
-plt.legend()
-plt.grid(True)
+def example(saveToFile = False):
+    # Simulação
+    t = np.linspace(0, 1, 1000)
+    v_s = np.sin(2 * np.pi * 50 * t)  # Tensão do estator (exemplo)
+    i_s = np.sin(2 * np.pi * 50 * t)  # Corrente do estator (exemplo)
+    v_r = np.sin(2 * np.pi * 50 * t)  # Tensão do rotor (exemplo)
+    i_r = np.sin(2 * np.pi * 50 * t)  # Corrente do rotor (exemplo)
+    ref_torque = 1  # Referência de torque
+    ref_fluxo_rotor = 1  # Referência de fluxo do rotor
+    ref_fluxo_estator = 1  # Referência de fluxo do estator
 
-plt.tight_layout()
-plt.show()
+    # Instanciar o objeto PWT com os parâmetros necessários
+    pwt = PWT(k=1, amp_fluxo=1, r_s=0.1, v_s=v_s, i_s=i_s, r_r=0.1, v_r=v_r, i_r=i_r, ref_torque=ref_torque, ref_fluxo_rotor=ref_fluxo_rotor, ref_fluxo_estator=ref_fluxo_estator, t=t)
 
-# comentaio aleatorio
+    # Controle
+    v_s_corrigido_rotor, v_s_corrigido_estator, erro_torque, erro_fluxo_rotor, erro_fluxo_estator = pwt.controle()
+    generatePlots(t, pwt, erro_torque, erro_fluxo_rotor, saveToFile)
+
+example(saveToFile = True)
