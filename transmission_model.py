@@ -2,7 +2,155 @@ import math
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
-# Valores experimentais para a curva de torque e potência
+class Drivetrain:
+    def __init__(self, matriz_dados):
+        self.matriz_dados = matriz_dados
+
+    def CalculateOutputs(self, cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp):
+        peso = massa * 9.81
+        rnet = (peso * (cgx * 0.001)) / (etex * 0.001)
+        rned = massa * 9.81 - rnet
+        ftr = (rnet * cfat) / (1 - ((cgy * 0.001) * cfat) / (etex * 0.001))
+        tdcl = (ftr * cgy * 0.001) / (etex * 0.001)
+        cnet = rnet + tdcl
+        ptet = cnet * rpneu * 0.001 * cfat
+        cpneu = cnet / 2
+        tpneu = ftr * rpneu * 0.001
+        redf = redp * red1
+        tpwt = ptet / (red1 * redp * optimized_cp)
+        acpr = (ftr / massa) / 9.81
+        acfi = acpi * 9.81
+        acfr = acpr * 9.81
+        fti = massa * acfi
+        tpi = fti * rpneu * 0.001
+        tpwti = tpi / (red1 * redp * optimized_cp)
+        tci = (fti * cgy) / etex
+        tcr = (ftr * cgy) / etex
+        cteti = rnet + tci
+        return peso, rnet, rned, ftr, tdcl, cnet, ptet, cpneu, tpneu, redf, tpwt, acpr, acfi, acfr, fti, tpi, tpwti, tci, tcr, cteti
+
+    def Transmission(self, cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp):
+        outputs = self.CalculateOutputs(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp)
+        rpm_values, torque_values, power_values = self.CurveTorquePower(self.matriz_dados)
+
+        # Print dos resultados obtidos
+        print("Resultados:")
+        labels = ["Peso", "Reação no eixo traseiro", "Reação no eixo dianteiro", "Força trativa",
+                  "Transferência de carga longitudinal", "Carga no eixo traseiro", "Pico de torque no eixo traseiro",
+                  "Carga no pneu", "Torque no pneu", "Redução final", "Torque necessário no motor",
+                  "Aceleração primária real (g)", "Aceleração final ideal", "Aceleração final real",
+                  "Força trativa ideal", "Torque no pneu ideal", "Torque no motor ideal", "Transferência de carga ideal",
+                  "Transferência de carga real", "Carga total no eixo traseiro ideal"]
+
+        for label, output in zip(labels, outputs):
+            print(f"{label}: {output}")
+
+        print("\nMatriz de RPM, Torque e Potência:")
+        print("RPM\t\tTorque (Nm)\tPotência (kW)")
+        for data in self.matriz_dados:
+            rpm = data["rpm"]
+            trq = data["trq"]
+            ptc = data["ptc"]
+            print(f"{rpm:.2f}\t\t{trq:.2f}\t\t{ptc:.2f}")
+
+        # Plotando o gráfico
+        plt.figure(figsize=(10, 6))
+        plt.plot(rpm_values, torque_values, label='Torque [Nm]', color='blue')
+        plt.plot(rpm_values, power_values, label='Power [kW]', color='orange')
+        plt.title("Curva de Torque e Potência")
+        plt.xlabel('RPM')
+        plt.ylabel('Torque [Nm] / Power [kW]')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def objective_function(self, cp, cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1):
+        outputs = self.CalculateOutputs(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, cp)
+        tpwt = outputs[10]  # Torque necessário no motor
+        target_tpwt = 80.0  # Alvo para o torque necessário no motor
+
+        performance = self.CarPerformance(massa, rpneu, redp, red1, cp)
+        max_vl = max([p['vl'] for p in performance])
+        min_ff = min([p['ff'] for p in performance])
+
+        penalty = 0
+        if max_vl < 100:
+            penalty += (100 - max_vl) ** 2
+        if min_ff <= 0:
+            penalty += abs(min_ff) * 1000
+
+        return abs(tpwt - target_tpwt) + penalty
+
+    def optimize_cp(self, cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1):
+        initial_guess = 1.5  # Chute inicial para cp
+        result = minimize(self.objective_function, initial_guess, args=(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1), method='BFGS')
+        return result.x[0], result.fun
+
+    def CarPerformance(self, massa, rpneu, redp, red1, optimized_cp):
+        peso = massa * 9.81
+        rdt = 0.9
+        mtrd = 0.9
+        cfar = 0.54
+        da = 1.162
+        af = 1.06
+        bscf = 0.015
+        spdf = 0.012
+
+        parametros = []
+
+        for dado in self.matriz_dados:
+            ftf = ((dado["trq"] * redp * red1 * optimized_cp) / (rpneu * 0.001)) * rdt
+            va = (dado["rpm"] * 2 * math.pi) / (60 * redp * red1 * optimized_cp)
+            vl = ((va * (rpneu * 0.001)) * mtrd) * 3.6
+            fa = (da * vl ** 2 * cfar * af) / 2
+            rr = (bscf + (3.24 * spdf * ((vl / 100 * 0.44704) ** 2.5))) * peso
+            ff = ftf - fa - rr
+
+            parametro = {
+                "ftf": ftf,
+                "va": va,
+                "vl": vl,
+                "fa": fa,
+                "rr": rr,
+                "ff": ff
+            }
+
+            parametros.append(parametro)
+
+        return parametros
+
+    def print_car_performance(self, performance):
+        print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]\tForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
+        for param in performance:
+            print(f"{param['ftf']}\t{param['va']}\t{param['vl']}\t{param['fa']}\t{param['rr']}\t{param['ff']}")
+
+    def HalfShaftsSizing(self, redp, red1, optimized_cp, fsi=1.25, tet=786, tec=471.6, dif=1):
+        tmax = max(data["trq"] for data in self.matriz_dados)
+        tmsx = tmax * redp * red1 * optimized_cp * dif
+        tmp = tmsx * fsi
+        dsx = (((2 * tmp) / (math.pi * tec * 10 ** 6)) ** (1 / 3)) * 2000
+        fso = (math.pi * (((dsx / 1000) / 2) ** 3) * tec * (10 ** 6)) / (2 * tmsx)
+        fs1p = (math.pi * ((0.0254 / 2) ** 3) * tec * (10 ** 6)) / (2 * tmsx)
+
+        print("Dimensionamento dos Semieixos:")
+        print("Torque máximo do motor:", tmax, "Nm")
+        print("Torque máximo nos semieixos:", tmsx, "Nm")
+        print("Torque máximo de projeto:", tmp, "Nm")
+        print("Diâmetro dos semieixos:", dsx, "mm")
+        print("Fator de segurança ideal:", fsi)
+        print("Fator de segurança obtido:", fso)
+        print("Fator de segurança para 1 polegada:", fs1p)
+
+        return tmax, tmsx, tmp, dsx, fso, fs1p
+
+    def CurveTorquePower(self, matriz_dados):
+        rpm_values = [data["rpm"] for data in matriz_dados]
+        torque_values = [data["trq"] for data in matriz_dados]
+        power_values = [data["ptc"] for data in matriz_dados]
+
+        return rpm_values, torque_values, power_values
+
+# Exemplo de chamada da função de otimização e impressão dos resultados
 matriz_dados = [
     {"rpm": 0, "ptc": 0.0, "trq": 245.89},
     {"rpm": 375, "ptc": 9.645583738270778, "trq": 245.61},
@@ -47,217 +195,26 @@ matriz_dados = [
     {"rpm": 15000, "ptc": 137.40470006702415, "trq": 87.47}
 ]
 
-def CalculateOutputs(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp):
-    peso = massa * 9.81
-    rnet = (peso * (cgx * 0.001)) / (etex * 0.001)
-    rned = massa * 9.81 - rnet
-    ftr = (rnet * cfat) / (1 - ((cgy * 0.001) * cfat) / (etex * 0.001))
-    tdcl = (ftr * cgy * 0.001) / (etex * 0.001)
-    cnet = rnet + tdcl
-    ptet = cnet * rpneu * 0.001 * cfat
-    cpneu = cnet / 2
-    tpneu = ftr * rpneu * 0.001
-    redf = redp * red1
-    tpwt = ptet / (red1 * redp * optimized_cp)
-    acpr = (ftr / massa) / 9.81
-    acfi = acpi * 9.81
-    acfr = acpr * 9.81
-    fti = massa * acfi
-    tpi = fti * rpneu * 0.001
-    tpwti = tpi / (red1 * redp * optimized_cp)
-    tci = (fti * cgy) / etex
-    tcr = (ftr * cgy) / etex
-    cteti = rnet + tci
-    return peso, rnet, rned, ftr, tdcl, cnet, ptet, cpneu, tpneu, redf, tpwt, acpr, acfi, acfr, fti, tpi, tpwti, tci, tcr, cteti
+# Parâmetros iniciais para otimização
+cgx = 853  # mm
+cgy = 294  # mm
+massa = 347  # kg
+etex = 1567  # mm
+cfat = 0.9  # coeficiente de atrito
+rpneu = 259  # mm
+acpi = 1.2  # g
+redp = 2.12  # redução primária
+red1 = 2.76  # redução da marcha única
 
-def Transmission(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp):
-    peso, rnet, rned, ftr, tdcl, cnet, ptet, cpneu, tpneu, redf, tpwt, acpr, acfi, acfr, fti, tpi, tpwti, tci, tcr, cteti = CalculateOutputs(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp)
-    rpm_values, torque_values, power_values = CurveTorquePower(matriz_dados)
-    
-    # Print dos resultados obtidos
-    print("Resultados:")
-    print("Peso:", peso, "N")
-    print("Reação no eixo traseiro:", rnet, "N")
-    print("Reação no eixo dianteiro:", rned, "N")
-    print("Força trativa:", ftr, "N")
-    print("Transferência de carga longitudinal:", tdcl, "N")
-    print("Carga no eixo traseiro:", cnet, "N")
-    print("Pico de torque no eixo traseiro:", ptet, "Nm")
-    print("Carga no pneu:", cpneu, "N")
-    print("Torque no pneu:", tpneu, "Nm")
-    print("Redução final:", redf)
-    print("Torque necessário no motor:", tpwt, "Nm")
-    print("Aceleração primária real (g):", acpr)
-    print("Aceleração final ideal:", acfi, "m/s²")
-    print("Aceleração final real:", acfr, "m/s²")
-    print("Força trativa ideal:", fti, "N")
-    print("Torque no pneu ideal:", tpi, "Nm")
-    print("Torque no motor ideal:", tpwti, "Nm")
-    print("Transferência de carga ideal:", tci, "N")
-    print("Transferência de carga real:", tcr, "N")
-    print("Carga total no eixo traseiro ideal:", cteti, "N")
+drivetrain = Drivetrain(matriz_dados)
+optimized_cp, fun_value = drivetrain.optimize_cp(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1)
 
-    print("\nMatriz de RPM, Torque e Potência:")
-    print("RPM\t\tTorque (Nm)\tPotência (kW)")
-    for data in matriz_dados:
-        rpm = data["rpm"]
-        trq = data["trq"]
-        ptc = data["ptc"]
-        print("{:.2f}\t\t{:.2f}\t\t{:.2f}".format(rpm, trq, ptc))
+print(f"O valor otimizado de cp é: {optimized_cp}")
+print(f"O valor da função objetivo é: {fun_value}")
 
-    # Plotando o gráfico
-    plt.figure(figsize=(10, 6))
-    plt.plot(rpm_values, torque_values, label='Torque [Nm]', color='blue')
-    plt.plot(rpm_values, power_values, label='Power [kW]', color='orange')
-    plt.title("Curva de Torque e Potência")
-    plt.xlabel('RPM')
-    plt.ylabel('Torque [Nm] / Power [kW]')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+drivetrain.Transmission(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp)
 
-# Definindo a função objetivo para otimização de cp
-def objective_function(cp, cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1):
-    # Calcula os outputs
-    outputs = CalculateOutputs(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, cp)
-    tpwt = outputs[10]  # Torque necessário no motor
-    target_tpwt = 80.0  # Alvo para o torque necessário no motor
-    
-    # Calcular o desempenho do carro com o cp atual
-    performance = CarPerformance(massa, rpneu, redp, red1, cp)
-    
-    # Extrair a velocidade linear máxima e a menor força final
-    max_vl = max([p['vl'] for p in performance])
-    min_ff = min([p['ff'] for p in performance])
-    
-    # Penalidades para as novas condições
-    penalty = 0
-    if max_vl < 100:
-        penalty += (100 - max_vl) ** 2
-    if min_ff <= 0:
-        penalty += abs(min_ff) * 1000
-    
-    # A função objetivo será a diferença absoluta entre tpwt e o valor alvo com penalidade
-    return abs(tpwt - target_tpwt) + penalty
+performance = drivetrain.CarPerformance(massa, rpneu, redp, red1, optimized_cp)
+drivetrain.print_car_performance(performance)
 
-# Função que realiza a otimização do parâmetro cp
-def optimize_cp(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1):
-    initial_guess = 1.5  # Chute inicial para cp
-    result = minimize(objective_function, initial_guess, args=(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1), method='BFGS')
-    return result.x[0], result.fun
-
-# Função de desempenho do carro
-def CarPerformance(massa, rpneu, redp, red1, optimized_cp):
-    peso = massa * 9.81
-    rdt = 0.9
-    mtrd = 0.9
-    cfar = 0.54
-    da = 1.162
-    af = 1.06
-    bscf = 0.015
-    spdf = 0.012
-
-    parametros = []
-
-    for dado in matriz_dados:
-        # Cálculo da força trativa (N)
-        ftf = ((dado["trq"] * redp * red1 * optimized_cp) / (rpneu * 0.001)) * rdt
-
-        # Cálculo da velocidade angular (rad/s)
-        va = (dado["rpm"] * 2 * math.pi) / (60 * redp * red1 * optimized_cp)
-
-        # Cálculo da velocidade linear (km/h)
-        vl = ((va * (rpneu * 0.001)) * mtrd) * 3.6
-
-        # Cálculo da força de arrasto (N)
-        fa = (da * vl ** 2 * cfar * af) / 2
-
-        # Cálculo da resistência de rolamento (N)
-        rr = (bscf + (3.24 * spdf * ((vl / 100 * 0.44704) ** 2.5))) * peso
-
-        # Cálculo da força final (N)
-        ff = ftf - fa - rr
-
-        # Armazenar os parâmetros calculados em um dicionário
-        parametro = {
-            "ftf": ftf,
-            "va": va,
-            "vl": vl,
-            "fa": fa,
-            "rr": rr,
-            "ff": ff
-        }
-
-        parametros.append(parametro)
-
-    # Retornar os parâmetros calculados
-    return parametros
-
-# Função para imprimir o desempenho do carro
-def print_car_performance(performance):
-    print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]\tForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
-    for param in performance:
-        print(f"{param['ftf']}\t{param['va']}\t{param['vl']}\t{param['fa']}\t{param['rr']}\t{param['ff']}")
-
-def HalfShaftsSizing(redp, red1, optimized_cp, fsi=1.25, tet=786, tec=471.6, dif=1):
-    # Obtendo o maior torque do motor a partir dos dados experimentais 
-    tmax = max(data["trq"] for data in matriz_dados)
-    
-    # Calculando o torque máximo nos semieixos
-    tmsx = tmax * redp * red1 * optimized_cp * dif
-    
-    # Calculando o torque máximo de projeto
-    tmp = tmsx * fsi
-    
-    # Calculando o diâmetro dos semieixos (mm)
-    dsx = (((2 * tmp) / (math.pi * tec * 10 ** 6)) ** (1 / 3)) * 2000
-    
-    # Calculando o fator de segurança obtido
-    fso = (math.pi * (((dsx / 1000) / 2) ** 3) * tec * (10 ** 6)) / (2 * tmsx)
-    
-    # Calculando o fator de segurança para 1 polegada
-    fs1p = (math.pi * ((0.0254 / 2) ** 3) * tec * (10 ** 6)) / (2 * tmsx)
-    
-    # Print dos resultados obtidos
-    print("Dimensionamento dos Semieixos:")
-    print("Torque máximo do motor:", tmax, "Nm")
-    print("Torque máximo nos semieixos:", tmsx, "Nm")
-    print("Torque máximo de projeto:", tmp, "Nm")
-    print("Diâmetro dos semieixos:", dsx, "mm")
-    print("Fator de segurança ideal:", fsi)
-    print("Fator de segurança obtido:", fso)
-    print("Fator de segurança para 1 polegada:", fs1p)
-    
-    return tmax, tmsx, tmp, dsx, fso, fs1p
-
-def CurveTorquePower(matriz_dados):
-    rpm_values = [data["rpm"] for data in matriz_dados]
-    torque_values = [data["trq"] for data in matriz_dados]
-    power_values = [data["ptc"] for data in matriz_dados]
-    return rpm_values, torque_values, power_values
-
-def main():
-    cgx = 853  # mm
-    cgy = 294  # mm
-    massa = 347  # kg
-    etex = 1567  # mm
-    cfat = 0.9  # coeficiente de atrito
-    rpneu = 259  # mm
-    acpi = 1.2  # g
-    redp = 2.12  # redução primária
-    red1 = 2.76  # redução da marcha única
-
-    # Otimizar o parâmetro cp
-    optimized_cp, objective_value = optimize_cp(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1)
-    print(f"Relação coroa-pinhão ideal: {optimized_cp}")
-    print(f"Valor da função objetivo: {objective_value}")
-
-    # Usar o parâmetro cp otimizado no restante do código
-    Transmission(cgx, cgy, massa, etex, cfat, rpneu, acpi, redp, red1, optimized_cp)
-    CarPerformance(massa, rpneu, redp, red1, optimized_cp)
-    performance = CarPerformance(massa, rpneu, redp, red1, optimized_cp)
-    print_car_performance(performance)
-    HalfShaftsSizing(redp, red1, optimized_cp)
-
-# Chama a função principal
-main()
+tmax, tmsx, tmp, dsx, fso, fs1p = drivetrain.HalfShaftsSizing(redp, red1, optimized_cp)
