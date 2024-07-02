@@ -1,10 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-initial_speed = 20 # m/s (Velocidade inicial do veículo)
+initial_speed = 20  # m/s (Velocidade inicial do veículo)
 if initial_speed != 0:
     class BrakeSystem:
-        def __init__(self, params):
+        def __init__(self, params=None):
             self.params = params
             self.RedP = params['RedP']
             self.a = params['a']
@@ -40,6 +40,7 @@ if initial_speed != 0:
             FnR = τR / self.Npast * self.RedP * self.red
             Awc = (self.pi * (self.Dwc ** 2)) / 4
             Acm = (self.pi * (self.Dcm ** 2)) / 4
+            # print("Área do pistão no cilindro mestre:",Acm)
             PF = FnF / Awc
             PR = FnR / Awc
             FaCM = PF * Acm
@@ -137,6 +138,7 @@ if initial_speed != 0:
     # Criação da instância do sistema de freios e aplicação da força no pedal de freio
     BrakeSystem = BrakeSystem(params)
     pedal_force = 885 # N
+
     # Faixa de forças no pedal
     pedal_forces = np.linspace(0, pedal_force, 1000)
 
@@ -172,19 +174,6 @@ if initial_speed != 0:
     print("Resistência ao rolamento:", resistencia_rolamento, "N")
     print("Torque de resistência ao rolamento:", torque_resistencia_rolamento, "N.m")
     print("Torque ajustado:", torque_ajustado, "N.m")
-
-    # Plotando a curva
-    plt.figure(figsize=(10, 6))
-    plt.plot(forces, slip_ratios, label="Slip Ratio vs. Força do Pedal")
-    # Invertendo o eixo x
-    plt.gca().invert_yaxis()
-    plt.xlabel("Força no Pedal (N)")
-    plt.ylabel("Slip Ratio")
-    plt.title("Força no Pedal em Relação ao Slip Ratio de Frenagem")
-    plt.grid(True)
-    plt.legend()
-    plt.show()
-
 
 
     class Dynamics:
@@ -298,6 +287,21 @@ if initial_speed != 0:
     plt.tight_layout()
     plt.show()
 
+    # Plotando a curva
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(forces, slip_ratios, label="Slip Ratio vs. Força do Pedal")
+
+    # Invertendo o eixo x
+    plt.gca().invert_yaxis()
+    plt.xlabel("Força no Pedal (N)")
+    plt.ylabel("Slip Ratio")
+    plt.title("Força no Pedal em Relação ao Slip Ratio de Frenagem")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
 
 else:
-    print("O carro tá parado mó fí")
+    print("A velocidade inicial do veículo não pode ser zero")
