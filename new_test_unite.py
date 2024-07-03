@@ -213,9 +213,14 @@ class Transmission:
     
     def print_car_performance(self, optimized_cp):
         performance = Transmission.CarPerformance(self, optimized_cp)
-        print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]\tForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
+        print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
+        
         for param in performance:
-            print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}\t{param['fa']}\t{param['rr']}\t{param['forca_final']}")
+            print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}")
+        
+        print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
+        for param in performance:
+            print(f"{param['fa']}\t{param['rr']}\t{param['forca_final']}")
 
     def HalfShaftsSizing(self, optimized_cp, fsi=1.25, tet=786, tec=471.6, dif=1):
         # Obtendo o maior torque do motor a partir dos dados experimentais 
@@ -297,11 +302,17 @@ class Dynamics:
     def slip_ratio(velocidade_angular, velocidade_linear, raio_pneu):
         slip_ratio = []
         for i in range(len(velocidade_angular)):
-            if velocidade_linear[i] != 0:
-                value = (velocidade_angular[i] * raio_pneu /velocidade_linear[i]) - 1
+            if velocidade_linear != 0:
+                value = (velocidade_angular[i] * raio_pneu /velocidade_linear) - 1
                 
                 slip_ratio.append(value)
         return slip_ratio
+    
+    def show_results(slip_ratio):
+        print("Valores do Slip Ratio: ")
+        
+        for dado in slip_ratio:
+            print(dado)
 
 
 ############### Testes ###########
@@ -325,23 +336,6 @@ car.show_results(optimized_cp)
 car.HalfShaftsSizing(optimized_cp)
 car.print_car_performance(optimized_cp)
 
-#################
-
-#Modelo de como resgatar os valores dos métodos da classe Transmission
-info = car.CalculateOutputs(optimized_cp)
-
-
-#Transforma em um dicionário para facilitar o acesso pelas chaves e indentificação dos valores
-info = dict(zip(['peso', 'reacao_traseira', 'reacao_dianteira', 'forca_trativa', 'transferencia_longitudinal', 'carga_traseira', 
-                 'pico_torque_traseiro', 'carga_pneu', 'torque_pneu', 'reducao_final', 'torque_necessario_motor', 'aceleracao_primaria_real',
-                 'aceleracao_primaria_ideal', 'aceleraco_real_final', 'forca_trativa_ideal', 'torque_pneu_ideal', 'torque_necessario_motor', 
-                 'transferencia_carga_ideal', 'transferencia_carga_real', 'carga_traseira_ideal'], info))
-              
-
-#Instancia a classe Dynamics com o parâmetro da carga vertical retirada do dict
-dynamics = Dynamics(tire_Fz = info['carga_pneu'])
-print(dynamics.tire_Fz) #Apenas demonstrando como o valor acessado pode ser atribuído
-
 
 ####### Cálculo de Slip Ratio ############
 
@@ -350,10 +344,12 @@ performance_veiculo = car.CarPerformance(optimized_cp)
 
 #Filtrando a velocidade angular e velocidade linear
 velocidade_angular = [dado["va"] for dado in performance_veiculo]
-velocidade_linear = [dado["velocidade_linear"] for dado in performance_veiculo]
+
 #Atrinuindo um valor para o raio do pneu(em m)
 raio_pneu = 0.259
-#Chama a função de slip ratio e salva seus valores numa lista
-slip_ratios = Dynamics.slip_ratio(velocidade_angular, velocidade_linear, raio_pneu)
 
-print(f'Printando slip ratios: {slip_ratios}')
+#Chama a função de slip ratio e salva seus valores numa lista
+#Utilizando uma velocidade arbitrária e fixa para o veículo
+slip_ratio = Dynamics.slip_ratio(velocidade_angular, 90, raio_pneu)
+
+Dynamics.show_results(slip_ratio)
