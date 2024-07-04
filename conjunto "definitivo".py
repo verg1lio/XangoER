@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.optimize as opt
 
 initial_speed = 20  # m/s (Velocidade inicial do veículo)
 if initial_speed != 0:
@@ -40,7 +41,6 @@ if initial_speed != 0:
             FnR = τR / self.Npast * self.RedP * self.red
             Awc = (self.pi * (self.Dwc ** 2)) / 4
             Acm = (self.pi * (self.Dcm ** 2)) / 4
-            # print("Área do pistão no cilindro mestre:",Acm)
             PF = FnF / Awc
             PR = FnR / Awc
             FaCM = PF * Acm
@@ -106,11 +106,14 @@ if initial_speed != 0:
 
             angular_velocity = initial_angular_velocity + angular_velocity
 
+            # Calculando a força longitudinal a partir das forças FzF_dyn e FzR_dyn
+
+            tire_longitudinal_force = (FzF_dyn + FzR_dyn) / 2
+
             # Retornando os resultados calculados
-            return resultados, forca_f, inertia_wheel, torque_ajustado, angular_deceleration, angular_velocity, angular_velocities, torque_resistencia_rolamento, desaceleracao_linear, torque_disco_freio, resistencia_rolamento
+            return resultados, forca_f, inertia_wheel, torque_ajustado, angular_deceleration, angular_velocity, angular_velocities, torque_resistencia_rolamento, desaceleracao_linear, torque_disco_freio, resistencia_rolamento, tire_longitudinal_force
 
 
-    # Definindo os parâmetros
     params = {
         'RedP': 4,  # Redução do pedal
         'a': 0.8,  # Desaceleração [g]
@@ -134,14 +137,68 @@ if initial_speed != 0:
         'L': 1.5,  # Distância entre eixos [m]]
         'c_rr': 0.015  # Coeficiente de resistência ao rolamento
     }
+    class Dynamics:
+        def __init__(self, spring_type=None, spring_k=None, spring_F=None, spring_non_lin_coef=None, tire_Fz=None,
+                   tire_Sa=None, tire_Ls=None, tire_friction_coef=None, damper_type=None, damper_V=None,
+                   damper_F_viscous=None, damper_K_friction=None, damper_F_static=None):
+            # Modelo de mola
+            self.spring_type = spring_type  # Hooke, Softening
+            self.spring_k = spring_k  # rigidez da mola [N/m]
+            self.spring_F = spring_F  # força que a mola recebe [N]
+            self.spring_non_lin_coef = spring_non_lin_coef  # coeficiente de ganho não-linear
+            # Modelo de pneu
+            self.tire_Fz = tire_Fz  # carga vertical no pneu [N]
+            self.tire_Sa = tire_Sa  # slip angle do pneu [rad]
+            self.tire_Ls = tire_Ls  # longitudinal slip do pneu [Admensional]
+            self.tire_type = 'Default'
+            self.tire_friction_coef = tire_friction_coef  # coeficiente de fricção entre o pneu e a pista
+            # Modelo de amortecedor
+            self.damper_type = damper_type  # Coulumb, Integrated, Stribeck
+            self.damper_V = damper_V  # velocidade relativa amortecedor [m/s]
+            self.damper_F_viscous = damper_F_viscous  # força viscosa do fluído [N]
+            self.damper_F_static = damper_F_static  # coeficiente de fricção estática de coulumb [N]
+            self.damper_K_friction = damper_K_friction  # rigidez de fricção [N/m]
 
-    # Criação da instância do sistema de freios e aplicação da força no pedal de freio
+        def Tire(self, params):
+            E, Cy, Cx, Cz, c1, c2 = params
+            Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
+            D = self.tire_friction_coef * self.tire_Fz
+            Bz = Cs / (Cz * D)
+            Bx = Cs / (Cx * D)
+            By = Cs / (Cy * D)
+            tire_lateral_force = D * np.sin(
+                Cy * np.arctan(By * self.tire_Sa - E * (By * self.tire_Sa - np.arctan(By * self.tire_Sa))))
+            tire_longitudinal_force = D * np.sin(
+                Cx * np.arctan(9 * Bx * self.tire_Ls - E * (Bx * self.tire_Ls - np.arctan(Bx * self.tire_Ls))))
+            tire_auto_align_moment = D * np.sin(
+                Cz * np.arctan(Bz * self.tire_Sa - E * (Bz * self.tire_Sa - np.arctan(Bz * self.tire_Sa))))
+
+            return tire_lateral_force, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
+
+        def slip_ratio_1(velocidade_angular, velocidade_linear, raio_pneu):
+            slip_ratio = []
+            value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
+            slip_ratio.append(value)
+
+            return slip_ratio
+
+        def show_results(slip_ratio):
+            print("Valores do Slip Ratio: ")
+
+            for dado in slip_ratio:
+                print(dado)
+
+
+    # Criação da instância do sistema de freios e aplicação da força do pedal
     BrakeSystem = BrakeSystem(params)
-    pedal_force = 885 # N
 
-    # Faixa de forças no pedal
+    # Listas para armazenar os resultados
+    tire_longitudinal_forces = []
+    forcas_frenagem = []
+
+    # Definindo força no pedal e Faixa de forças no pedal
+    pedal_force = 885  # N
     pedal_forces = np.linspace(0, pedal_force, 1000)
-
     tempo = 2  # s (Tempo total de acionamento do pedal)
     time_intervals = np.linspace(0, tempo, 100)
 
@@ -149,12 +206,15 @@ if initial_speed != 0:
     forces = []
 
     for pedal_force in pedal_forces:
-        resultados, forca_f, inertia_wheel, torque_ajustado, angular_deceleration, angular_velocity, angular_velocities, torque_resistencia_rolamento, desaceleracao_linear, torque_disco_freio, resistencia_rolamento = BrakeSystem.apply_brake(
+        resultados, forca_f, inertia_wheel, torque_ajustado, angular_deceleration, angular_velocity, angular_velocities, torque_resistencia_rolamento, desaceleracao_linear, torque_disco_freio, resistencia_rolamento, tire_longitudinal_force = BrakeSystem.apply_brake(
             pedal_force, initial_speed)
 
-        # Slip ratio
-        slip_ratio = (angular_velocity * params['Rdp'] / initial_speed) - 1
-        slip_ratios.append(slip_ratio)
+    # Definindo parametros para o slip ratio com base na função def:slip_ratio_1
+        velocidade_angular = angular_velocity
+        raio_pneu = params['Rdp']
+        velocidade_linear = initial_speed
+        slip_ratio_definivo = Dynamics.slip_ratio_1(velocidade_angular, velocidade_linear, raio_pneu)
+        slip_ratios.append(slip_ratio_definivo)
         forces.append(pedal_force)
 
     # Exibindo os resultados calculados
@@ -174,120 +234,15 @@ if initial_speed != 0:
     print("Resistência ao rolamento:", resistencia_rolamento, "N")
     print("Torque de resistência ao rolamento:", torque_resistencia_rolamento, "N.m")
     print("Torque ajustado:", torque_ajustado, "N.m")
+    print(f'slip ratio definitivo: {slip_ratio_definivo}')
 
+    for pedal_force in pedal_forces:
+        # esteja correto tem que adicionar a variavel.
+        resultados, forca_f, inertia_wheel, torque_ajustado, angular_deceleration, angular_velocity, angular_velocities, torque_resistencia_rolamento, desaceleracao_linear, torque_disco_freio, resistencia_rolamento, tire_longitudinal_force = BrakeSystem.apply_brake(
+            pedal_force, initial_speed)
 
-    class Dynamics:
-        def __init__(self, spring_type, spring_k, spring_F, spring_non_lin_coef, tire_Fz, tire_Sa, tire_Ls):
-            # Modelo de mola
-            self.spring_type = spring_type  # Hooke, Softening
-            self.spring_k = spring_k  # rigidez da mola [N/m]
-            self.spring_F = spring_F  # força que a mola recebe [N]
-            self.spring_non_lin_coef = spring_non_lin_coef  # coeficiente de ganho não-linear
-            # Modelo de pneu
-            self.tire_Fz = tire_Fz  # carga vertical no pneu [N]
-            self.tire_Sa = tire_Sa  # slip angle do pneu [rad]
-            self.tire_Ls = tire_Ls  # longitudinal slip do pneu [Admensional]
-            self.tire_type = 'Default'
-
-        def Tire(self):
-            # Pacejka parâmetros
-            E = -2
-            Cy = 1.4  # C para força lateral
-            Cx = 1.65  # C para força longitudinal
-            Cz = 2.4  # C para momento de torque auto-alinhante
-            c1 = 54000
-            c2 = 6600
-            Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
-
-            if self.tire_type == 'Default':
-                D = 1.45 * self.tire_Fz
-                Bz = Cs / (Cz * D)
-                Bx = Cs / (Cx * D)
-                By = Cs / (Cy * D)
-                tire_lateral_force = D * np.sin(
-                    Cy * np.arctan(By * self.tire_Sa - E * (By * self.tire_Sa - np.arctan(By * self.tire_Sa))))
-                tire_longitudinal_force = D * np.sin(
-                    Cx * np.arctan(Bx * self.tire_Ls - E * (Bx * self.tire_Ls - np.arctan(Bx * self.tire_Ls))))
-                tire_auto_align_moment = D * np.sin(
-                    Cz * np.arctan(Bz * self.tire_Sa - E * (Bz * self.tire_Sa - np.arctan(Bz * self.tire_Sa))))
-
-            return tire_lateral_force, tire_longitudinal_force, (10 + (tire_auto_align_moment / 55))
-
-
-    # Valores de tire_Fz para plotagem
-    tire_Fz_values = [1500]
-
-    # Instanciando a classe Dynamics para cada valor de tire_Fz
-    dynamics_list = [
-        Dynamics(spring_type="Hooke", spring_k=1000, spring_F=500, spring_non_lin_coef=0.1, tire_Fz=tire_Fz, tire_Sa=5,
-                 tire_Ls=0.1) for tire_Fz in tire_Fz_values]
-
-    # Criando arrays de valores para os parâmetros relevantes
-    tire_Sa_values = np.linspace(-np.pi / 20, np.pi / 20, 1000)  # Valores de ângulo de deslizamento lateral
-    tire_Ls_values = np.linspace(-0.4, 0.4, 1000)  # Valores de slip longitudinal
-
-    # Calculando as variáveis retornadas pela função Tire() para cada conjunto de parâmetros e para cada valor de tire_Fz
-    tire_lateral_force_values_list = [[dynamics.Tire()[0] for dynamics.tire_Sa in tire_Sa_values] for dynamics in
-                                      dynamics_list]
-    tire_longitudinal_force_values_list = [[dynamics.Tire()[1] for dynamics.tire_Ls in tire_Ls_values] for dynamics in
-                                           dynamics_list]
-    tire_auto_align_moment_values_list = [[dynamics.Tire()[2] for dynamics.tire_Sa in tire_Sa_values] for dynamics in
-                                          dynamics_list]
-
-    # Dados experimentais
-    angles = [-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-
-    forces_1 = [-2300, -2200, -2060, -1880, -1680, -1450, -1190, -850, -430, 60, 520, 890, 1170, 1390, 1580, 1730, 1890,
-                2000, 2090]
-    torque_1 = [-28.84, -28.68, -27.21, -26.41, -27.70, -24.21, -24.15, -15.88, -4.91, 14.72, 33.80, 43.79, 46.93,
-                49.09,
-                50.90, 50.10, 50.81, 48.12, 48.83]
-
-    forces_2 = [-2930, -2750, -2530, -2310, -2050, -1760, -1410, -990, -480, 90, 620, 1080, 1450, 1760, 2010, 2230,
-                2420,
-                2590, 2750]
-    torque_2 = [-48.55, -49.34, -47.81, -45.55, -46.18, -43.39, -40.66, -28.43, -9.02, 17.80, 42.97, 59.03, 64.82,
-                67.67,
-                68.95, 67.69, 67.29, 64.64, 64.16]
-
-    tire_Sa = angles  # Ângulos de deslizamento lateral
-    tire_Ls = (angular_velocity * params['Rdp'] / initial_speed) - 1  # Slip ratio baseado na nova velocidade angular
-    print("Slip Ratio Longitudinal:", tire_Ls)
-
-    # Plotagem dos resultados
-    plt.figure(figsize=(15, 5))
-
-    # Plotagem da Força Lateral em função do Ângulo de Deslizamento Lateral
-    plt.subplot(1, 3, 1)
-    for i, tire_lateral_force_values in enumerate(tire_lateral_force_values_list):
-        plt.plot(np.degrees(tire_Sa_values), tire_lateral_force_values, label=f'tire_Fz = {tire_Fz_values[i]}')
-    plt.scatter(angles, forces_1, color='black', label='Dados Experimentais 1500N')
-    plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
-    plt.ylabel('Força Lateral do Pneu (N)')
-    plt.title('Força Lateral X Slip Angle')
-    plt.legend()
-
-    # Plotagem da Força Longitudinal em função do Slip Longitudinal
-    plt.subplot(1, 3, 2)
-    for i, tire_longitudinal_force_values in enumerate(tire_longitudinal_force_values_list):
-        plt.plot(tire_Ls_values, tire_longitudinal_force_values, label=f'tire_Fz = {tire_Fz_values[i]}')
-    plt.xlabel('Slip Longitudinal')
-    plt.ylabel('Força Longitudinal do Pneu (N)')
-    plt.title('Força Longitudinal X Longitudinal Slip')
-    plt.legend()
-
-    # Plotagem do Momento de Auto-Alinhamento em função do Ângulo de Deslizamento Lateral
-    plt.subplot(1, 3, 3)
-
-    plt.plot(time_intervals, angular_velocities[:-1])
-    plt.xlabel('Tempo (s)')
-    plt.ylabel('Velocidade Angular (rad/s)')
-    plt.title('Velocidade Angular ao Longo do Tempo')
-
-    plt.tight_layout()
-    plt.show()
-
-    # Plotando a curva
+        tire_longitudinal_forces.append(tire_longitudinal_force)
+        forcas_frenagem.append(forca_f)
 
     plt.figure(figsize=(10, 6))
     plt.plot(forces, slip_ratios, label="Slip Ratio vs. Força do Pedal")
@@ -301,7 +256,72 @@ if initial_speed != 0:
     plt.legend()
     plt.show()
 
+    # Valores a serem usados na instância da classe Dynamics
+    slip_ratio = np.linspace(-1, 1, 1000)
+    slip_angles = np.linspace(-9, 9, 1000)
+    slip_ratio2 = (velocidade_angular * raio_pneu / velocidade_linear) - 1
 
+    # Dados experimentais
+    ratio = np.linspace(-1, 1, 19)
+    angles = np.array(
+        [-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    tire_lateral_forces_1 = np.array(
+        [-2300, -2200, -2060, -1880, -1680, -1450, -1190, -850, -430, 60, 520, 890, 1170, 1390, 1580, 1730, 1890, 2000,
+         2090])
+    tire_auto_align_moment_1 = np.array(
+        [-28.84, -28.68, -27.21, -26.41, -27.70, -24.21, -24.15, -15.88, -4.91, 14.72, 33.80, 43.79, 46.93, 49.09,
+         50.90, 50.10, 50.81, 48.12, 48.83])
 
-else:
-    print("A velocidade inicial do veículo não pode ser zero")
+    Dynamics = Dynamics(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45)
+
+    # Parâmetros de Pacejka
+    result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057),
+              (366.4936818126405)]
+
+    predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces = Dynamics.Tire(
+        result)
+
+    # Definindo um tamanho para a figura
+    plt.figure(figsize=(20, 7))
+
+    # Plotagem força lateral
+    plt.subplot(1, 3, 1)
+    plt.plot(slip_angles, predicted_tire_lateral_forces, label='Curva Otimizada')
+    plt.scatter(angles, tire_lateral_forces_1, color='red', label='Dados Experimentais')
+    plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
+    plt.ylabel('Força Lateral do Pneu (N)')
+    plt.title('Curva Otimizada com os Dados Experimentais')
+    plt.legend()
+    plt.grid(True)
+
+    # Plotagem torque auto-alinhante
+    plt.subplot(1, 3, 2)
+    plt.plot(slip_angles, predicted_tire_auto_align_moment, label='Curva Otimizada')
+    plt.scatter(angles, tire_auto_align_moment_1, color='blue', label='Dados Experimentais')
+    plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
+    plt.ylabel('Torque auto-alinhante (N.m)')
+    plt.title('Curva Otimizada com os Dados Experimentais')
+    plt.legend()
+    plt.grid(True)
+
+    # Plotagem força longitudinal
+    plt.subplot(1, 3, 3)
+    plt.plot(slip_ratio, predicted_tire_longitudinal_forces, label='Curva Sem Otimizar')
+    plt.xlabel('Taxa de Escorregamento Longitudinal (Admensional)')
+    plt.ylabel('Força Longitudinal (N)')
+    plt.title('Força Longitudinal - Sem Dados Experimentais')
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
+    plt.show()
+
+    # Plotar o gráfico da força do pedal em relação à força longitudinal do pneu
+    plt.plot(pedal_forces, tire_longitudinal_forces, label='Força Longitudinal do Pneu')
+    plt.plot(pedal_forces, forcas_frenagem, label='Força de Frenagem')
+    plt.xlabel('Força do Pedal (N)')
+    plt.ylabel('Força Longitudinal (N)')
+    plt.title('Relação entre a Força do Pedal e a Força Longitudinal')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
