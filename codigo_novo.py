@@ -121,7 +121,7 @@ class BrakeSystem:
         resistencia_rolamento = self.c_rr * W
 
         # Calculando o torque gerado pela resistência ao rolamento
-        torque_resistencia_rolamento = resistencia_rolamento * (self.Rdp + self.Rdr)
+        torque_resistencia_rolamento = resistencia_rolamento * (self.Rdp)
 
         # Calculando o torque de freio ajustado considerando a resistência ao rolamento
         torque_ajustado = torque_disco_freio - torque_resistencia_rolamento
@@ -143,22 +143,31 @@ class BrakeSystem:
 
     def calculate_angular_velocity(self, torque_ajustado, tempo, initial_speed):
         time_intervals = np.linspace(0, tempo, 100)
-        inertia_wheel = 0.5 * (self.m_tire + self.m_wheel) * (self.Rdr * 2 + self.Rdp * 2)
+        inertia_wheel = 0.5 * (self.m_tire + self.m_wheel) * (self.Rdp * 2)
         angular_deceleration = (torque_ajustado / 4) / inertia_wheel
-        initial_angular_velocity = initial_speed / (self.Rdp + self.Rdr)
+        initial_angular_velocity = initial_speed / (self.Rdp)
         time_step = time_intervals[1] - time_intervals[0]
         angular_velocity = initial_angular_velocity
-        angular_velocities = [angular_velocity]
+        angular_velocities = []
 
         for i in time_intervals:
             angular_velocity -= angular_deceleration * time_step
             angular_velocities.append(angular_velocity)
-
             angular_velocity = initial_angular_velocity + angular_velocity
 
 
         # Retornando os resultados calculados
         return angular_deceleration, angular_velocity, angular_velocities
+    
+    def show_graph(self, longitudinal_force, pedal_force):
+        plt.figure(figsize=(10, 6))
+        plt.plot(pedal_force, longitudinal_force, label='Longitudinal Force', color='blue')
+        plt.xlabel('Pedal Force (N)')
+        plt.ylabel('Longitudinal Force (N)')
+        plt.title('Longitudinal Force vs. Pedal Force')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
         
 # Definindo os parâmetros
@@ -172,7 +181,7 @@ params = {
         'μ': 1.5,  # Coeficiente de atrito do pneu/solo
         'FzF': 1471.5,  # Força de reação estática na dianteira [N]
         'FzR': 981.0,  # Força de reação estática na traseira [N]
-        'Rdp': 0.15,  # Raio do pneu [m]
+        'Rdp': 0.30,  # Raio do pneu [m]
         'Rdr': 0.1651,  # Raio da roda [m]
         'Dcm': 0.02,  # Diâmetro do cilindro mestre em metros
         'Dwc': 0.032,  # Diâmetro do cilindro da roda em metros
@@ -183,7 +192,7 @@ params = {
         'm_wheel': 10,  # Massa da roda [kg] <-- estimativa
         'm_tire': 10,  # Massa do pneu [kg] <-- estimativa
         'L': 1.5,  # Distância entre eixos [m]]
-        'c_rr': 0.015  # Coeficiente de resistência ao rolamento
+        'c_rr': 0  # Coeficiente de resistência ao rolamento
 }
 
 tempo = 2
@@ -191,9 +200,10 @@ initial_speed = 20
 
 # Criação da instância do sistema de freios e aplicação da força no pedal de freio
 BrakeSystem = BrakeSystem(params)
-pedal_force = np.linspace(0, 823, 1000)  # N
+pedal_force = np.linspace(0, 0, 1)  # N
 resultados, forca_frenagem, torque_ajustado = BrakeSystem.apply_brake(pedal_force) 
-desaceleracao_angular, velocidade_angular, lista_velocidade = BrakeSystem.calculate_angular_velocity(torque_ajustado, initial_speed, tempo)   
+desaceleracao_angular, velocidade_angular, lista_velocidade = BrakeSystem.calculate_angular_velocity(torque_ajustado, initial_speed, tempo) 
+print(f'Velocidade angular {velocidade_angular}, {torque_ajustado}' )  
 
 # Valores a serem usados na instância da classe Dynamics
 slip_ratio = np.linspace(-1, 1, 1000)
@@ -209,5 +219,14 @@ calculo_slip_ratio = dynamics_instance.slip_ratio_1(velocidade_angular, initial_
 
 dynamics_instance_2 = Dynamics(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=calculo_slip_ratio, tire_friction_coef=1.45)
 forca_longitudinal = dynamics_instance_2.Tire(result)[2]
+dynamics_instance_2.show_results(calculo_slip_ratio)
 
-print(f'força longitudinal : {forca_longitudinal}')
+
+
+# Plotting the longitudinal force against pedal force
+pedal_force = np.linspace(0, 823, 1000)
+
+# Since forca_longitudinal is an array, we need to ensure it's the same length as pedal_force
+forca_longitudinal = np.array(forca_longitudinal)
+
+# BrakeSystem.show_graph(forca_longitudinal, pedal_force)
