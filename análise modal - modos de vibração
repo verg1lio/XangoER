@@ -1,0 +1,174 @@
+import numpy as np
+from scipy.linalg import eigh
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Propriedades físicas e geométricas
+ro = 7800  # Densidade do material
+E = 2.1e11  # Módulo de Elasticidade
+A = 1.0  # Área da seção transversal
+L = 1.0  # Comprimento do elemento
+
+# Função para gerar a matriz de conectividade
+def gerar_matriz_conec(nos_gerar, conexoes_gerar):
+    num_nos = len(nos_gerar)
+    matriz_0e1 = np.zeros((num_nos, num_nos))
+    for conexao in conexoes_gerar:
+        i, j = conexao
+        matriz_0e1[i, j] += 1
+        matriz_0e1[j, i] += 1
+    return matriz_0e1
+
+# Função para calcular a matriz de rigidez de um elemento
+def calcular_matriz_rigidez_elemento(L, A, E):
+    k = (A * E / L) * np.array([
+        [1, -1],
+        [-1, 1]
+    ])
+    return k
+
+# Função para calcular a matriz de massa de um elemento
+def calcular_matriz_massa_elemento(L, A, ro):
+    m = (ro * A * L / 6) * np.array([
+        [2, 1],
+        [1, 2]
+    ])
+    return m
+
+# Função para montar a matriz de rigidez global
+def montar_matriz_rigidez_global(nos, conexoes, matriz_conectividade):
+    num_nos = len(nos)
+    num_gdl = 2 * num_nos
+    K = np.zeros((num_gdl, num_gdl))
+
+    for i, conexao in enumerate(conexoes):
+        no_i, no_j = conexao
+        matriz_0e1 = matriz_conectividade[i]
+
+        x_i, y_i, z_i = nos[no_i]
+        x_j, y_j, z_j = nos[no_j]
+
+        L = np.sqrt((x_j - x_i) ** 2 + (y_j - y_i) ** 2 + (z_j - z_i) ** 2)
+        cos_theta = (x_j - x_i) / L
+        sen_theta = (y_j - y_i) / L
+
+        T = np.array([
+            [cos_theta, sen_theta, 0, 0],
+            [-sen_theta, cos_theta, 0, 0],
+            [0, 0, cos_theta, sen_theta],
+            [0, 0, -sen_theta, cos_theta]
+        ])
+
+        k_local = calcular_matriz_rigidez_elemento(L, A, E)
+        k_global = np.dot(np.dot(T.T, k_local), T)
+
+        gdl_i = [2 * no_i, 2 * no_i + 1, 2 * no_j, 2 * no_j + 1]
+
+        for gdl1 in range(4):
+            for gdl2 in range(4):
+                K[gdl_i[gdl1], gdl_i[gdl2]] += matriz_0e1[gdl1, gdl2]
+
+    return K
+
+# Função para montar a matriz de massa global
+def montar_matriz_massa_global(nos, conexoes, matriz_conectividade):
+    num_nos = len(nos)
+    num_gdl = 2 * num_nos
+    M = np.zeros((num_gdl, num_gdl))
+
+    for i, conexao in enumerate(conexoes):
+        no_i, no_j = conexao
+        matriz_0e1 = matriz_conectividade[i]
+
+        x_i, y_i, z_i = nos[no_i]
+        x_j, y_j, z_j = nos[no_j]
+
+        L = np.sqrt((x_j - x_i) ** 2 + (y_j - y_i) ** 2 + (z_j - z_i) ** 2)
+
+        m_local = calcular_matriz_massa_elemento(L, A, ro)
+        m_global = np.dot(np.dot(T.T, m_local), T)
+
+        gdl_i = [2 * no_i, 2 * no_i + 1, 2 * no_j, 2 * no_j + 1]
+
+        for gdl1 in range(4):
+            for gdl2 in range(4):
+                M[gdl_i[gdl1], gdl_i[gdl2]] += matriz_0e1[gdl1, gdl2]
+
+    return M
+
+# Coordenadas dos nós
+lista_nos = np.array([
+    [64*1.5, 0*1.4, 0*1.6],   # Nó 0
+    [64*1.5, 16*1.4, 0*1.6],  # Nó 1
+    [64*1.5, 0*1.4, 16*1.6],  # Nó 2
+    [64*1.5, 16*1.4, 16*1.6], # Nó 3
+    [59*1.5, 0*1.4, 7*1.6],   # Nó 4
+    [59*1.5, 16*1.4, 7*1.6],  # Nó 5
+    [64*1.5, 0*1.4, 3*1.6],   # Nó 6
+    [64*1.5, 16*1.4, 3*1.6],  # Nó 7
+    [66*1.5, 0*1.4, 9*1.6],   # Nó 8
+    [66*1.5, 16*1.4, 9*1.6],  # Nó 9
+    [70*1.5, 0*1.4, 7*1.6],   # Nó 10
+    [70*1.5, 16*1.4, 7*1.6],  # Nó 11
+    [66*1.5, 0*1.4, 11*1.6],  # Nó 12
+    [66*1.5, 16*1.4, 11*1.6], # Nó 13
+    [74*1.5, 0*1.4, 7*1.6],   # Nó 14
+    [74*1.5, 16*1.4, 7*1.6],  # Nó 15
+    [77*1.5, 0*1.4, 7*1.6],   # Nó 16
+    [77*1.5, 16*1.4, 7*1.6],  # Nó 17
+])
+
+# Lista de conexões entre os nós
+lista_conexoes = [
+    (0, 1), (0, 2), (1, 3), (2, 3), (4, 8), (5, 9), (8, 9), (8, 14), (9, 15), (10, 8), (10, 4), (11, 9), (11, 5), (10, 11), (12, 10), (13, 11),
+    (14, 12), (14, 4), (15, 13), (15, 5), (16, 14), (16, 4), (17, 13), (17, 15), (17, 5), (2, 16),
+    (3, 17), (18, 40), (19, 41), (20, 18), (20, 14), (21, 19), (20, 40),
+    (21, 15), (21, 41), (22, 10), (22, 20), (22, 34), (23, 11), (23, 15), (23, 21), (23, 35), (22, 14), (22, 23),
+    (24, 22), (24, 34), (25, 23), (25, 35), (26, 22), (26, 24), (27, 23), (27, 25), (26, 27),
+    (28, 30), (28, 32), (29, 31), (29, 33), (30, 26), (31, 27), (30, 31), (28, 24), (29, 25),
+    (32, 33), (34, 20), (34, 32), (35, 21), (35, 33),
+    (34, 35), (36, 34), (36, 18), (37, 35), (37, 19), (36, 38), (37, 38), (16, 39), (17, 39), (2, 17), (3, 16)
+]
+
+# Definição de fatores de curvatura para conexões específicas
+curvaturas = {
+    (36, 37): 3,
+    (37, 38): 3,
+    (36, 38): 3,
+    (16, 17): 1,
+    (16, 39): 1,
+    (17, 39): 1,
+}
+
+# Imprimir a matriz de conectividade
+matriz_conectividade = gerar_matriz_conec(lista_nos, lista_conexoes)
+print("Matriz de Conectividade:")
+print(matriz_conectividade)
+
+# Montar matrizes globais
+K_global = montar_matriz_rigidez_global(lista_nos, lista_conexoes, matriz_conectividade)
+M_global = montar_matriz_massa_global(lista_nos, lista_conexoes, matriz_conectividade)
+
+# Imprimir matriz de rigidez global
+print("\nMatriz de Rigidez Global (K):")
+print(K_global)
+
+# Imprimir matriz de massa global
+print("\nMatriz de Massa Global (M):")
+print(M_global)
+
+# Função para análise modal
+def analise_modal(K_global, M_global, num_modos=6):
+    autovalores, autovetores = eigh(K_global, M_global, eigvals=(0, num_modos-1))
+    freqs = np.sqrt(autovalores) / (2 * np.pi)
+    return freqs, autovetores
+
+# Realizar análise modal
+num_modos = 6
+freqs, autovetores = analise_modal(K_global, M_global, num_modos)
+
+# Imprimir frequências naturais
+print("\nFrequências Naturais (Hz):")
+for i, freq in enumerate(freqs):
+    print(f"Modo {i+1}: {freq:.2f}")
+
