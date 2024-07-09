@@ -3,10 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import numpy as np
 
-####################
-
-
-class Transmission:
+class Drivetrain:
     
     #Construtores com as variáveis mais recorrentes como entrada do código
     def __init__(self, *, cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica, cp = 1):
@@ -82,15 +79,15 @@ class Transmission:
         aceleraco_real_final = aceleracao_primaria_real * 9.81
         forca_trativa_ideal = self.massa * aceleracao_primaria_ideal
         torque_pneu_ideal = forca_trativa_ideal * self.raio_pneu * 0.001
-        torque_necessario_motor = torque_pneu_ideal / (self.reducao_unica * self.reducao_primaria * self.cp)
+        torque_motor_ideal = torque_pneu_ideal / (self.reducao_unica * self.reducao_primaria * self.cp)
         transferencia_carga_ideal = (forca_trativa_ideal * self.cgy) / self.entre_eixos
         transferencia_carga_real = (forca_trativa * self.cgy) / self.entre_eixos
         carga_traseira_ideal = reacao_traseira + transferencia_carga_ideal
-        return peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_necessario_motor, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal
+        return peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal
 
     def show_results(self): #Alterei o nome para diferenciar da classse
-        peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_necessario_motor, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal = Transmission.CalculateOutputs(self)
-        rpm_values, torque_values, power_values = Transmission.CurveTorquePower()
+        peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal = Drivetrain.CalculateOutputs(self)
+        rpm_values, torque_values, power_values = Drivetrain.CurveTorquePower()
         
         # Print dos resultados obtidos
         print(f'''Resultados:
@@ -110,7 +107,7 @@ class Transmission:
             Aceleração final real: {aceleraco_real_final}m/s²
             Força trativa ideal: {forca_trativa_ideal}N
             Torque no pneu ideal: {torque_pneu_ideal}Nm
-            Torque no motor ideal: {torque_necessario_motor}Nm
+            Torque no motor ideal: {torque_motor_ideal}Nm
             Transferência de carga ideal: {transferencia_carga_ideal}N
             Transferência de carga real: {transferencia_carga_real}N
             Carga total no eixo traseiro ideal: {carga_traseira_ideal}N\n
@@ -119,7 +116,7 @@ class Transmission:
         print("\nMatriz de RPM, Torque e Potência:")
         print("RPM\t\tTorque (Nm)\tPotência (kW)")
         
-        for data in Transmission.matriz_dados:
+        for data in Drivetrain.matriz_dados:
             rpm = data["rpm"]
             torque = data["torque"]
             potencia = data["potencia"]
@@ -142,12 +139,12 @@ class Transmission:
         self.cp = cp
         
         # Calcula os outputs
-        outputs = Transmission.CalculateOutputs(self)
+        outputs = Drivetrain.CalculateOutputs(self)
         torque_necessario_motor = outputs[10]  # Torque necessário no motor
         target_torque_necessario_motor = 80.0  # Alvo para o torque necessário no motor
         
         # Calcular o desempenho do carro com o cp atual
-        performance = Transmission.CarPerformance(self)
+        performance = Drivetrain.CarPerformance(self)
         
         # Extrair a velocidade linear máxima e a menor força final
         max_velocidade_linear = max([p['velocidade_linear'] for p in performance])
@@ -169,11 +166,11 @@ class Transmission:
     def optimize_cp(self):
         
         initial_guess = 1.5  # Chute inicial para cp
-        result = minimize(Transmission.objective_function, initial_guess, args = (self), method='BFGS')
+        result = minimize(Drivetrain.objective_function, initial_guess, args = (self), method='BFGS')
         
         self.cp = result.x[0]
         
-        return result.x[0], result.fun
+        return result.fun
 
     # Função de desempenho do carro
     def CarPerformance(self):
@@ -188,7 +185,7 @@ class Transmission:
 
         parametros = []
 
-        for dado in Transmission.matriz_dados:
+        for dado in Drivetrain.matriz_dados:
             # Cálculo da força trativa (N)
             forca_trativa = ((dado["torque"] * self.reducao_primaria * self.reducao_unica * self.cp) / (self.raio_pneu * 0.001)) * rendimento_transmissao
            
@@ -216,7 +213,7 @@ class Transmission:
         return parametros 
     
     def print_car_performance(self):
-        performance = Transmission.CarPerformance(self)
+        performance = Drivetrain.CarPerformance(self)
         print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
         
         for param in performance:
@@ -228,7 +225,7 @@ class Transmission:
 
     def HalfShaftsSizing(self, fsi=1.25, tet=786, tec=471.6, dif=1):
         # Obtendo o maior torque do motor a partir dos dados experimentais 
-        torque_max_motor = max(data["torque"] for data in Transmission.matriz_dados)
+        torque_max_motor = max(data["torque"] for data in Drivetrain.matriz_dados)
         
         # Calculando o torque máximo nos semieixos
         torque_max_semieixo = torque_max_motor * self.reducao_primaria * self.reducao_unica * self.cp * dif
@@ -258,7 +255,7 @@ class Transmission:
         return torque_max_motor, torque_max_semieixo, torque_max_projeto, diametro_semieixo, fator_seguranca_obtido, fs1p
 
     def CurveTorquePower():
-        matriz_dados = Transmission.matriz_dados
+        matriz_dados = Drivetrain.matriz_dados
         rpm_values = [data["rpm"] for data in matriz_dados]
         torque_values = [data["torque"] for data in matriz_dados]
         power_values = [data["potencia"] for data in matriz_dados]
@@ -322,18 +319,17 @@ class Dynamics:
         plt.figure(figsize=(15, 5))
         
         plt.subplot(1, 2, 1)
-        plt.plot(rpm_values, slip_ratio)
+        plt.plot(rpm_values, slip_ratio, label = 'Slip Ratio', color = 'blue')
         plt.xlabel('RPM')
         plt.ylabel('Slip Ratio')
         plt.title('Slip Ratio x RPM') 
         plt.legend()
         
         plt.subplot(1, 2, 2)
-        plt.plot(rpm_values, velocidade_angular)
+        plt.plot(rpm_values, velocidade_angular, label = 'Velocidade Angular', color = 'red')
         plt.xlabel('RPM')
         plt.ylabel('Velocidade Angular (rad/s)')
         plt.title('Velocidade Angular x RPM')
-        #plt.figure(figsize=(10, 6))
         plt.legend()
      
         plt.tight_layout()
@@ -341,7 +337,7 @@ class Dynamics:
 
 #######Instanciando a classe Transmission#######
 
-transmission_model = Transmission(
+transmission_model = Drivetrain(
         cgx = 853,  # mm
         cgy = 294,  # mm
         massa = 347,  # kg
@@ -359,7 +355,6 @@ transmission_model.optimize_cp()
 transmission_model.show_results()
 transmission_model.HalfShaftsSizing()
 transmission_model.print_car_performance()
-
 ####### Cálculo de Slip Ratio ############
 
 #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
@@ -375,6 +370,6 @@ raio_pneu = 0.259
 #Utilizando uma velocidade arbitrária e fixa para o veículo
 slip_ratio = Dynamics.slip_ratio(velocidade_angular, 30, raio_pneu)
 
-rpm = [dado["rpm"] for dado in Transmission.matriz_dados]
+rpm = [dado["rpm"] for dado in Drivetrain.matriz_dados]
 
 Dynamics.show_slip_ratio(rpm, slip_ratio, velocidade_angular)
