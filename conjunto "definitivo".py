@@ -129,7 +129,6 @@ class BrakeSystem:
         self.Mt = params['Mt']  # Massa total do veículo [kg]
         self.L = params['L']  # Distância entre eixos [m]
         self.c_rr = params['c_rr']  # Coeficiente de resistência ao rolamento
-        self.Rdr = params['Rdr']
         self.m_tire = params['m_tire']
         self.m_wheel = params['m_wheel']
 
@@ -197,28 +196,39 @@ class BrakeSystem:
         # Calculando a desaceleração linear
 
         desaceleracao_linear = forca_frenagem / self.Mt
+       
 
-        return resultados, forca_frenagem, torque_ajustado
+        return resultados, forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
     def calculate_angular_velocity(self, torque_ajustado):
         time_intervals = np.linspace(0, tempo, 100)
         inertia_wheel = 0.5 * (self.m_tire + self.m_wheel) * (self.Rdp * 2)
-        angular_deceleration = (torque_ajustado / 4) / inertia_wheel
+        angular_desaceleration = (torque_ajustado / 4) / inertia_wheel
         initial_angular_velocity = initial_speed / (self.Rdp)
         time_step = time_intervals[1] - time_intervals[0]
-        angular_velocity_1 = initial_angular_velocity
-        angular_velocities = [angular_velocity_1]
+        angular_velocity = initial_angular_velocity
+        angular_velocities = []
 
         for i in time_intervals:
-            angular_velocity_1 -= angular_deceleration * time_step
-            angular_velocity = initial_angular_velocity + angular_velocity_1
+            angular_velocity -= angular_desaceleration * time_step
             angular_velocities.append(angular_velocity)
 
-        return angular_deceleration, angular_velocity_1, angular_velocities
+        return angular_desaceleration, angular_velocity, angular_velocities, inertia_wheel
 
-    def show_graph(self, longitudinal_force, pedal_force):
+    def print_resultados(self):
+        print("Resultados Calculados:")
+        print("Força de frenagem teórica:", BrakeSystem.apply_brake(pedal_force=823)[3], 'N' )
+        print("Inércia da roda:", inertia_wheel, "kg.m^2")
+        print("Resistência ao rolamento:", resistencia_rolamento, "N")
+        print("Torque do disco de freio:", BrakeSystem.apply_brake(pedal_force=823)[4] , "N.m")
+        print("Torque de resistência ao rolamento:", torque_resistencia_rolamento, "N.m")
+        print("Torque ajustado:", BrakeSystem.apply_brake(pedal_force=823)[2], "N.m")
+
+
+
+    def show_graph(self, longitudinal_force, pedal_forces):
         plt.figure(figsize=(10, 6))
-        plt.plot(pedal_force, longitudinal_force, label='Longitudinal Force', color='blue')
+        plt.plot(pedal_forces, longitudinal_force, label='Longitudinal Force', color='blue')
         plt.xlabel('Pedal Force (N)')
         plt.ylabel('Longitudinal Force (N)')
         plt.title('Longitudinal Force vs. Pedal Force')
@@ -238,7 +248,6 @@ params = {
     'FzF': 1471.5,  # Força de reação estática na dianteira [N]
     'FzR': 981.0,  # Força de reação estática na traseira [N]
     'Rdp': 0.30,  # Raio do pneu [m]
-    'Rdr': 0.1651,  # Raio da roda [m]
     'Dcm': 0.02,  # Diâmetro do cilindro mestre em metros
     'Dwc': 0.032,  # Diâmetro do cilindro da roda em metros
     'Npast': 2,  # Número de pastilhas por disco
@@ -272,11 +281,12 @@ tire_auto_align_moment_1 = np.array([-28.84, -28.68, -27.21, -26.41, -27.70, -24
 dynamics_instance = Dynamics()
 BrakeSystem = BrakeSystem(params)
 
+
 # Aplica o sistema de freio às forças do pedal e obtém resultados
-resultados, forca_frenagem, torque_ajustado = BrakeSystem.apply_brake(pedal_forces)
+resultados, forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento = BrakeSystem.apply_brake(pedal_forces)
 
 # Calcula a velocidade angular, desaceleração angular e lista de velocidades
-desaceleracao_angular, velocidade_angular, lista_velocidade = BrakeSystem.calculate_angular_velocity(torque_ajustado)
+desaceleracao_angular, velocidade_angular, lista_velocidade, inertia_wheel = BrakeSystem.calculate_angular_velocity(torque_ajustado)
 
 # Calcula a razão de escorregamento com base na velocidade angular, raio do pneu e forças do pedal
 calculo_slip_ratio = dynamics_instance.slip_ratio_1(velocidade_angular, params['Rdp'])
@@ -291,9 +301,9 @@ predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_
 # Calcula a força longitudinal do pneu
 forca_longitudinal = dynamics_instance_2.Tire(result)[2]
 
-# Plotagem dos gráficos
+
+# Plotagem dos gráficos e print dos resultados de freio
 dynamics_instance_2.plot_graph_slip_ratio(calculo_slip_ratio)
 dynamics_instance_1.plot_graph(predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces, tire_lateral_forces_1, tire_auto_align_moment_1, angles)
 BrakeSystem.show_graph(forca_longitudinal, pedal_forces)
-
-
+BrakeSystem.print_resultados()
