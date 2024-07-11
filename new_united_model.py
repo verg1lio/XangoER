@@ -85,7 +85,7 @@ class Drivetrain:
         carga_traseira_ideal = reacao_traseira + transferencia_carga_ideal
         return peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal
 
-    def show_results(self): #Alterei o nome para diferenciar da classse
+    def show_results(self):
         peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal = Drivetrain.CalculateOutputs(self)
         rpm_values, torque_values, power_values = Drivetrain.CurveTorquePower()
         
@@ -335,6 +335,43 @@ class Dynamics:
         plt.tight_layout()
         plt.show()
 
+    def plot_graph(self, tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces, tire_lateral_experimental=None, tire_auto_align_experimental=None, angles=None, ratio=None):
+        # Definindo um tamanho para a figura
+        plt.figure(figsize=(20, 7))
+
+        # Plotagem força lateral
+        plt.subplot(1, 3, 1)
+        plt.plot(self.tire_Sa, tire_lateral_forces, label='Curva Otimizada')
+        plt.scatter(angles, tire_lateral_experimental, color='red', label='Dados Experimentais')
+        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
+        plt.ylabel('Força Lateral do Pneu (N)')
+        plt.title('Curva Otimizada com os Dados Experimentais')
+        plt.legend()
+        plt.grid(True)
+
+        # Plotagem torque auto-alinhante
+        plt.subplot(1, 3, 2)
+        plt.plot(self.tire_Sa, tire_auto_align_moment, label='Curva Otimizada')
+        plt.scatter(angles, tire_auto_align_experimental, color='blue', label='Dados Experimentais')
+        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
+        plt.ylabel('Torque auto-alinhante (N.m)')
+        plt.title('Curva Otimizada com os Dados Experimentais')
+        plt.legend()
+        plt.grid(True)
+
+        # Plotagem força longitudinal
+        plt.subplot(1, 3, 3)
+        plt.plot(self.tire_Ls, tire_longitudinal_forces, label='Curva Sem Otimizar')
+        plt.xlabel('Taxa de Escorregamento Longitudinal (Admensional)')
+        plt.ylabel('Força Longitudinal (N)')
+        plt.title('Força Longitudinal - Sem Dados Experimentais')
+        plt.legend()
+        plt.grid(True)
+
+        plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
+        plt.show()
+ 
+
 #######Instanciando a classe Transmission#######
 
 transmission_model = Drivetrain(
@@ -366,10 +403,28 @@ velocidade_angular = [dado["va"] for dado in performance_veiculo]
 #Atrinuindo um valor para o raio do pneu(em m)
 raio_pneu = 0.259
 
-#Chama a função de slip ratio e salva seus valores numa lista
-#Utilizando uma velocidade arbitrária e fixa para o veículo
+#Chama a função de slip ratio e salva seus valores numa lista utilizando uma velocidade arbitrária e fixa para o veículo
 slip_ratio = Dynamics.slip_ratio(velocidade_angular, 30, raio_pneu)
 
 rpm = [dado["rpm"] for dado in Drivetrain.matriz_dados]
-
+#Plotagem do gráfico de slip ratio e velcidade angular X RPM
 Dynamics.show_slip_ratio(rpm, slip_ratio, velocidade_angular)
+
+
+#Transformando num arranjo para permitir a realização de contas dentro do código de Tire
+slip_ratio_array = np.array(slip_ratio)
+
+#Iniciando valores para instanciar Dynamics:
+slip_angles = np.linspace(-9, 9, 1000)
+
+# Instanciando a classe Dynamics
+dynamics_instance = Dynamics(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio_array, tire_friction_coef=1.45)
+
+# Parâmetros de Pacejka 
+result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
+
+#Recebendo valores de força lateral, momento auto alinhante e força lateral
+tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces = dynamics_instance.Tire(result)
+
+#Plotagem dos gráficos
+dynamics_instance.plot_graph(tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces)
