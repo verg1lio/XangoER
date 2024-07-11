@@ -1,7 +1,5 @@
-import math
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 
 class Dynamics:
 
@@ -42,8 +40,20 @@ class Dynamics:
 
         return tire_lateral_force, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
 
-    def slip_ratio_1(self, velocidade_angular, velocidade_linear, raio_pneu, pedal_forces):
+    def slip_ratio_1(self, velocidade_angular, raio_pneu):
+        velocidade_linear = initial_speed
+        # Calcula a razão de escorregamento com base na velocidade angular e raio do pneu
         value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
+
+        return value
+
+    def show_results(self, value):
+        print("Valores do Slip Ratio: ")
+
+        for dado in value:
+            print(dado)
+
+    def plot_graph_slip_ratio(self, value=None):
 
         # Plotando a curva
         plt.figure(figsize=(10, 6))
@@ -57,18 +67,9 @@ class Dynamics:
         plt.grid(True)
         plt.legend()
         plt.show()
-
-        return value
-
-    def show_results(self, value):
-        print("Valores do Slip Ratio: ")
-
-        for dado in value:
-            print(dado)
-
     def plot_graph(self, predicted_tire_lateral_forces, predicted_tire_auto_align_moment,
                    predicted_tire_longitudinal_forces, tire_lateral_experimental=None,
-                   tire_auto_align_experimental=None, angles=None, ratio=None):
+                   tire_auto_align_experimental=None, angles=None, ratio=None, pedal_forces=None, value=None):
 
         # Definindo um tamanho para a figura
 
@@ -105,7 +106,6 @@ class Dynamics:
 
         plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
         plt.show()
-
 
 class BrakeSystem:
 
@@ -200,8 +200,7 @@ class BrakeSystem:
 
         return resultados, forca_frenagem, torque_ajustado
 
-    def calculate_angular_velocity(self, torque_ajustado, tempo, initial_speed):
-        initial_speed = initial_speed
+    def calculate_angular_velocity(self, torque_ajustado):
         time_intervals = np.linspace(0, tempo, 100)
         inertia_wheel = 0.5 * (self.m_tire + self.m_wheel) * (self.Rdp * 2)
         angular_deceleration = (torque_ajustado / 4) / inertia_wheel
@@ -252,63 +251,49 @@ params = {
     'c_rr': 0.015  # Coeficiente de resistência ao rolamento
 }
 
-tempo = 2
+# Define a velocidade inicial e o tempo para o cálculo
+initial_speed = 20  # Velocidade inicial do veículo [km/h]
+tempo = 2  # Tempo para o cálculo [s]
 
-initial_speed = 20
+# Parâmetros de Pacejka
+result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
 
-# Criação da instância do sistema de freios e aplicação da força no pedal de freio
+# Criação de arrays com valores para plotagem e análise
+slip_ratio = np.linspace(-1, 1, 1000)  # Razão de escorregamento variando de -1 a 1
+slip_angles = np.linspace(-9, 9, 1000)  # Ângulos de deslizamento variando de -9 a 9 graus
+pedal_forces = np.linspace(0, 823, 1000)  # Forças do pedal variando de 0 a 823 N
 
+# Dados experimentais dos ângulos de deslizamento e forças do pneu
+angles = np.array([-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+tire_lateral_forces_1 = np.array([-2300, -2200, -2060, -1880, -1680, -1450, -1190, -850, -430, 60, 520, 890, 1170, 1390, 1580, 1730, 1890, 2000, 2090])
+tire_auto_align_moment_1 = np.array([-28.84, -28.68, -27.21, -26.41, -27.70, -24.21, -24.15, -15.88, -4.91, 14.72, 33.80, 43.79, 46.93, 49.09, 50.90, 50.10, 50.81, 48.12, 48.83])
+
+# Cria uma instância da classe Dynamics e da classe BrakeSystem
+dynamics_instance = Dynamics()
 BrakeSystem = BrakeSystem(params)
 
-pedal_forces = np.linspace(0, 823, 1000)  # N
-
+# Aplica o sistema de freio às forças do pedal e obtém resultados
 resultados, forca_frenagem, torque_ajustado = BrakeSystem.apply_brake(pedal_forces)
 
-desaceleracao_angular, velocidade_angular, lista_velocidade = BrakeSystem.calculate_angular_velocity(torque_ajustado, tempo, initial_speed)
+# Calcula a velocidade angular, desaceleração angular e lista de velocidades
+desaceleracao_angular, velocidade_angular, lista_velocidade = BrakeSystem.calculate_angular_velocity(torque_ajustado)
 
-# Valores a serem usados na instância da classe Dynamics
+# Calcula a razão de escorregamento com base na velocidade angular, raio do pneu e forças do pedal
+calculo_slip_ratio = dynamics_instance.slip_ratio_1(velocidade_angular, params['Rdp'])
 
-result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057),
-          (366.4936818126405)]
-
-slip_ratio = np.linspace(-1, 1, 1000)
-
-slip_angles = np.linspace(-9, 9, 1000)
-
-angles = np.array([-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
-
-tire_lateral_forces_1 = np.array([-2300, -2200, -2060, -1880, -1680, -1450, -1190, -850, -430, 60, 520, 890, 1170, 1390, 1580, 1730, 1890,2000, 2090])
-
-tire_auto_align_moment_1 = np.array([-28.84, -28.68, -27.21, -26.41, -27.70, -24.21, -24.15, -15.88, -4.91, 14.72, 33.80, 43.79,
-                                     46.93, 49.09,50.90, 50.10, 50.81, 48.12, 48.83])
-
-velocidade_angular = BrakeSystem.calculate_angular_velocity(torque_ajustado, tempo, initial_speed)[1]
-
-raio_pneu = params['Rdp']
-
-velocidade_linear = initial_speed
-
-# Instância dynamics
-dynamics_instance = Dynamics()
-
-calculo_slip_ratio = dynamics_instance.slip_ratio_1(velocidade_angular, initial_speed, params['Rdp'], pedal_forces)
-
+# Cria instâncias da classe Dynamics com diferentes parâmetros de pneus e coeficiente de atrito
 dynamics_instance_1 = Dynamics(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45)
-
-
-predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces = dynamics_instance_1.Tire(
-    result)
-
-dynamics_instance_1.plot_graph(predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces, tire_lateral_forces_1, tire_auto_align_moment_1, angles)
-
 dynamics_instance_2 = Dynamics(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=calculo_slip_ratio, tire_friction_coef=1.45)
 
+# Calcula as forças laterais, momento de auto-alinhamento e forças longitudinais previstas para o pneu
+predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces = dynamics_instance_1.Tire(result)
+
+# Calcula a força longitudinal do pneu
 forca_longitudinal = dynamics_instance_2.Tire(result)[2]
 
-# Plotting the longitudinal force against pedal force
-pedal_force = np.linspace(0, 823, 1000)
+# Plotagem dos gráficos
+dynamics_instance_2.plot_graph_slip_ratio(calculo_slip_ratio)
+dynamics_instance_1.plot_graph(predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces, tire_lateral_forces_1, tire_auto_align_moment_1, angles)
+BrakeSystem.show_graph(forca_longitudinal, pedal_forces)
 
-# Since forca_longitudinal is an array, we need to ensure it's the same length as pedal_force
-forca_longitudinal = np.array(forca_longitudinal)
 
-BrakeSystem.show_graph(forca_longitudinal, pedal_force)
