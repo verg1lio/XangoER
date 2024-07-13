@@ -1,0 +1,148 @@
+import numpy as np
+
+class BodyAndFrame:
+    def __init__(self, A, E, L, I, G, a, B, K, y, rho, k, g, J):
+        self.A = A    # Área da seção transversal
+        self.E = E    # Módulo de elasticidade
+        self.L = L    # Comprimento da barra
+        self.I = I    # Momento de inércia
+        self.G = G    # Módulo de elasticidade transversal
+        self.a = a    # Largura da seção transversal
+        self.B = B    # Altura da seção transversal
+        self.K = K    # Constante de mola
+        self.y = y    # Deslocamento
+        self.rho = rho # Densidade
+        self.k = k    # Coeficiente de amortecimento
+        self.g = g    # Aceleração devido à gravidade
+        self.J = J    # Momento polar de inércia
+
+    def analyze(self, F):
+        # Análise axial
+        deformacao_axial = self.deformacao_axial(F)
+
+        # Análise de flexão
+        flexao = self.flexao(F)
+
+        # Análise de torção
+        torsao = self.torsao(F)
+
+        return deformacao_axial, flexao, torsao
+
+    def deformacao_axial(self, F):
+        # Equação diferencial para deformação axial
+        deformacao = (F / (self.A * self.E)) * self.L
+        return deformacao
+
+    def flexao(self, F):
+        # Equação de Euler-Bernoulli para flexão
+        x = np.linspace(0, self.L, len(F))
+        v = np.zeros_like(F)
+        for i in range(1, len(F)):
+            v[i] = (F[i] - F[i-1]) / (self.E * self.I) * (self.L ** 3 / 12)
+        return v
+
+    def torsao(self, F):
+        # Equação de torção
+        torsao = (F * self.L) / (self.G * self.J)
+        return torsao
+    
+    def criar_matriz_conectividade(self, pontos, elementos):
+        numero_pontos = len(pontos)
+        matriz_conectividade = np.zeros((numero_pontos, numero_pontos), dtype=int)
+
+        for elemento in elementos:
+            ponto_inicial, ponto_final = elemento
+            matriz_conectividade[ponto_inicial, ponto_final] += 1
+            matriz_conectividade[ponto_final, ponto_inicial] += 1
+
+        labels_pontos = [chr(65 + i) for i in range(numero_pontos)]  # Labels A, B, C, ...
+
+        return matriz_conectividade, labels_pontos
+
+import numpy as np
+
+def construir_matriz(num_linhas, num_colunas):
+    matriz = []
+
+    for i in range(num_linhas):
+        linha = []
+        for j in range(num_colunas):
+            elemento = input(f"Qual é o elemento da linha {i+1} e coluna {j+1}? ")
+            linha.append(calculadora_rebuscada(elemento))
+        matriz.append(linha)
+
+    return np.array(matriz)
+
+def calculadora_rebuscada(expressao):
+    try:
+        resultado = eval(expressao)
+        return resultado
+    except Exception as e:
+        return f"Erro: {str(e)}"
+
+# Solicitação de entradas do usuário
+opcao = int(input("Matrizes flexional (1), massa (2), axial (3) ou torcional (4): "))
+L = float(input("Digite o tamanho do elemento L: "))
+num_linhas = int(input("Quantas linhas tem a matriz? "))
+num_colunas = int(input("Quantas colunas tem a matriz? "))
+
+# Construção da matriz do elemento
+matriz_elemento = construir_matriz(num_linhas, num_colunas)
+
+# Modificação da matriz conforme a opção escolhida
+if opcao == 1:
+    modulo_de_young = float(input("Digite o módulo de Young do material: "))
+    momento_de_inercia = float(input("Digite o momento de inércia do elemento: "))
+    Kf = 2 * modulo_de_young * momento_de_inercia / (L ** 3)
+    print(f"A constante fora da matriz é igual a {Kf}")
+    C = Kf
+elif opcao == 2:
+    massa_especifica = float(input("Digite a massa específica do material: "))
+    area_do_elemento = float(input("Digite a área do elemento: "))
+    Km = massa_especifica * area_do_elemento * L / 420
+    print(f"A constante fora da matriz é igual a {Km}")
+    C = Km
+elif opcao == 3:
+    modulo_de_young = float(input("Digite o módulo de Young do material: "))
+    area_do_elemento = float(input("Digite a área do elemento: "))
+    Ka = modulo_de_young * area_do_elemento / (3 * L)
+    print(f"A constante fora da matriz é igual a {Ka}")
+    C = Ka
+elif opcao == 4:
+    constante_torcao = float(input("Digite a constante de torção do material: "))
+    elasticidade_transversal = float(input("Digite o módulo de elasticidade transversal do material: "))
+    momento_polar = float(input("Digite o momento polar de inércia do elemento: "))
+    Kt = constante_torcao * elasticidade_transversal * momento_polar / L
+    print(f"A constante fora da matriz é igual a {Kt}")
+    C = Kt
+else:
+    print("Erro")
+    C = None
+
+# Aplicação da constante à matriz do elemento, se definida
+if C is not None:
+    matriz_elemento = matriz_elemento * C
+
+print("Matriz do Elemento Modificada:")
+for linha in matriz_elemento:
+    print(linha)
+
+# Construção da matriz global (exemplo simples)
+# Supondo 3 elementos e 4 nós, e que a matriz do elemento tenha 2x2
+num_elementos = 3
+num_nos = 4
+tamanho_matriz_global = num_nos * 2  # Simplificação para nós com 2 DOFs
+
+matriz_global = np.zeros((tamanho_matriz_global, tamanho_matriz_global))
+
+
+mapeamento = 
+
+# Montagem da matriz global a partir das matrizes dos elementos
+for elemento, (i, j) in enumerate(mapeamento):
+    matriz_global[2*i:2*i+2, 2*i:2*i+2] += matriz_elemento
+    matriz_global[2*j:2*j+2, 2*j:2*j+2] += matriz_elemento
+
+print("Matriz Global:")
+for linha in matriz_global:
+    print(linha)
