@@ -44,27 +44,27 @@ class forcas_aerodinamicas():
         cd_wing=cd_induced+0.05                                         #Coeficiente de arrasto total da asa= Cd=Cd_induzido+Cd_forma
         drag_wing= (cd_wing * pressao_dinamica * self.a_wing)           #Calculo da força de arrasto
         lift_wing= (cl_wing * pressao_dinamica * self.a_wing)
-        return drag_wing,lift_wing
+        return drag_wing,lift_wing,cl_wing,cd_wing
     
 #Parâmetros físicos do ar:
-p_atm= 101325                    #pressâo atmosférica (N/m^2)
-rho= 1.184                       #densidade (kg/m^3)
-mi= 1.849*10**-5                 #Viscosidade dinâmica (kg/m*s)
-ni= (mi/rho)                     #Viscosidade Cinematica (m²/s)
+p_atm= 101325                       #pressâo atmosférica (N/m^2)
+rho= 1.184                          #densidade (kg/m^3)
+mi= 1.849*10**-5                    #Viscosidade dinâmica (kg/m*s)
+ni= (mi/rho)                        #Viscosidade Cinematica (m²/s)
 #parâmetros do carro
-length= 2                        #Comprimento do carro (m^2)
-af= 1.5                          #Área Frontal do carro (m^2)
-a_sup= 2                         #Área de Superfície do carro (m^2)
-cd_p = 0.45                      #Coeficiente de arrasto por pressão do carro
-cd_f = 0.05                      #Coeficiente de arrasto por atrito do carro
-cl= -0.3                         #Coeficiente de lift do carro
-a1= 0.25                         #Área de entrada do ar embaixo do carro (m^2)
-a2= 0.20                         #Área embaixo do carro (m^2)
+length= 2                           #Comprimento do carro (m^2)
+af= 1.5                             #Área Frontal do carro (m^2)
+a_sup= 2                            #Área de Superfície do carro (m^2)
+cd_p = 0.45                         #Coeficiente de arrasto por pressão do carro
+cd_f = 0.05                         #Coeficiente de arrasto por atrito do carro
+cl= -0.3                            #Coeficiente de lift do carro
+a1= 0.25                            #Área de entrada do ar embaixo do carro (m^2)
+a2= 0.20                            #Área embaixo do carro (m^2)
 #parâmetros da asa
-chord=0.25                          #Comprimento da asa (m)
-span=1                              #Largura da asa (m)
+chord=0.50                          #Comprimento da asa (m)
+span=1.5                            #Largura da asa (m)
 thickness=0.05                      #Expessura máxima da asa (m)
-alpha=math.radians(-3.75)            #Ângulo de incidencia do vento com a asa (radianos)
+alpha=math.radians(-3.75)           #Ângulo de incidencia do vento com a asa (radianos)
 
 carro=forcas_aerodinamicas(af,a_sup,rho,cd_p,cd_f,cl,length,ni,p_atm,alpha,span,chord)    #Definição do objeto 
 
@@ -77,12 +77,13 @@ drags_w=[]
 lifts_w=[]
 for v in velocidades:
     drag,lift= carro.aerodynamic_forces(v)
-    drag_w,lift_w= carro.aerodynamics_forces_wing(v)
+    drag_w,lift_w,cl_w,cd_w= carro.aerodynamics_forces_wing(v)
     drags.append(drag)
     lifts.append(lift)
     drags_w.append(drag_w)
     lifts_w.append(lift_w)
-
+print(cd_w)
+print(cl_w)
 # Plotagem do gráfico 1
 plt.figure(figsize=(12, 6))
 plt.subplot(2,2,1)
