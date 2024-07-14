@@ -1,0 +1,55 @@
+mport numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Definindo as coordenadas dos nós
+nodes = {
+    1: (0, 0, 0),
+    2: (0, 375, 0),
+    3: (0, 700, 0),
+    4: (1500, 375, 0),
+    5: (1500, 0, 0),
+    6: (1500, 700, 0)
+}
+
+# Definindo a matriz de conectividade
+connectivity = {
+    1: (1, 2),
+    2: (2, 3),
+    3: (2, 1),
+    4: (4, 5),
+    5: (5, 4),
+    6: (4, 6),
+    7: (2, 4)  # Elemento conectando o nó 2 ao nó 4
+}
+
+# Convertendo a matriz de conectividade para um array numpy
+connectivity_array = np.array([(key, value[0], value[1]) for key, value in connectivity.items()])
+
+# Plotando o gráfico 3D
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+# Adicionando os pontos
+for node, (x, y, z) in nodes.items():
+    ax.scatter(x, y, z, color='b', s=100)
+    ax.text(x, y, z, f'  {node}', color='black', fontsize=12)
+
+# Adicionando as linhas de ligação entre os nós
+for key, (node1, node2) in connectivity.items():
+    x = [nodes[node1][0], nodes[node2][0]]
+    y = [nodes[node1][1], nodes[node2][1]]
+    z = [nodes[node1][2], nodes[node2][2]]
+    ax.plot(x, y, z, marker='o')
+
+# Configurações adicionais
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.set_title('Estrutura 3D')
+
+plt.show()
+
+# Imprimindo a matriz de conectividade
+print("Matriz de Conectividade:")
+print(connectivity_array)
