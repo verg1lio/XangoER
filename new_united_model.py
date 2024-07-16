@@ -3,10 +3,13 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import numpy as np
 
+####################
+
+
 class Drivetrain:
     
     #Construtores com as variáveis mais recorrentes como entrada do código
-    def __init__(self, *, cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica, cp = 1):
+    def __init__(self, cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica):
         self.cgx = cgx
         self.cgy = cgy
         self. massa = massa
@@ -16,7 +19,9 @@ class Drivetrain:
         self.aceleracao_ideal = aceleracao_ideal
         self.reducao_primaria = reducao_primaria
         self. reducao_unica = reducao_unica
-        self.cp = cp
+        self.cp = 1
+        self.objective_function = 0
+        
     # Valores experimentais para a curva de torque e potência
     matriz_dados = [
         {"rpm": 0, "potencia": 0.0, "torque": 245.89},
@@ -169,9 +174,8 @@ class Drivetrain:
         result = minimize(Drivetrain.objective_function, initial_guess, args = (self), method='BFGS')
         
         self.cp = result.x[0]
+        self.objective_function = result.fun
         
-        return result.fun
-
     # Função de desempenho do carro
     def CarPerformance(self):
         peso = self.massa * 9.81
@@ -191,7 +195,7 @@ class Drivetrain:
            
             # Cálculo da velocidade angular (rad/s)
             velocidade_angular = (dado["rpm"] * 2 * math.pi) / (60 * self.reducao_primaria * self.reducao_unica * self.cp)
-
+            
             # Cálculo da velocidade linear (km/h)
             velocidade_linear = ((velocidade_angular * (self.raio_pneu * 0.001)) * transmissao_motor_roda) * 3.6
 
@@ -261,6 +265,14 @@ class Drivetrain:
         power_values = [data["potencia"] for data in matriz_dados]
         return rpm_values, torque_values, power_values
 
+    @classmethod
+    def generate_model(cls, cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica):
+        model = cls(cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica)
+        model.optimize_cp()
+        return model
+    
+    def __str__(self):
+        return f'Relação Coroa-Pinhão: {self.cp}\nFunção Objetivo: {self.objective_function}'
 
 class Dynamics:
     
@@ -299,7 +311,8 @@ class Dynamics:
 
         return tire_lateral_force, (10 + (tire_auto_align_moment/55)), tire_longitudinal_force
     
-    #criação de uma função para o slip ratio dentro da classe Dynamics tendo em vista a reutilização com valores de freio e transmissão
+    @staticmethod
+    #criação de uma função para o slip ratio dentro da classe Dynamics
     def slip_ratio(velocidade_angular, velocidade_linear, raio_pneu):
         slip_ratio = []
         for i in range(len(velocidade_angular)):
@@ -309,8 +322,8 @@ class Dynamics:
                 slip_ratio.append(value)
         return slip_ratio
     
-    def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):#,
-                        #longitudinal_force):
+    @staticmethod
+    def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):
         
         print("Valores do Slip Ratio: ")
         for dado in slip_ratio:
@@ -334,8 +347,9 @@ class Dynamics:
      
         plt.tight_layout()
         plt.show()
-
+        
     def plot_graph(self, tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces, tire_lateral_experimental=None, tire_auto_align_experimental=None, angles=None, ratio=None):
+        
         # Definindo um tamanho para a figura
         plt.figure(figsize=(20, 7))
 
@@ -370,11 +384,11 @@ class Dynamics:
 
         plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
         plt.show()
- 
+      
 
 #######Instanciando a classe Transmission#######
 
-transmission_model = Drivetrain(
+transmission_model = Drivetrain.generate_model(
         cgx = 853,  # mm
         cgy = 294,  # mm
         massa = 347,  # kg
@@ -383,15 +397,13 @@ transmission_model = Drivetrain(
         raio_pneu = 259,  # mm
         aceleracao_ideal = 1.2,  # g
         reducao_primaria = 2.12,  # redução primária
-        reducao_unica = 2.76,  # redução da marcha única
-        )
+        reducao_unica = 2.76)
 
-
-#Após instanciar a classe, chamar o método optimize_cp() para os demais terem um retorno válido, caso contrário terá valor 1
-transmission_model.optimize_cp()
+print(transmission_model)
 transmission_model.show_results()
-transmission_model.HalfShaftsSizing()
 transmission_model.print_car_performance()
+transmission_model.HalfShaftsSizing()
+
 ####### Cálculo de Slip Ratio ############
 
 #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
@@ -409,7 +421,6 @@ slip_ratio = Dynamics.slip_ratio(velocidade_angular, 30, raio_pneu)
 rpm = [dado["rpm"] for dado in Drivetrain.matriz_dados]
 #Plotagem do gráfico de slip ratio e velcidade angular X RPM
 Dynamics.show_slip_ratio(rpm, slip_ratio, velocidade_angular)
-
 
 #Transformando num arranjo para permitir a realização de contas dentro do código de Tire
 slip_ratio_array = np.array(slip_ratio)
