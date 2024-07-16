@@ -1,29 +1,35 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+'''
+Classe que encapsula modelos e métodos para simular o comportamento dinâmico de um sistema veicular,
+especificamente focando em molas, pneus e amortecedores.
+'''
 class Dynamics:
 
+    # Função para definir todos os parâmetros necessários
     def __init__(self, spring_type=None, spring_k=None, spring_F=None, spring_non_lin_coef=None, tire_Fz=None,
                tire_Sa=None, tire_Ls=None, tire_friction_coef=None, damper_type=None, damper_V=None,
                damper_F_viscous=None, damper_K_friction=None, damper_F_static=None):
-        # Modelo de mola
+        # Inicializa o modelo de mola
         self.spring_type = spring_type  # Hooke, Softening
         self.spring_k = spring_k  # rigidez da mola [N/m]
         self.spring_F = spring_F  # força que a mola recebe [N]
         self.spring_non_lin_coef = spring_non_lin_coef  # coeficiente de ganho não-linear
-        # Modelo de pneu
+        # Inicializa o modelo de pneu
         self.tire_Fz = tire_Fz  # carga vertical no pneu [N]
         self.tire_Sa = tire_Sa  # slip angle do pneu [rad]
         self.tire_Ls = tire_Ls  # longitudinal slip do pneu [Admensional]
         self.tire_type = 'Default'
         self.tire_friction_coef = tire_friction_coef  # coeficiente de fricção entre o pneu e a pista
-        # Modelo de amortecedor
+        # Inicializa o modelo de amortecedor
         self.damper_type = damper_type  # Coulumb, Integrated, Stribeck
         self.damper_V = damper_V  # velocidade relativa amortecedor [m/s]
         self.damper_F_viscous = damper_F_viscous  # força viscosa do fluído [N]
         self.damper_F_static = damper_F_static  # coeficiente de fricção estática de coulumb [N]
         self.damper_K_friction = damper_K_friction  # rigidez de fricção [N/m]
 
+    # Função que calcula as forças no pneu (lateral, longitudinal e torque auto-alinhante)
     def Tire(self, params):
         E, Cy, Cx, Cz, c1, c2 = params
         Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
@@ -40,22 +46,22 @@ class Dynamics:
 
         return tire_lateral_force, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
 
+    # Função que calcula a razão de escorregamento (slip ratio) com base na velocidade angular e no raio do pneu
     def slip_ratio_1(self, velocidade_angular, raio_pneu):
         velocidade_linear = initial_speed
-        # Calcula a razão de escorregamento com base na velocidade angular e raio do pneu
         value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
 
         return value
 
+    # Função que exibe os valores do slip ratio
     def show_results(self, value):
         print("Valores do Slip Ratio: ")
 
         for dado in value:
             print(dado)
 
+    # Função que plota o gráfico do slip ratio em relação à força do pedal
     def plot_graph_slip_ratio(self, value=None):
-
-        # Plotando a curva
         plt.figure(figsize=(10, 6))
         plt.plot(pedal_forces, value, label="Slip Ratio vs. Força do Pedal")
 
@@ -67,12 +73,11 @@ class Dynamics:
         plt.grid(True)
         plt.legend()
         plt.show()
+        
+    # Função que plota os gráficos das forças laterais, longitudinais e torque auto-alinhante do pneu
     def plot_graph(self, predicted_tire_lateral_forces, predicted_tire_auto_align_moment,
                    predicted_tire_longitudinal_forces, tire_lateral_experimental=None,
                    tire_auto_align_experimental=None, angles=None, ratio=None, pedal_forces=None, value=None):
-
-        # Definindo um tamanho para a figura
-
         plt.figure(figsize=(20, 7))
 
         # Plotagem força lateral
@@ -107,8 +112,14 @@ class Dynamics:
         plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
         plt.show()
 
+
+'''
+Classe que modela o sistema de frenagem de um veículo e calcula diversos parâmetros relacionados à frenagem, 
+incluindo forças, torques, desaceleração, pressões necessárias e forças de atrito.
+'''
 class BrakeSystem:
 
+    # Inicializa a classe com os parâmetros necessários
     def __init__(self, params):
         self.params = params
         self.RedP = params['RedP']  # Redução do pedal
@@ -129,9 +140,10 @@ class BrakeSystem:
         self.Mt = params['Mt']  # Massa total do veículo [kg]
         self.L = params['L']  # Distância entre eixos [m]
         self.c_rr = params['c_rr']  # Coeficiente de resistência ao rolamento
-        self.m_tire = params['m_tire']
-        self.m_wheel = params['m_wheel']
+        self.m_tire = params['m_tire']  # Massa do pneu
+        self.m_wheel = params['m_wheel']  # Massa da roda
 
+    # Calcula diversos parâmetros relacionados à frenagem com base na força aplicada ao pedal
     def calculate_params(self, pedal_force):
         BF = 2 * self.μl  # Fator de freio
         χ = self.HCG / self.L  # Razão entre HCG e L
@@ -147,85 +159,102 @@ class BrakeSystem:
         PF = FnF / Awc  # Pressão necessária na dianteira
         PR = FnR / Awc  # Pressão necessária na traseira
         FaCM = PF * Acm  # Força necessária para acionar o cilindro mestre
-        lF = self.psi * self.L  # Distância do eixo ao centro de gravidade em relação a distribuição de carga dianteiro
-        lR = (
-                         1 - self.psi) * self.L  # Distância do eixo ao centro de gravidade em relação a distribuição de carga traseiro
+        lF = self.psi * self.L  # Distância do eixo ao centro de gravidade em relação à distribuição de carga dianteira
+        lR = (1 - self.psi) * self.L  # Distância do eixo ao centro de gravidade em relação à distribuição de carga traseira
         return BF, χ, W, FzF_dyn, FzR_dyn, τF, τR, FnF, FnR, Awc, Acm, PF, PR, FaCM, lF, lR
 
+    # Aplica o freio e calcula os resultados com base na força aplicada ao pedal
     def apply_brake(self, pedal_force):
         resultados = self.calculate_params(pedal_force)
         BF, χ, W, FzF_dyn, FzR_dyn, τF, τR, FnF, FnR, Awc, Acm, PF, PR, FaCM, lF, lR = resultados
 
-        # Calculando a pressão do cilindro mestre
+        # Calcula a pressão do cilindro mestre
         pressao_cilindro_mestre = pedal_force / Acm
 
-        # Calculando a pressurização do fluido
+        # Calcula a pressurização do fluido
         pressao_fluido = pressao_cilindro_mestre
 
-        # Calculando a transmissão de pressão da linha de freio
+        # Calcula a transmissão de pressão da linha de freio
         transmissao_pressao = pressao_fluido * Awc
 
-        # Calculando a força de aperto da pinça
+        # Calcula a força de aperto da pinça
         forca_aperto_pinca = transmissao_pressao
 
-        # Calculando a força de atrito da pastilha de freio
+        # Calcula a força de atrito da pastilha de freio
         forca_atrito_pastilha = forca_aperto_pinca * self.atrito_coeficiente
 
-        # Calculando o torque do disco de freio
+        # Calcula o torque do disco de freio
         torque_disco_freio = forca_atrito_pastilha * self.red
 
-        # Calculando a resistência ao rolamento
+        # Calcula a resistência ao rolamento
         resistencia_rolamento = self.c_rr * W
 
-        # Calculando o torque gerado pela resistência ao rolamento
-        torque_resistencia_rolamento = resistencia_rolamento * (self.Rdp)
+        # Calcula o torque gerado pela resistência ao rolamento
+        torque_resistencia_rolamento = resistencia_rolamento * self.Rdp
 
-        # Calculando o torque de freio ajustado considerando a resistência ao rolamento
+        # Calcula o torque de freio ajustado considerando a resistência ao rolamento
         torque_ajustado = torque_disco_freio - torque_resistencia_rolamento
 
-        # Calculando a força gerada pelo disco de freio ajustado
+        # Calcula a força gerada pelo disco de freio ajustado
         forca_f = torque_ajustado / self.Rdp
 
-        # Calculando a força de frenagem considerando todos os fatores
+        # Calcula a força de frenagem considerando todos os fatores
         forca_frenagem = (FnF + FnR) / self.Npast
         forca_frenagem *= self.atrito_coeficiente
         forca_frenagem *= self.red
         forca_frenagem /= self.Rdp
         forca_frenagem -= resistencia_rolamento
 
-        # Calculando a desaceleração linear
-
+        # Calcula a desaceleração linear
         desaceleracao_linear = forca_frenagem / self.Mt
-       
 
         return resultados, forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
+    # Calcula a velocidade angular das rodas durante a frenagem
     def calculate_angular_velocity(self, torque_ajustado):
+        
+        # Cria uma série de intervalos de tempo igualmente espaçados de 0 até 'tempo' com 100 pontos
         time_intervals = np.linspace(0, tempo, 100)
+        
+        # Calcula a inércia da roda considerando a massa do pneu e da roda e o raio do pneu
         inertia_wheel = 0.5 * (self.m_tire + self.m_wheel) * (self.Rdp * 2)
+        
+        # Calcula a desaceleração angular com base no torque ajustado e na inércia da roda
         angular_desaceleration = (torque_ajustado / 4) / inertia_wheel
-        initial_angular_velocity = initial_speed / (self.Rdp)
+        
+        # Calcula a velocidade angular inicial das rodas com base na velocidade inicial e no raio do pneu
+        initial_angular_velocity = initial_speed / self.Rdp
+        
+        # Calcula o intervalo de tempo entre cada ponto de 'time_intervals'
         time_step = time_intervals[1] - time_intervals[0]
+        
+        # Define a velocidade angular inicial para o cálculo
         angular_velocity = initial_angular_velocity
+        
+        # Inicializa uma lista para armazenar as velocidades angulares ao longo do tempo
         angular_velocities = []
 
+        # Itera sobre cada intervalo de tempo
         for i in time_intervals:
+            # Atualiza a velocidade angular subtraindo a desaceleração angular multiplicada pelo intervalo de tempo
             angular_velocity -= angular_desaceleration * time_step
+            # Adiciona a velocidade angular atual à lista de velocidades angulares
             angular_velocities.append(angular_velocity)
 
         return angular_desaceleration, angular_velocity, angular_velocities, inertia_wheel
 
+
+    # Imprime os resultados calculados
     def print_resultados(self):
         print("Resultados Calculados:")
-        print("Força de frenagem teórica:", BrakeSystem.apply_brake(pedal_force=823)[3], 'N' )
+        print("Força de frenagem teórica:", BrakeSystem.apply_brake(pedal_force=823)[3], 'N')
         print("Inércia da roda:", inertia_wheel, "kg.m^2")
         print("Resistência ao rolamento:", resistencia_rolamento, "N")
-        print("Torque do disco de freio:", BrakeSystem.apply_brake(pedal_force=823)[4] , "N.m")
+        print("Torque do disco de freio:", BrakeSystem.apply_brake(pedal_force=823)[4], "N.m")
         print("Torque de resistência ao rolamento:", torque_resistencia_rolamento, "N.m")
         print("Torque ajustado:", BrakeSystem.apply_brake(pedal_force=823)[2], "N.m")
 
-
-
+    # Plota o gráfico da força longitudinal em relação à força aplicada ao pedal
     def show_graph(self, longitudinal_force, pedal_forces):
         plt.figure(figsize=(10, 6))
         plt.plot(pedal_forces, longitudinal_force, label='Longitudinal Force', color='blue')
@@ -235,6 +264,7 @@ class BrakeSystem:
         plt.legend()
         plt.grid(True)
         plt.show()
+
 
 # Definindo os parâmetros
 params = {
