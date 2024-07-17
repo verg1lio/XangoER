@@ -79,8 +79,8 @@ class Drivetrain:
         min_ff = min([p['ff'] for p in performance])
 
         penalty = 0
-        if max_vl < 100:
-            penalty += (100 - max_vl) ** 2
+        if max_vl < 27.78:
+            penalty += (27.78 - max_vl) ** 2
         if min_ff <= 0:
             penalty += abs(min_ff) * 1000
 
@@ -106,7 +106,7 @@ class Drivetrain:
         for dado in self.matriz_dados:
             ftf = ((dado["trq"] * redp * red1 * optimized_cp) / (rpneu * 0.001)) * rdt
             va = (dado["rpm"] * 2 * math.pi) / (60 * redp * red1 * optimized_cp)
-            vl = ((va * (rpneu * 0.001)) * mtrd) * 3.6
+            vl = ((va * (rpneu * 0.001)) * mtrd)
             fa = (da * vl ** 2 * cfar * af) / 2
             rr = (bscf + (3.24 * spdf * ((vl / 100 * 0.44704) ** 2.5))) * peso
             ff = ftf - fa - rr
