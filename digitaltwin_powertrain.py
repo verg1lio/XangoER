@@ -2,6 +2,8 @@ import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 import cmath  # Para operações com números complexos
+from matplotlib.widgets import Slider
+from scipy import signal
 
 __all__ = ["bateria", "motor_gaiola", "inversor", "controle_fluxo", "controle_inversor", "peso"]
 
