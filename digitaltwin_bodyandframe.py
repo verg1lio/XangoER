@@ -181,21 +181,36 @@ class BodyAndFrame:
 
 
 
-    def Mesh(self):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-            Description.
-
-        Examples
-        --------
-        >>> example
-        """
+    def Mesh(self, Coordenadas_nos, conexões_nos):
         
+        filename=input("Insira o nome do arquivo: ") +".geo"                          # Nome do arquivo
+        diretorio=input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")    # Diretorio onde o arquivo sera colocado
+    
+        if not os.path.exists(diretorio):                                             # Vê se o diretorio existe, caso contrario, cria um
+            os.makedirs(diretorio)
+        
+        filepath = os.path.join(diretorio, filename)                                  # Cria o caminho completo para o arquivo
+        
+        with open(filepath, 'w') as geo_file:
+            
+            for i, (x, y, z) in enumerate(Coordenadas_nos):                           # Descreve os nós
+                geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
+            
+            for i, (start, end) in enumerate(conexões_nos):                           # Cria as linhas(elementos)
+                geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
+            
+                            
+            if len(conexões_nos) > 2:                                                 # Cria um loop de linha e uma superfície plana se tivermos mais de 2 conexões
+                line_loop_indices = ', '.join(str(i + 1) for i in range(len(conexões_nos)))
+                geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
+                geo_file.write('Plane Surface(1) = {1};\n')
+            
+            geo_file.write('Mesh.Algorithm = 6;\n')                                   # Configurações da malha
+            geo_file.write('Mesh.ElementOrder = 1;\n')
+            geo_file.write('Mesh.Format = 1;\n')
+    
+        print(f'O arquivo foi salvo em : {filepath}, basta abrir o GMSH, e abrir o arquivo')
+    
         return Mesh
 
 
