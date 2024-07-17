@@ -21,7 +21,6 @@ class Drivetrain:
         self. reducao_unica = reducao_unica
         self.cp = 1
         self.objective_function = 0
-        self.velocidade_angular = 0
         
     # Valores experimentais para a curva de torque e potência
     matriz_dados = [
@@ -196,7 +195,6 @@ class Drivetrain:
            
             # Cálculo da velocidade angular (rad/s)
             velocidade_angular = (dado["rpm"] * 2 * math.pi) / (60 * self.reducao_primaria * self.reducao_unica * self.cp)
-            self.velocidade_angular = velocidade_angular 
             
             # Cálculo da velocidade linear (km/h)
             velocidade_linear = ((velocidade_angular * (self.raio_pneu * 0.001)) * transmissao_motor_roda) * 3.6
