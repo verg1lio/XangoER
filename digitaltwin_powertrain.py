@@ -577,14 +577,12 @@ class peso:
         self.peso_motor = peso_motor
 
     def peso_total(self):
-        """peso total dos componentes do sistema de powertrain
-
-        detalhamento do peso total da bateria, do inversor e motor
+        """Peso total dos componentes do sistema de powertrain
 
         Returns
         -------
         peso_total : np
-            somatorio dos pesos dos componentes do sistema
+            Somatorio dos pesos dos componentes do sistema
 
         Examples
         --------
