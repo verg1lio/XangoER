@@ -205,9 +205,6 @@ class BrakeSystem:
         forca_frenagem /= self.Rdp
         forca_frenagem -= resistencia_rolamento
 
-        # Calcula a desaceleração linear
-        desaceleracao_linear = forca_frenagem / self.Mt
-
         return resultados, forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
     # Calcula a velocidade angular das rodas durante a frenagem
