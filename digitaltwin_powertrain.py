@@ -565,8 +565,290 @@ class controle_fluxo:
         return
         
 class controle_inversor:
-    def __init__(self,):
-        return
+    def __init__(self, q1, q2, q3, v_dc, t_s, V, DDP_da_fonte):
+        self.q1 = q1  # Interruptor Q1
+        self.q2 = q2  # Interruptor Q2
+        self.q3 = q3  # Interruptor Q3
+        self.v_dc = v_dc
+        self.t_s = t_s
+        self.V = V  # Tensão de Alimentação
+        self.DDP_da_fonte = DDP_da_fonte  # Diferença de Potencial da Fonte
+
+        self.f = 50  # frequency in Hz
+        self.T = 1 / self.f  # period
+        self.t = np.linspace(0, 2 * self.T, 1000)  # time vector
+        self.f_start = 1  # initial frequency in Hz
+        self.f_end = 1000  # final frequency in Hz
+        self.w_start = 2 * np.pi * self.f_start  # initial frequency in Rad
+        self.w_end = 2 * np.pi * self.f_end  # final frequency in Rad
+        self.num_points = 400  # Number of frequency points for smooth plot
+
+    def chaves(self):
+        ''' Função para determinar se as chaves de comutação estão abertas (False) ou fechadas (True). 
+            Referido no livro Sistemas de Acionamento Estatico de Maquina Eletrica, Cursino Brandão Jacobina, Pag 89. 
+        '''
+        chave_1 = self.q1 == 1  # Retorno chave 1 fechada
+        chave_2 = self.q2 == 1  # Retorno chave 2 fechada
+        chave_3 = self.q3 == 1  # Retorno chave 3 fechada
+        return chave_3, chave_2, chave_1
+
+    def tensao_nos_terminais(self):
+        # Retorna as tensões trifásicas nos terminais de cargas
+        terminal_1 = (2 * self.q1 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.1)
+        terminal_2 = (2 * self.q2 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.2)
+        terminal_3 = (2 * self.q3 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.3)
+        return terminal_1, terminal_2, terminal_3
+
+    def componente_direta(self, terminal_1, terminal_2, terminal_3):  # Retorna o valor da componente direta
+        componente_direta = np.sqrt(2 / 3) * (terminal_1 - (terminal_2 / 2) - (terminal_3 / 2))  # Jacobina equação (7.10)
+        return componente_direta
+
+    def componente_quadratura(self, terminal_2, terminal_3):  # Retorna o valor da componente de quadratura
+        componente_quadratura = np.sqrt(2 / 3) * (np.sqrt(3) / 2 * terminal_2 - (np.sqrt(3) / 2) * terminal_3)  # Jacobina equação (7.11)
+        return componente_quadratura
+
+    def vetores(self):
+        # Retorna os vetores de tensão não nulos para a modulação vetorial 
+        vetor_1 = np.sqrt(2 / 3) * self.V  # Jacobina equação (7.14)
+        vetor_2 = (self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.15)
+        vetor_3 = (-self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.16)
+        vetor_4 = - np.sqrt(2 / 3) * self.V  # Jacobina equação (7.17)
+        vetor_5 = (self.V / np.sqrt(6)) - (1j * self.V / np.sqrt(2))  # Jacobina equação (7.18)
+        vetor_6 = (-self.V / np.sqrt(6)) - (1j * self.V / np.sqrt(2))  # Jacobina equação (7.19)
+        
+        return vetor_1, vetor_2, vetor_3, vetor_4, vetor_5, vetor_6
+
+    def transform_clarke(self, v_a, v_b, v_c):
+        v_alpha = (2 / 3) * (v_a - 0.5 * (v_b + v_c))
+        v_beta = (2 / 3) * (np.sqrt(3) / 2 * (v_b - v_c))
+        return v_alpha, v_beta
+
+    def transform_park(self, v_alpha, v_beta):
+        theta = 2 * np.pi * self.f * self.t
+        D = v_alpha * np.cos(theta) + v_beta * np.sin(theta)
+        Q = -v_alpha * np.sin(theta) + v_beta * np.cos(theta)
+        return D, Q
+
+    def find_sector(self, v_alpha, v_beta):
+        """
+        Determina em qual setor o vetor de referência está localizado.
+        """
+        sector = np.arctan2(v_beta, v_alpha) * 180 / np.pi
+        if sector < 0:
+            sector += 360
+        if 0 <= sector < 60:
+            return 1
+        elif 60 <= sector < 120:
+            return 2
+        elif 120 <= sector < 180:
+            return 3
+        elif 180 <= sector < 240:
+            return 4
+        elif 240 <= sector < 300:
+            return 5
+        elif 300 <= sector < 360:
+            return 6
+
+    def calculate_times(self, v_alpha, v_beta):
+        """
+        Calcula os tempos de comutação T1, T2 e T0.
+        """
+        t1 = v_beta * self.t_s / self.v_dc
+        t2 = v_alpha * self.t_s / self.v_dc
+        t0 = self.t_s - t1 - t2
+        return t1, t2, t0
+
+    def svm(self):  # Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
+        # Passo 1: Transformada de Clarke
+        v_alpha, v_beta = self.transform_clarke(self.v_a, self.v_b, self.v_c)
+        
+        # Passo 2: Identificação do setor
+        sector = self.find_sector(v_alpha, v_beta)
+        
+        # Passo 3: Cálculo dos tempos de comutação
+        t1, t2, t0 = self.calculate_times(v_alpha, v_beta)
+
+        return v_alpha, v_beta, sector, t1, t2, t0
+
+    def first_order_system(self, omega_n, zeta):
+        """
+        Define uma função de transferência de primeira ordem.
+        """
+        num = [omega_n**2]
+        den = [1, 2 * zeta * omega_n, omega_n**2]
+        return signal.TransferFunction(num, den)
+
+    def second_order_system(self, omega_n, zeta):
+        """
+        Define uma função de transferência de segunda ordem.
+        """
+        num = [omega_n**2]
+        den = [1, 2 * zeta * omega_n, omega_n**2]
+        return signal.TransferFunction(num, den)
+
+    def frequency_sweep(self):
+        """
+        Gera uma varredura de frequência.
+        """
+        self.w = np.logspace(np.log10(self.w_start), np.log10(self.w_end), self.num_points)
+        return self.w
+
+    def plot_bode(self):
+        """
+        Plota o diagrama de Bode para sistemas de primeira e segunda ordem.
+        """
+        # Define sistemas de funções de transferência (exemplo)
+        system1 = self.first_order_system(10, 0.5)  # Exemplo de sistema de primeira ordem
+        system2 = self.second_order_system(20, 0.7)  # Exemplo de sistema de segunda ordem
+
+        # Gera dados de Bode plot para cada sistema
+        w = self.frequency_sweep()
+        w, mag1, phase1 = signal.bode(system1, w)
+        w, mag2, phase2 = signal.bode(system2, w)
+
+        # Cria o Bode plot
+        plt.figure(figsize=(10, 6))
+
+        # Plot de Magnitude (dB)
+        plt.subplot(2, 1, 1)
+        plt.semilogx(w, mag1, label='System 1')
+        plt.semilogx(w, mag2, label='System 2')
+        plt.title('Bode Plot (Magnitude)')
+        plt.ylabel('Magnitude (dB)')
+        plt.grid(True, which="both", ls="--")
+        plt.legend()
+
+        # Plot de Fase (graus)
+        plt.subplot(2, 1, 2)
+        plt.semilogx(w, phase1, label='System 1')
+        plt.semilogx(w, phase2, label='System 2')
+        plt.xlabel('Frequency (rad/s)')
+        plt.ylabel('Phase (degrees)')
+        plt.grid(True, which="both", ls="--")
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_tensoes(self):
+        """
+        Plota as tensões de fase e as componentes Alpha-Beta e D-Q.
+        """
+        plt.figure(figsize=(10, 8))
+
+        # Plot das tensões de fase
+        plt.subplot(3, 1, 1)
+        plt.plot(self.t, self.v_a, label='Va')
+        plt.plot(self.t, self.v_b, label='Vb')
+        plt.plot(self.t, self.v_c, label='Vc')
+        plt.title('Tensões de Fase')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        # Plot das componentes Alpha-Beta
+        plt.subplot(3, 1, 2)
+        plt.plot(self.t, self.v_alpha, label='Alpha')
+        plt.plot(self.t, self.v_beta, label='Beta')
+        plt.title('Componentes Alpha-Beta')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        # Plot das componentes D-Q
+        plt.subplot(3, 1, 3)
+        plt.plot(self.t, self.D, label='D')
+        plt.plot(self.t, self.Q, label='Q')
+        plt.title('Componentes D-Q')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_signals(self, T_pwm):
+        # Calculando a frequência de chaveamento
+        f_chaveamento = 1 / T_pwm  # Frequência de chaveamento (Hz)
+
+        # Tempo de simulação
+        t_final = 0.1  # Tempo final da simulação (segundos)
+        t = np.arange(0, t_final, T_pwm)  # Vetor de tempo
+
+        # Geração da onda senoidal de referência
+        V_out_peak = self.v_dc / 2  # Amplitude de pico da tensão de saída CA
+        omega = 2 * np.pi * self.f  # Frequência angular
+        V_ref = V_out_peak * np.sin(omega * t)  # Onda senoidal de referência
+
+        # Geração do sinal PWM
+        V_carrier = V_out_peak * np.sign(np.sin(2 * np.pi * f_chaveamento * t))
+
+        # Sinal PWM
+        PWM_signal = np.where(V_ref >= V_carrier, self.v_dc, 0)
+
+        # Plotando os sinais
+        self.ax1.clear()
+        self.ax1.plot(t, V_ref, label='Onda Senoidal de Referência')
+        self.ax1.set_title('Onda Senoidal de Referência')
+        self.ax1.set_xlabel('Tempo (s)')
+        self.ax1.set_ylabel('Tensão (V)')
+        self.ax1.legend()
+
+        self.ax2.clear()
+        self.ax2.plot(t, V_carrier, label='Onda Portadora')
+        self.ax2.set_title('Onda Portadora')
+        self.ax2.set_xlabel('Tempo (s)')
+        self.ax2.set_ylabel('Tensão (V)')
+        self.ax2.legend()
+
+        self.ax3.clear()
+        self.ax3.plot(t, PWM_signal, label='Sinal PWM')
+        self.ax3.set_title('Sinal PWM')
+        self.ax3.set_xlabel('Tempo (s)')
+        self.ax3.set_ylabel('Tensão (V)')
+        self.ax3.legend()
+
+        self.fig.canvas.draw_idle()
+
+    def configure_slider_plot(self, T_pwm_initial):
+        # Configuração inicial do gráfico
+        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(3, 1, figsize=(12, 8))
+        plt.subplots_adjust(left=0.1, bottom=0.25)
+
+        # Plot inicial
+        self.plot_signals(T_pwm_initial)
+
+        # Eixo para o slider de controle de T_pwm
+        ax_slider = plt.axes([0.1, 0.1, 0.8, 0.03], facecolor='lightgoldenrodyellow')
+        T_pwm_slider = Slider(ax_slider, 'T_pwm (s)', 0.00001, 0.1, valinit=T_pwm_initial)
+
+        # Função de atualização do slider
+        def update(val):
+            T_pwm = T_pwm_slider.val
+            self.plot_signals(T_pwm)
+
+        T_pwm_slider.on_changed(update)
+
+        plt.show()
+
+def example_controle_inversor():
+    v_a = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000))
+    v_b = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000) - 2*np.pi/3)
+    v_c = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000) + 2*np.pi/3)
+
+    controle = controle_inversor(q1=1, q2=0, q3=1, v_dc=400, t_s=0.001, V=220, DDP_da_fonte=0)
+    controle.v_a = v_a
+    controle.v_b = v_b
+    controle.v_c = v_c
+
+    # Calcular transformações
+    controle.v_alpha, controle.v_beta = controle.transform_clarke(controle.v_a, controle.v_b, controle.v_c)
+    controle.D, controle.Q = controle.transform_park(controle.v_alpha, controle.v_beta)
+
+    # Plotar gráficos
+    controle.plot_bode()
+    controle.plot_tensoes()
+    controle.configure_slider_plot(0.0001)
 
 
 
@@ -606,4 +888,5 @@ def example_peso():
 # example_inversor()
 # plotar_potencia_vs_frequencia()
 # example_motor()
+# example_controle_inversor()
 # example_peso()
