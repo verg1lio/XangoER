@@ -265,6 +265,7 @@ class Drivetrain:
         power_values = [data["potencia"] for data in matriz_dados]
         return rpm_values, torque_values, power_values
 
+    #Método de classe para gerar modelos com valor da relação coroa-pinhão já calculados
     @classmethod
     def generate_model(cls, cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica):
         model = cls(cgx, cgy, massa, entre_eixos, coeficiente_atrito, raio_pneu, aceleracao_ideal, reducao_primaria, reducao_unica)
@@ -384,6 +385,18 @@ class Dynamics:
 
         plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
         plt.show()
+        
+    @staticmethod
+    def show_longitudinal_rpm(rpm_values, tire_longitudinal_force):
+        plt.figure(figsize=(10, 6))
+        plt.plot(rpm_values, tire_longitudinal_force, label='Longitudinal Force', color='blue')
+        plt.xlabel('RPM')
+        plt.ylabel('Longitudinal Force (N)')
+        plt.title('Longitudinal Force vs. RPM')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
       
 
 #######Instanciando a classe Transmission#######
@@ -399,7 +412,7 @@ transmission_model = Drivetrain.generate_model(
         reducao_primaria = 2.12,  # redução primária
         reducao_unica = 2.76)
 
-print(transmission_model)
+#print(transmission_model)
 transmission_model.show_results()
 transmission_model.print_car_performance()
 transmission_model.HalfShaftsSizing()
@@ -439,3 +452,6 @@ tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces = dynamics
 
 #Plotagem dos gráficos
 dynamics_instance.plot_graph(tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces)
+
+#Plotagem Força Longitudinal x RPM
+dynamics_instance.show_longitudinal_rpm(rpm, tire_longitudinal_forces)
