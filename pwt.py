@@ -33,12 +33,12 @@ class bateria:
 
         Returns
         -------
-        time_points: np
-            é uma array do NumPy contendo 100 valores, entre '0' e 'self.time'.
-        discharge_voltages: list
-            valores das tensões de descarga
-        charge_voltages: list
-            valores das tensões de carga
+        time_points : np
+            É uma array do NumPy contendo 100 valores, entre '0' e 'self.time'.
+        discharge_voltages : list
+            Valores das tensões de descarga
+        charge_voltages : list
+            Valores das tensões de carga
         
         Examples
         --------
@@ -93,18 +93,11 @@ class inversor:
         self.theta = theta # Ângulo de fase da corrente de saída (rad)
         self.f_s = f_s # Frequência de chaveamento (Hz)
         self.m = m # Índice de modulação
-
-        # Cálculo do período de chaveamento
-        self.T_s = 1 / f_s 
-
-        # Cálculo do ângulo de modulação
-        self.theta_m = np.arcsin(m)
-
-        # Cálculo da frequência angular de entrada
-        self.omega = 2 * np.pi * f
-
-        # Cálculo da tensão de saída fundamental
-        self.V_o1 = (2 * V_dc / np.pi) * m
+        
+        self.T_s = 1 / f_s # Cálculo do período de chaveamento
+        self.theta_m = np.arcsin(m) # Cálculo do ângulo de modulação
+        self.omega = 2 * np.pi * f # Cálculo da frequência angular de entrada
+        self.V_o1 = (2 * V_dc / np.pi) * m # Cálculo da tensão de saída fundamental
 
     def gerar_tensoes_saida(self, t):
         """Tensões de saída.
@@ -114,11 +107,11 @@ class inversor:
         Returns
         -------
         v_a : np
-        Tensão da Fase A do inversor
+            Tensão da Fase A do inversor
         v_b : np
-        Tensão da Fase B do inversor
+            Tensão da Fase B do inversor
         v_c : np
-        Tensão da Fase C do inversor
+            Tensão da Fase C do inversor
 
         Examples
         --------
@@ -139,22 +132,21 @@ class inversor:
         v_a = v_sw_a * np.sin(self.omega * t - self.phi)
         v_b = v_sw_b * np.sin(self.omega * t - self.phi - 2 * np.pi / 3)
         v_c = v_sw_c * np.sin(self.omega * t - self.phi + 2 * np.pi / 3)
-
         return v_a, v_b, v_c
 
     def gerar_correntes_saida(self, t):
        """Correntes de saída.
 
-        Função que irá gerar as correntes de saída.
+        Função que gera as correntes de saída do inversor.
 
         Returns
         -------
         i_a : np
-        Corrente da Fase A do inversor
+            Corrente da Fase A do inversor
         i_b : np
-        Corrente da Fase B do inversor
+            Corrente da Fase B do inversor
         i_c : np
-        Corrente da Fase C do inversor.
+            Corrente da Fase C do inversor.
         
         Examples
         --------
@@ -171,18 +163,16 @@ class inversor:
         return i_a, i_b, i_c
 
     def calcular_potencias(self, v_a, v_b, v_c, i_a, i_b, i_c):
-        """Calculo da potencia.
-
-        Calculo da potencia do inversor.
+        """Calculo da potencia do inversor.
 
         Returns
         -------
         P : np
-        Potencia ativa.
+            Potencia ativa.
         Q : np
-        Potencia reativa.
+            Potencia reativa.
         S : np
-        Potencia aparente. 
+            Potencia aparente. 
 
         Examples
         --------
@@ -206,7 +196,7 @@ class inversor:
         Returns
         -------
         u : np
-        Defini a corrente como contínua ou alternada.
+            Defini a corrente como contínua ou alternada.
 
         Examples
         --------
@@ -222,27 +212,30 @@ class inversor:
         return u
 
 def deriv(y, t, V_d, V_q, omega):
-        """Derivar.
-
-        Calculo da derivada dos fluxos magneticos 
+        """Calculo da derivada dos fluxos magneticos 
 
         Returns
         -------
         I_D : np
-        Componente da corrente no eixo d.
+            Componente da corrente no eixo d.
         I_q : np 
-        Componente da correo de q em relação ao tempo.
+            Componente da correo de q em relação ao tempo.
 
         Examples
         --------
-        >>> 
+        >>> t_sim = 0.2
+        >>> t = np.linspace(0, t_sim, 1000)
+        >>> y = [0, 0, 0, 0] 
+        >>> V_d, V_q, omega = (10, 10, 2 * np.pi * 60)
+        >>> derivadas = inversor(220, 60, 220, 118, 0, 0, 1, 0.01)
+        >>> exemple_id, exemple_iq, exemple_lambda_d, exemple_lambda_q = derivadas.deriv(y, t, V_d, V_q, omega)
+            [0, 0, 10.0, 10.0]
         """
         R_s = 0.435 # resistência do stator
         I_d, I_q, lambda_d, lambda_q = y
         
         d_lambda_d_dt = V_d - R_s * I_d + omega * lambda_q
         d_lambda_q_dt = V_q - R_s * I_q - omega * lambda_d
-        
         return [I_d, I_q, d_lambda_d_dt, d_lambda_q_dt]
 
 def plotar_inversor(t, v_a, v_b, v_c, i_a, i_b, i_c, Pa, Q, S, lambda_m):
@@ -446,7 +439,6 @@ class motor_gaiola:
         # Potência no rotor e torque
         P_r = 3 * abs(I2)**2 * (self.R2 / s)
         torque = P_r / self.w_s
-
         return self.K * torque  # Aplica a constante de proporcionalidade
 
     def encontrar_maior_torque(self, V_fase, escorregamentos):
@@ -616,31 +608,94 @@ class controle_inversor:
         self.num_points = 400  # Number of frequency points for smooth plot
 
     def chaves(self):
-        ''' Função para determinar se as chaves de comutação estão abertas (False) ou fechadas (True). 
-            Referido no livro Sistemas de Acionamento Estatico de Maquina Eletrica, Cursino Brandão Jacobina, Pag 89. 
-        '''
-        chave_1 = self.q1 == 1  # Retorno chave 1 fechada
-        chave_2 = self.q2 == 1  # Retorno chave 2 fechada
-        chave_3 = self.q3 == 1  # Retorno chave 3 fechada
+        """Determinar se as chaves de comutação.
+
+        Função para determinar se as chaves de comutação estão abertas (False) ou fechadas (True). 
+        Referido no livro Sistemas de Acionamento Estatico de Maquina Eletrica, Cursino Brandão Jacobina, Pag 89.
+
+        Returns
+        -------
+        chave_3 : Any
+            Retorno chave 1 fechada
+        chave_2 : Any
+            Retorno chave 2 fechada
+        chave_1 : Any
+            Retorno chave 3 fechada
+
+        Examples
+        --------
+        >>> example
+        """
+        chave_1 = self.q1 == 1
+        chave_2 = self.q2 == 1
+        chave_3 = self.q3 == 1
         return chave_3, chave_2, chave_1
 
     def tensao_nos_terminais(self):
-        # Retorna as tensões trifásicas nos terminais de cargas
+        """Description.
+
+        Retorna as tensões trifásicas nos terminais de cargas
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         terminal_1 = (2 * self.q1 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.1)
         terminal_2 = (2 * self.q2 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.2)
         terminal_3 = (2 * self.q3 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.3)
         return terminal_1, terminal_2, terminal_3
 
     def componente_direta(self, terminal_1, terminal_2, terminal_3):  # Retorna o valor da componente direta
+        """Retorna o valor da componente direta
+
+        Returns
+        -------
+        componente_direta : Any
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         componente_direta = np.sqrt(2 / 3) * (terminal_1 - (terminal_2 / 2) - (terminal_3 / 2))  # Jacobina equação (7.10)
         return componente_direta
 
-    def componente_quadratura(self, terminal_2, terminal_3):  # Retorna o valor da componente de quadratura
+    def componente_quadratura(self, terminal_2, terminal_3):
+        """Retorna o valor da componente de quadratura.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         componente_quadratura = np.sqrt(2 / 3) * (np.sqrt(3) / 2 * terminal_2 - (np.sqrt(3) / 2) * terminal_3)  # Jacobina equação (7.11)
         return componente_quadratura
 
     def vetores(self):
-        # Retorna os vetores de tensão não nulos para a modulação vetorial 
+        """Vetores de tensão.
+
+        Retorna os vetores de tensão não nulos para a modulação vetorial 
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         vetor_1 = np.sqrt(2 / 3) * self.V  # Jacobina equação (7.14)
         vetor_2 = (self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.15)
         vetor_3 = (-self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.16)
@@ -651,19 +706,53 @@ class controle_inversor:
         return vetor_1, vetor_2, vetor_3, vetor_4, vetor_5, vetor_6
 
     def transform_clarke(self, v_a, v_b, v_c):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         v_alpha = (2 / 3) * (v_a - 0.5 * (v_b + v_c))
         v_beta = (2 / 3) * (np.sqrt(3) / 2 * (v_b - v_c))
         return v_alpha, v_beta
 
     def transform_park(self, v_alpha, v_beta):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
+        """
         theta = 2 * np.pi * self.f * self.t
         D = v_alpha * np.cos(theta) + v_beta * np.sin(theta)
         Q = -v_alpha * np.sin(theta) + v_beta * np.cos(theta)
         return D, Q
 
     def find_sector(self, v_alpha, v_beta):
-        """
-        Determina em qual setor o vetor de referência está localizado.
+        """Determina em qual setor o vetor de referência está localizado.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> example
         """
         sector = np.arctan2(v_beta, v_alpha) * 180 / np.pi
         if sector < 0:
@@ -682,45 +771,87 @@ class controle_inversor:
             return 6
 
     def calculate_times(self, v_alpha, v_beta):
-        """
-        Calcula os tempos de comutação T1, T2 e T0.
+        """Calcula os tempos de comutação T1, T2 e T0.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        =>>> example
         """
         t1 = v_beta * self.t_s / self.v_dc
         t2 = v_alpha * self.t_s / self.v_dc
         t0 = self.t_s - t1 - t2
         return t1, t2, t0
 
-    def svm(self):  # Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
-        # Passo 1: Transformada de Clarke
-        v_alpha, v_beta = self.transform_clarke(self.v_a, self.v_b, self.v_c)
-        
-        # Passo 2: Identificação do setor
-        sector = self.find_sector(v_alpha, v_beta)
-        
-        # Passo 3: Cálculo dos tempos de comutação
-        t1, t2, t0 = self.calculate_times(v_alpha, v_beta)
+    def svm(self):
+        """Modulação por vetor espacial (SVM)
 
+        Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        >>> Passo 1: Transformada de Clarke
+        >>> Passo 2: Identificação do setor
+        >>> Passo 3: Cálculo dos tempos de comutação
+        """
+        v_alpha, v_beta = self.transform_clarke(self.v_a, self.v_b, self.v_c)
+        sector = self.find_sector(v_alpha, v_beta)
+        t1, t2, t0 = self.calculate_times(v_alpha, v_beta)
         return v_alpha, v_beta, sector, t1, t2, t0
 
     def first_order_system(self, omega_n, zeta):
         """
         Define uma função de transferência de primeira ordem.
         """
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        =>>> example
+        """
         num = [omega_n**2]
         den = [1, 2 * zeta * omega_n, omega_n**2]
         return signal.TransferFunction(num, den)
 
     def second_order_system(self, omega_n, zeta):
-        """
-        Define uma função de transferência de segunda ordem.
+        """Define uma função de transferência de segunda ordem.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        =>>> example
         """
         num = [omega_n**2]
         den = [1, 2 * zeta * omega_n, omega_n**2]
         return signal.TransferFunction(num, den)
 
     def frequency_sweep(self):
-        """
-        Gera uma varredura de frequência.
+        """Gera uma varredura de frequência.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
         """
         self.w = np.logspace(np.log10(self.w_start), np.log10(self.w_end), self.num_points)
         return self.w
