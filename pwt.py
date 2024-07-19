@@ -2,6 +2,8 @@ import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 import cmath  # Para operações com números complexos
+from matplotlib.widgets import Slider
+from scipy import signal
 
 __all__ = ["bateria", "motor_gaiola", "inversor", "controle_fluxo", "controle_inversor", "peso"]
 
@@ -25,18 +27,24 @@ class bateria:
             self.time = time
 
     def battery(self):
-        """Description.
+        """Bateria do sistema de powertrain
 
-        Detailed description.
+        Função que determinará os valores de tensão de carga e tensão de descarga da bateria de acordo com pontos do tempo.
 
         Returns
         -------
-        Bat : variable type
-        Description.
-
+        time_points: np
+            é uma array do NumPy contendo 100 valores, entre '0' e 'self.time'.
+        discharge_voltages: list
+            valores das tensões de descarga
+        charge_voltages: list
+            valores das tensões de carga
+        
         Examples
         --------
-        =>>> example
+        >>> my_battery = bateria('S', 10, 5, 1, 12, 0.1, 100, 1, 0.01, 1, 0.05)
+        >>> time, discharge_voltage, charge_voltage = my_battery.battery()
+            [...]
         """
         time_points = np.linspace(0, self.time, 100)  # 100 time points
         discharge_voltages = []
@@ -76,7 +84,7 @@ def example_bateria():
 
 
 class inversor:
-    def __init__(self, V_m, f, V_dc, i_dc, phi, theta, f_s, m, peso_inv=None):
+    def __init__(self, V_m, f, V_dc, i_dc, phi, theta, f_s, m):
         self.V_m = V_m # Tensão de entrada RMS (V)
         self.f = f # Frequência de entrada (Hz)
         self.V_dc = V_dc # Tensão CC (V)
@@ -85,7 +93,6 @@ class inversor:
         self.theta = theta # Ângulo de fase da corrente de saída (rad)
         self.f_s = f_s # Frequência de chaveamento (Hz)
         self.m = m # Índice de modulação
-        self.peso_inv = peso_inv # peso da inversor (kg)
 
         # Cálculo do período de chaveamento
         self.T_s = 1 / f_s 
@@ -100,18 +107,26 @@ class inversor:
         self.V_o1 = (2 * V_dc / np.pi) * m
 
     def gerar_tensoes_saida(self, t):
-        """Description.
+        """Tensões de saída.
 
-        Detailed description.
+        Essa função gera as tensõs de saída do inversor.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        v_a : np
+        Tensão da Fase A do inversor
+        v_b : np
+        Tensão da Fase B do inversor
+        v_c : np
+        Tensão da Fase C do inversor
 
         Examples
         --------
-        =>>> example
+        >>> t_sim = 0.2
+        >>> t = np.linspace(0, t_sim, 1000)
+        >>> tensoes = Inversor(220, 60, 220, 118, 0, 0, 1, 0.01)
+        >>> v_a, v_b, v_c = tensoes.gerar_tensoes_saida(t)
+            [...]
         """
         u_a = self._gerar_funcao_comutacao(t, self.theta_m)
         u_b = self._gerar_funcao_comutacao(t, self.theta_m + 2 * np.pi / 3)
@@ -128,18 +143,26 @@ class inversor:
         return v_a, v_b, v_c
 
     def gerar_correntes_saida(self, t):
-        """Description.
+       """Correntes de saída.
 
-        Detailed description.
+        Função que irá gerar as correntes de saída.
 
         Returns
         -------
-        Bat : variable type
-        Description.
-
+        i_a : np
+        Corrente da Fase A do inversor
+        i_b : np
+        Corrente da Fase B do inversor
+        i_c : np
+        Corrente da Fase C do inversor.
+        
         Examples
         --------
-        =>>> example
+        >>> t_sim = 0.2
+        >>> t = np.linspace(0, t_sim, 1000)
+        >>> correntes = Inversor(220, 60, 220, 118, 0, 0, 1, 0.01)
+            i_A, i_B, i_B = correntes.gerar_correntes_saida(t)
+            [...]
         """
         # Utilizando a mesma forma das tensões, por simplicidade
         i_a = self.i_dc * np.sin(self.omega * t - self.theta + np.pi/2)
@@ -148,18 +171,25 @@ class inversor:
         return i_a, i_b, i_c
 
     def calcular_potencias(self, v_a, v_b, v_c, i_a, i_b, i_c):
-        """Description.
+        """Calculo da potencia.
 
-        Detailed description.
+        Calculo da potencia do inversor.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        P : np
+        Potencia ativa.
+        Q : np
+        Potencia reativa.
+        S : np
+        Potencia aparente. 
 
         Examples
         --------
-        =>>> example
+        >>> v_a, v_b, v_c, i_a, i_b, i_c = (5, 6, 9, 18, 10, 14)
+        >>> potencias = Inversor(220, 60, 220, 118, 0, 0, 1, 0.01)
+        >>> p_P, p_Q, p_S = potencias.calcular_potencias(v_a, v_b, v_c, i_a, i_b, i_c)
+            890.1460554313545, 0.0, 890.1460554313545
         """
         V_ef = np.sqrt(np.mean(v_a**2 + v_b**2 + v_c**2))
         I_ef = np.sqrt(np.mean(i_a**2 + i_b**2 + i_c**2))
@@ -168,37 +198,44 @@ class inversor:
         S = np.sqrt(P**2 + Q**2)
         return P, Q, S
 
-    def _gerar_funcao_comutacao(self, t, theta_m):
-        """Description.
+    def gerar_funcao_comutacao(self, t, theta_m):
+        """Função de comutação.
 
-        Detailed description.
+        Gera a função responsável por ligar e desligar a chave eletrônica de potencia.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        u : np
+        Defini a corrente como contínua ou alternada.
 
         Examples
         --------
-        =>>> example
+        >>> t_sim = 0.2
+        >>> t = np.linspace(0, t_sim, 1000)
+        >>> theta_m = np.pi * 45
+        >>> comutacao = Inversor(220, 60, 220, 118, 0, 0, 1, 0.01)
+        >>> exemple_u = comutacao._gerar_funcao_comutacao(t, theta_m)
+            [1, 1, ..., 1]
         """
         k = np.floor((t + self.T_s / 4) / self.T_s)
         u = (t < (k * self.T_s + theta_m)).astype(int)
         return u
 
 def deriv(y, t, V_d, V_q, omega):
-        """Description.
+        """Derivar.
 
-        Detailed description.
+        Calculo da derivada dos fluxos magneticos 
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        I_D : np
+        Componente da corrente no eixo d.
+        I_q : np 
+        Componente da correo de q em relação ao tempo.
 
         Examples
         --------
-        =>>> example
+        >>> 
         """
         R_s = 0.435 # resistência do stator
         I_d, I_q, lambda_d, lambda_q = y
@@ -313,18 +350,20 @@ class motor_gaiola:
         self.V_m = V_m  # Tensão de entrada RMS (V)
 
     def calcular_impedancia(self, s):
-        """Description.
+        """Calculo da impedância do motor.
 
-        Detailed description.
+        Representa a oposição que um circuito elétrico oferece à passagem da corrente elétrica alternada.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        Z1 + Z2_prime : np
+            Somatorio da impedância do rotor e a do estator
+        Z1 : np
+            Valor de impedância do estator
 
         Examples
         --------
-        =>>> example
+        >>> example
         """
         j = complex(0, 1)
         Z1 = self.R1 + j * self.X1
@@ -334,71 +373,73 @@ class motor_gaiola:
         return Z1 + Z2_prime, Z1
 
     def calcular_corrente(self, V_fase, s):
-        """Description.
+        """Calculo para a corrente.
 
-        Detailed description.
+        Cálculo da corrente de fase no sistema proposto.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        I_fase : np
+        Corrente da fase
 
         Examples
         --------
-        =>>> example
+        >>> I_fase(230, 10 + 5j)
+            18.4 - 9.2j 
         """
         Z = self.calcular_impedancia(s)[0]
         I_fase = V_fase / Z
         return I_fase
 
     def calcular_tensao_induzida(self, V_fase, s):
-        """Description.
+        """Calculo da tensão induzida.
 
-        Detailed description.
+        Calcula a tensão induzida do motor.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        E2 : np
+            Valor total da tensão induzida.
 
         Examples
         --------
-        =>>> example
+        >>> example
         """
         E2 = V_fase - self.calcular_corrente(V_fase, s) * self.calcular_impedancia(s)[1]
         return E2
 
     def calcular_corrente_de_partida(self, V_fase, s):
-        """Description.
+        """Calculo da corrente de partida do motor.
 
-        Detailed description.
+        Função para a corrente necessária para o iniciar a operação do motor.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        I2 : np
+            Retorna o valor da corrente necessária para partida
 
         Examples
         --------
-        =>>> example
+        >>> example
         """
         Im = self.calcular_tensao_induzida(V_fase, s) / self.Xm
         I2 = self.calcular_corrente(V_fase, s) - Im
         return I2
 
     def calcular_torque(self, V_fase, s):
-        """Description.
+        """Carcular torque.
 
-        Detailed description.
+        Calcuclo do torque do motor elétrico.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        self.K * torque : np 
+            Torque com a constante de proporcionalidade 
 
         Examples
         --------
-        =>>> example
+        >>> torque = (12000/314)
+            38.22 Nm ; se K for 1 
         """
         # Corrente do rotor
         I2 = self.calcular_corrente_de_partida(V_fase, s)
@@ -409,18 +450,20 @@ class motor_gaiola:
         return self.K * torque  # Aplica a constante de proporcionalidade
 
     def encontrar_maior_torque(self, V_fase, escorregamentos):
-        """Description.
+        """Encontrar o maior torque.
 
-        Detailed description.
+        Encontra o maior valor de torque gerado
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        max_s : np
+            Escorregamento do torque máximo.
+        max_torque : np
+            Torque máximo.
 
         Examples
         --------
-        =>>> example
+        >>> example
         """
         torques = [self.calcular_torque(V_fase, s) for s in escorregamentos]
         max_torque = max(torques)
@@ -428,53 +471,42 @@ class motor_gaiola:
         return max_s, max_torque
 
     def calcular_velocidade_angular(self, escorregamentos):
-        """Description.
+        """Calculo da valocidade angular do rotor.
 
-        Detailed description.
+        Função que calcula a velocidade de giro do rotor.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        (self.w_s * (1 - escorregamentos)) * (30 / np.pi): np
+            Retorna o valor da velocidade de giro do rotor 
 
         Examples
         --------
-        =>>> example
+        >>> example
         """
         return (self.w_s * (1 - escorregamentos)) * (30 / np.pi)
 
     def calcular_fator_potencia(self, s):
-        """Description.
+        """calcula o fator de potencia.
 
-        Detailed description.
+        calcula o fator de potência e no retorno deve-se subtrair o fator de potencia por 1, para se ter o valor esperado 
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        1 - fator_potencia : numb 
+            Fator de potencia menos 1 
 
         Examples
         --------
-        =>>> example
+        >>> 1 - fator_potencia (0.8944) 
+            0.1056
         """
         Z, _ = self.calcular_impedancia(s)
         fator_potencia = np.cos(np.angle(Z))
         return 1-fator_potencia
 
     def simular_motor(self, t_final, num_steps):
-        """Description.
-
-        Detailed description.
-
-        Returns
-        -------
-        Bat : variable type
-        Description.
-
-        Examples
-        --------
-        =>>> example
-        """
+        
         t = np.linspace(0, t_final, num_steps)
         s = np.linspace(0.0001, 1, num_steps)  # Slip varies from 0 to 1 during simulation
 
@@ -565,8 +597,290 @@ class controle_fluxo:
         return
         
 class controle_inversor:
-    def __init__(self,):
-        return
+    def __init__(self, q1, q2, q3, v_dc, t_s, V, DDP_da_fonte):
+        self.q1 = q1  # Interruptor Q1
+        self.q2 = q2  # Interruptor Q2
+        self.q3 = q3  # Interruptor Q3
+        self.v_dc = v_dc
+        self.t_s = t_s
+        self.V = V  # Tensão de Alimentação
+        self.DDP_da_fonte = DDP_da_fonte  # Diferença de Potencial da Fonte
+
+        self.f = 50  # frequency in Hz
+        self.T = 1 / self.f  # period
+        self.t = np.linspace(0, 2 * self.T, 1000)  # time vector
+        self.f_start = 1  # initial frequency in Hz
+        self.f_end = 1000  # final frequency in Hz
+        self.w_start = 2 * np.pi * self.f_start  # initial frequency in Rad
+        self.w_end = 2 * np.pi * self.f_end  # final frequency in Rad
+        self.num_points = 400  # Number of frequency points for smooth plot
+
+    def chaves(self):
+        ''' Função para determinar se as chaves de comutação estão abertas (False) ou fechadas (True). 
+            Referido no livro Sistemas de Acionamento Estatico de Maquina Eletrica, Cursino Brandão Jacobina, Pag 89. 
+        '''
+        chave_1 = self.q1 == 1  # Retorno chave 1 fechada
+        chave_2 = self.q2 == 1  # Retorno chave 2 fechada
+        chave_3 = self.q3 == 1  # Retorno chave 3 fechada
+        return chave_3, chave_2, chave_1
+
+    def tensao_nos_terminais(self):
+        # Retorna as tensões trifásicas nos terminais de cargas
+        terminal_1 = (2 * self.q1 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.1)
+        terminal_2 = (2 * self.q2 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.2)
+        terminal_3 = (2 * self.q3 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.3)
+        return terminal_1, terminal_2, terminal_3
+
+    def componente_direta(self, terminal_1, terminal_2, terminal_3):  # Retorna o valor da componente direta
+        componente_direta = np.sqrt(2 / 3) * (terminal_1 - (terminal_2 / 2) - (terminal_3 / 2))  # Jacobina equação (7.10)
+        return componente_direta
+
+    def componente_quadratura(self, terminal_2, terminal_3):  # Retorna o valor da componente de quadratura
+        componente_quadratura = np.sqrt(2 / 3) * (np.sqrt(3) / 2 * terminal_2 - (np.sqrt(3) / 2) * terminal_3)  # Jacobina equação (7.11)
+        return componente_quadratura
+
+    def vetores(self):
+        # Retorna os vetores de tensão não nulos para a modulação vetorial 
+        vetor_1 = np.sqrt(2 / 3) * self.V  # Jacobina equação (7.14)
+        vetor_2 = (self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.15)
+        vetor_3 = (-self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.16)
+        vetor_4 = - np.sqrt(2 / 3) * self.V  # Jacobina equação (7.17)
+        vetor_5 = (self.V / np.sqrt(6)) - (1j * self.V / np.sqrt(2))  # Jacobina equação (7.18)
+        vetor_6 = (-self.V / np.sqrt(6)) - (1j * self.V / np.sqrt(2))  # Jacobina equação (7.19)
+        
+        return vetor_1, vetor_2, vetor_3, vetor_4, vetor_5, vetor_6
+
+    def transform_clarke(self, v_a, v_b, v_c):
+        v_alpha = (2 / 3) * (v_a - 0.5 * (v_b + v_c))
+        v_beta = (2 / 3) * (np.sqrt(3) / 2 * (v_b - v_c))
+        return v_alpha, v_beta
+
+    def transform_park(self, v_alpha, v_beta):
+        theta = 2 * np.pi * self.f * self.t
+        D = v_alpha * np.cos(theta) + v_beta * np.sin(theta)
+        Q = -v_alpha * np.sin(theta) + v_beta * np.cos(theta)
+        return D, Q
+
+    def find_sector(self, v_alpha, v_beta):
+        """
+        Determina em qual setor o vetor de referência está localizado.
+        """
+        sector = np.arctan2(v_beta, v_alpha) * 180 / np.pi
+        if sector < 0:
+            sector += 360
+        if 0 <= sector < 60:
+            return 1
+        elif 60 <= sector < 120:
+            return 2
+        elif 120 <= sector < 180:
+            return 3
+        elif 180 <= sector < 240:
+            return 4
+        elif 240 <= sector < 300:
+            return 5
+        elif 300 <= sector < 360:
+            return 6
+
+    def calculate_times(self, v_alpha, v_beta):
+        """
+        Calcula os tempos de comutação T1, T2 e T0.
+        """
+        t1 = v_beta * self.t_s / self.v_dc
+        t2 = v_alpha * self.t_s / self.v_dc
+        t0 = self.t_s - t1 - t2
+        return t1, t2, t0
+
+    def svm(self):  # Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
+        # Passo 1: Transformada de Clarke
+        v_alpha, v_beta = self.transform_clarke(self.v_a, self.v_b, self.v_c)
+        
+        # Passo 2: Identificação do setor
+        sector = self.find_sector(v_alpha, v_beta)
+        
+        # Passo 3: Cálculo dos tempos de comutação
+        t1, t2, t0 = self.calculate_times(v_alpha, v_beta)
+
+        return v_alpha, v_beta, sector, t1, t2, t0
+
+    def first_order_system(self, omega_n, zeta):
+        """
+        Define uma função de transferência de primeira ordem.
+        """
+        num = [omega_n**2]
+        den = [1, 2 * zeta * omega_n, omega_n**2]
+        return signal.TransferFunction(num, den)
+
+    def second_order_system(self, omega_n, zeta):
+        """
+        Define uma função de transferência de segunda ordem.
+        """
+        num = [omega_n**2]
+        den = [1, 2 * zeta * omega_n, omega_n**2]
+        return signal.TransferFunction(num, den)
+
+    def frequency_sweep(self):
+        """
+        Gera uma varredura de frequência.
+        """
+        self.w = np.logspace(np.log10(self.w_start), np.log10(self.w_end), self.num_points)
+        return self.w
+
+    def plot_bode(self):
+        """
+        Plota o diagrama de Bode para sistemas de primeira e segunda ordem.
+        """
+        # Define sistemas de funções de transferência (exemplo)
+        system1 = self.first_order_system(10, 0.5)  # Exemplo de sistema de primeira ordem
+        system2 = self.second_order_system(20, 0.7)  # Exemplo de sistema de segunda ordem
+
+        # Gera dados de Bode plot para cada sistema
+        w = self.frequency_sweep()
+        w, mag1, phase1 = signal.bode(system1, w)
+        w, mag2, phase2 = signal.bode(system2, w)
+
+        # Cria o Bode plot
+        plt.figure(figsize=(10, 6))
+
+        # Plot de Magnitude (dB)
+        plt.subplot(2, 1, 1)
+        plt.semilogx(w, mag1, label='System 1')
+        plt.semilogx(w, mag2, label='System 2')
+        plt.title('Bode Plot (Magnitude)')
+        plt.ylabel('Magnitude (dB)')
+        plt.grid(True, which="both", ls="--")
+        plt.legend()
+
+        # Plot de Fase (graus)
+        plt.subplot(2, 1, 2)
+        plt.semilogx(w, phase1, label='System 1')
+        plt.semilogx(w, phase2, label='System 2')
+        plt.xlabel('Frequency (rad/s)')
+        plt.ylabel('Phase (degrees)')
+        plt.grid(True, which="both", ls="--")
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_tensoes(self):
+        """
+        Plota as tensões de fase e as componentes Alpha-Beta e D-Q.
+        """
+        plt.figure(figsize=(10, 8))
+
+        # Plot das tensões de fase
+        plt.subplot(3, 1, 1)
+        plt.plot(self.t, self.v_a, label='Va')
+        plt.plot(self.t, self.v_b, label='Vb')
+        plt.plot(self.t, self.v_c, label='Vc')
+        plt.title('Tensões de Fase')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        # Plot das componentes Alpha-Beta
+        plt.subplot(3, 1, 2)
+        plt.plot(self.t, self.v_alpha, label='Alpha')
+        plt.plot(self.t, self.v_beta, label='Beta')
+        plt.title('Componentes Alpha-Beta')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        # Plot das componentes D-Q
+        plt.subplot(3, 1, 3)
+        plt.plot(self.t, self.D, label='D')
+        plt.plot(self.t, self.Q, label='Q')
+        plt.title('Componentes D-Q')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Tensão (V)')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_signals(self, T_pwm):
+        # Calculando a frequência de chaveamento
+        f_chaveamento = 1 / T_pwm  # Frequência de chaveamento (Hz)
+
+        # Tempo de simulação
+        t_final = 0.1  # Tempo final da simulação (segundos)
+        t = np.arange(0, t_final, T_pwm)  # Vetor de tempo
+
+        # Geração da onda senoidal de referência
+        V_out_peak = self.v_dc / 2  # Amplitude de pico da tensão de saída CA
+        omega = 2 * np.pi * self.f  # Frequência angular
+        V_ref = V_out_peak * np.sin(omega * t)  # Onda senoidal de referência
+
+        # Geração do sinal PWM
+        V_carrier = V_out_peak * np.sign(np.sin(2 * np.pi * f_chaveamento * t))
+
+        # Sinal PWM
+        PWM_signal = np.where(V_ref >= V_carrier, self.v_dc, 0)
+
+        # Plotando os sinais
+        self.ax1.clear()
+        self.ax1.plot(t, V_ref, label='Onda Senoidal de Referência')
+        self.ax1.set_title('Onda Senoidal de Referência')
+        self.ax1.set_xlabel('Tempo (s)')
+        self.ax1.set_ylabel('Tensão (V)')
+        self.ax1.legend()
+
+        self.ax2.clear()
+        self.ax2.plot(t, V_carrier, label='Onda Portadora')
+        self.ax2.set_title('Onda Portadora')
+        self.ax2.set_xlabel('Tempo (s)')
+        self.ax2.set_ylabel('Tensão (V)')
+        self.ax2.legend()
+
+        self.ax3.clear()
+        self.ax3.plot(t, PWM_signal, label='Sinal PWM')
+        self.ax3.set_title('Sinal PWM')
+        self.ax3.set_xlabel('Tempo (s)')
+        self.ax3.set_ylabel('Tensão (V)')
+        self.ax3.legend()
+
+        self.fig.canvas.draw_idle()
+
+    def configure_slider_plot(self, T_pwm_initial):
+        # Configuração inicial do gráfico
+        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(3, 1, figsize=(12, 8))
+        plt.subplots_adjust(left=0.1, bottom=0.25)
+
+        # Plot inicial
+        self.plot_signals(T_pwm_initial)
+
+        # Eixo para o slider de controle de T_pwm
+        ax_slider = plt.axes([0.1, 0.1, 0.8, 0.03], facecolor='lightgoldenrodyellow')
+        T_pwm_slider = Slider(ax_slider, 'T_pwm (s)', 0.00001, 0.1, valinit=T_pwm_initial)
+
+        # Função de atualização do slider
+        def update(val):
+            T_pwm = T_pwm_slider.val
+            self.plot_signals(T_pwm)
+
+        T_pwm_slider.on_changed(update)
+
+        plt.show()
+
+def example_controle_inversor():
+    v_a = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000))
+    v_b = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000) - 2*np.pi/3)
+    v_c = 220 * np.sin(2 * np.pi * 50 * np.linspace(0, 2 * (1/50), 1000) + 2*np.pi/3)
+
+    controle = controle_inversor(q1=1, q2=0, q3=1, v_dc=400, t_s=0.001, V=220, DDP_da_fonte=0)
+    controle.v_a = v_a
+    controle.v_b = v_b
+    controle.v_c = v_c
+
+    # Calcular transformações
+    controle.v_alpha, controle.v_beta = controle.transform_clarke(controle.v_a, controle.v_b, controle.v_c)
+    controle.D, controle.Q = controle.transform_park(controle.v_alpha, controle.v_beta)
+
+    # Plotar gráficos
+    controle.plot_bode()
+    controle.plot_tensoes()
+    controle.configure_slider_plot(0.0001)
 
 
 
@@ -577,19 +891,17 @@ class peso:
         self.peso_motor = peso_motor
 
     def peso_total(self):
-        """peso total dos componentes do sistema de powertrain
-
-        detalhamento do peso total da bateria, do inversor e motor
+        """Peso total dos componentes do sistema de powertrain
 
         Returns
         -------
         peso_total : np
-            somatorio dos pesos dos componentes do sistema
+            Somatorio dos pesos dos componentes do sistema
 
         Examples
         --------
-        =>>> peso_pwt = peso(10, 10, 65)
-        =>>> total = 10 + 10 + 65 = 85
+        >>> peso_pwt = peso(10, 10, 65)
+            85
         """
         peso_total = self.peso_bateria + self.peso_inversor + self.peso_motor
         return peso_total
@@ -608,22 +920,5 @@ def example_peso():
 # example_inversor()
 # plotar_potencia_vs_frequencia()
 # example_motor()
+# example_controle_inversor()
 # example_peso()
-
-# mapamental
-
-# refatoração
-# [   ] completar as descriçoes: gabriel, samuel e alan
-# [ x ] concertar o fluxo: igor, nikolas e caio
-# [ x ] juntar os 2 codigos de motor: fabricio e leo
-# [ x ] concertar o peso: muca
-# [   ] adicionar plot dinamico bateria
-# [   ] adicionar plot dinamico inversor
-# [ x ] adicionar plot dinamico motor
-# [   ] adicionar plot dinamico
-
-
-
-# concluir os codigos 
-# [ / ] fluxo: caio, alan,
-# [ / ] pwm: mari, jm e iago
