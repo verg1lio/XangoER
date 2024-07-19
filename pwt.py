@@ -133,8 +133,8 @@ class inversor:
         return v_a, v_b, v_c
 
     def gerar_correntes_saida(self, t):
-       """Gera as correntes de saída do inversor.
-       
+        """Gera as correntes de saída do inversor.
+        
         Returns
         -------
         i_a : np
@@ -143,7 +143,7 @@ class inversor:
             Corrente da Fase B do inversor
         i_c : np
             Corrente da Fase C do inversor.
-        
+      
         Examples
         --------
         >>> t_sim = 0.2
@@ -575,7 +575,10 @@ def example_motor():
 class controle_fluxo:
     def __init__(self,):
         return
-        
+
+
+
+
 class controle_inversor:
     def __init__(self, q1, q2, q3, v_dc, t_s, V, DDP_da_fonte):
         self.q1 = q1  # Interruptor Q1
@@ -624,111 +627,111 @@ class controle_inversor:
         return chave_3, chave_2, chave_1
 
     def tensao_nos_terminais(self):
-    """Calcula as tensões trifásicas nos terminais de cargas.
+        """Calcula as tensões trifásicas nos terminais de cargas.
 
-    A função retorna as tensões nos terminais de uma carga trifásica com base no estado das chaves de comutação 
-    e na diferença de potencial fornecida pela fonte, conforme descrito nas equações (7.1), (7.2) e (7.3) do livro 
-    "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
+        A função retorna as tensões nos terminais de uma carga trifásica com base no estado das chaves de comutação 
+        e na diferença de potencial fornecida pela fonte, conforme descrito nas equações (7.1), (7.2) e (7.3) do livro 
+        "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
 
-    Returns
-    -------
-    terminal_1 : float
-        Tensão no terminal 1.
-    terminal_2 : float
-        Tensão no terminal 2.
-    terminal_3 : float
-        Tensão no terminal 3.
+        Returns
+        -------
+        terminal_1 : float
+            Tensão no terminal 1.
+        terminal_2 : float
+            Tensão no terminal 2.
+        terminal_3 : float
+            Tensão no terminal 3.
 
-    Examples
-    --------
-    >>> self.q1 = 1
-    >>> self.q2 = 0
-    >>> self.q3 = 1
-    >>> self.V = 220
-    >>> self.DDP_da_fonte = 10
-    >>> tensao_nos_terminais()
-        (120.0, -100.0, 120.0)
-    """
+        Examples
+        --------
+        >>> self.q1 = 1
+        >>> self.q2 = 0
+        >>> self.q3 = 1
+        >>> self.V = 220
+        >>> self.DDP_da_fonte = 10
+        >>> tensao_nos_terminais()
+            (120.0, -100.0, 120.0)
+        """
         terminal_1 = (2 * self.q1 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.1)
         terminal_2 = (2 * self.q2 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.2)
         terminal_3 = (2 * self.q3 - 1) * self.V / 2 + self.DDP_da_fonte  # Jacobina equação (7.3)
         return terminal_1, terminal_2, terminal_3
 
     def componente_direta(self, terminal_1, terminal_2, terminal_3):
-    """Retorna o valor da componente direta.
+        """Retorna o valor da componente direta.
 
-    Calcula a componente direta das tensões trifásicas nos terminais usando a fórmula descrita na equação (7.10) 
-    do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
+        Calcula a componente direta das tensões trifásicas nos terminais usando a fórmula descrita na equação (7.10) 
+        do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
 
-    Returns
-    -------
-    componente_direta : float
-        Valor da componente direta das tensões nos terminais.
+        Returns
+        -------
+        componente_direta : float
+            Valor da componente direta das tensões nos terminais.
 
-    Examples
-    --------
-    >>> terminal_1 = 120.0
-    >>> terminal_2 = -100.0
-    >>> terminal_3 = 120.0
-    >>> componente_direta(terminal_1, terminal_2, terminal_3)
-        146.097563556976
-    """
+        Examples
+        --------
+        >>> terminal_1 = 120.0
+        >>> terminal_2 = -100.0
+        >>> terminal_3 = 120.0
+        >>> componente_direta(terminal_1, terminal_2, terminal_3)
+            146.097563556976
+        """
         componente_direta = np.sqrt(2 / 3) * (terminal_1 - (terminal_2 / 2) - (terminal_3 / 2))  # Jacobina equação (7.10)
         return componente_direta
 
     def componente_quadratura(self, terminal_2, terminal_3):
-    """Retorna o valor da componente de quadratura.
+        """Retorna o valor da componente de quadratura.
 
-    Calcula a componente de quadratura das tensões trifásicas nos terminais usando a fórmula descrita na equação (7.11) 
-    do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
+        Calcula a componente de quadratura das tensões trifásicas nos terminais usando a fórmula descrita na equação (7.11) 
+        do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
 
-    Returns
-    -------
-    componente_quadratura : float
-        Valor da componente de quadratura das tensões nos terminais.
+        Returns
+        -------
+        componente_quadratura : float
+            Valor da componente de quadratura das tensões nos terminais.
 
-    Examples
-    --------
-    >>> terminal_2 = -100.0
-    >>> terminal_3 = 120.0
-    >>> componente_quadratura(terminal_2, terminal_3)
-        -170.78251276599332
-    """
+        Examples
+        --------
+        >>> terminal_2 = -100.0
+        >>> terminal_3 = 120.0
+        >>> componente_quadratura(terminal_2, terminal_3)
+            -170.78251276599332
+        """
         componente_quadratura = np.sqrt(2 / 3) * (np.sqrt(3) / 2 * terminal_2 - (np.sqrt(3) / 2) * terminal_3)  # Jacobina equação (7.11)
         return componente_quadratura
 
     def vetores(self):
-    """Retorna os vetores de tensão não nulos para a modulação vetorial.
+        """Retorna os vetores de tensão não nulos para a modulação vetorial.
 
-    Calcula os vetores de tensão que são utilizados na modulação vetorial, conforme descrito nas equações (7.14) a (7.19) 
-    do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
+        Calcula os vetores de tensão que são utilizados na modulação vetorial, conforme descrito nas equações (7.14) a (7.19) 
+        do livro "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
 
-    Returns
-    -------
-    vetor_1 : complex
-        Vetor de tensão 1.
-    vetor_2 : complex
-        Vetor de tensão 2.
-    vetor_3 : complex
-        Vetor de tensão 3.
-    vetor_4 : complex
-        Vetor de tensão 4.
-    vetor_5 : complex
-        Vetor de tensão 5.
-    vetor_6 : complex
-        Vetor de tensão 6.
+        Returns
+        -------
+        vetor_1 : complex
+            Vetor de tensão 1.
+        vetor_2 : complex
+            Vetor de tensão 2.
+        vetor_3 : complex
+            Vetor de tensão 3.
+        vetor_4 : complex
+            Vetor de tensão 4.
+        vetor_5 : complex
+            Vetor de tensão 5.
+        vetor_6 : complex
+            Vetor de tensão 6.
 
-    Examples
-    --------
-    >>> self.V = 220
-    >>> vetores()
-        (179.61044104991788); 
-        (89.80522052495894+155.56349186104046j); 
-        (-89.80522052495894+155.56349186104046j);
-        (-179.61044104991788);
-        (89.80522052495894-155.56349186104046j);
-        (-89.80522052495894-155.56349186104046j);
-    """
+        Examples
+        --------
+        >>> self.V = 220
+        >>> vetores()
+            (179.61044104991788); 
+            (89.80522052495894+155.56349186104046j); 
+            (-89.80522052495894+155.56349186104046j);
+            (-179.61044104991788);
+            (89.80522052495894-155.56349186104046j);
+            (-89.80522052495894-155.56349186104046j);
+        """
         vetor_1 = np.sqrt(2 / 3) * self.V  # Jacobina equação (7.14)
         vetor_2 = (self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.15)
         vetor_3 = (-self.V / np.sqrt(6)) + (1j * self.V / np.sqrt(2))  # Jacobina equação (7.16)
@@ -739,83 +742,83 @@ class controle_inversor:
         return vetor_1, vetor_2, vetor_3, vetor_4, vetor_5, vetor_6
 
     def transform_clarke(self, v_a, v_b, v_c):
-    """Transformação de Clarke.
+        """Transformação de Clarke.
 
-    Converte as tensões trifásicas (v_a, v_b, v_c) para as componentes alfa (v_alpha) e beta (v_beta) 
-    usando a Transformação de Clarke.
-    
-    Returns
-    -------
-    v_alpha : float
-        Componente alfa da transformação de Clarke.
-    v_beta : float
-        Componente beta da transformação de Clarke.
+        Converte as tensões trifásicas (v_a, v_b, v_c) para as componentes alfa (v_alpha) e beta (v_beta) 
+        usando a Transformação de Clarke.
+        
+        Returns
+        -------
+        v_alpha : float
+            Componente alfa da transformação de Clarke.
+        v_beta : float
+            Componente beta da transformação de Clarke.
 
-    Examples
-    --------
-    >>> v_a = 220
-    >>> v_b = 110
-    >>> v_c = -110
-    >>> transform_clarke(v_a, v_b, v_c)
-        (146.66666666666666, 190.5255888325765)
-    """
+        Examples
+        --------
+        >>> v_a = 220
+        >>> v_b = 110
+        >>> v_c = -110
+        >>> transform_clarke(v_a, v_b, v_c)
+            (146.66666666666666, 190.5255888325765)
+        """
         v_alpha = (2 / 3) * (v_a - 0.5 * (v_b + v_c))
         v_beta = (2 / 3) * (np.sqrt(3) / 2 * (v_b - v_c))
         return v_alpha, v_beta
 
     def transform_park(self, v_alpha, v_beta):
-    """Transformação de Park.
+        """Transformação de Park.
 
-    Converte as componentes alfa (v_alpha) e beta (v_beta) para as componentes direta (D) e de quadratura (Q) 
-    usando a Transformação de Park.
+        Converte as componentes alfa (v_alpha) e beta (v_beta) para as componentes direta (D) e de quadratura (Q) 
+        usando a Transformação de Park.
 
-    Returns
-    -------
-    D : float
-        Componente direta da transformação de Park.
-    Q : float
-        Componente de quadratura da transformação de Park.
+        Returns
+        -------
+        D : float
+            Componente direta da transformação de Park.
+        Q : float
+            Componente de quadratura da transformação de Park.
 
-    Examples
-    --------
-    >>> v_alpha = 146.66666666666666
-    >>> v_beta = 190.5255888325765
-    >>> self.f = 50
-    >>> self.t = 0.01
-    >>> transform_park(v_alpha, v_beta)
-        (140.3174570760944, 196.66287296729442)
-    """
+        Examples
+        --------
+        >>> v_alpha = 146.66666666666666
+        >>> v_beta = 190.5255888325765
+        >>> self.f = 50
+        >>> self.t = 0.01
+        >>> transform_park(v_alpha, v_beta)
+            (140.3174570760944, 196.66287296729442)
+        """
         theta = 2 * np.pi * self.f * self.t
         D = v_alpha * np.cos(theta) + v_beta * np.sin(theta)
         Q = -v_alpha * np.sin(theta) + v_beta * np.cos(theta)
         return D, Q
 
     def find_sector(self, v_alpha, v_beta):
-    """Determina em qual setor o vetor de referência está localizado.
+        """Determina em qual setor o vetor de referência está localizado.
 
-    Returns
-    -------
-    sector : int
-        O número do setor onde o vetor de referência está localizado.
-        Os setores são definidos como:
-        1: 0° ≤ setor < 60°
-        2: 60° ≤ setor < 120°
-        3: 120° ≤ setor < 180°
-        4: 180° ≤ setor < 240°
-        5: 240° ≤ setor < 300°
-        6: 300° ≤ setor < 360°
+        Returns
+        -------
+        sector : int
+            O número do setor onde o vetor de referência está localizado.
+            Os setores são definidos como:
+            1: 0° ≤ setor < 60°
+            2: 60° ≤ setor < 120°
+            3: 120° ≤ setor < 180°
+            4: 180° ≤ setor < 240°
+            5: 240° ≤ setor < 300°
+            6: 300° ≤ setor < 360°
 
-    Examples
-    --------
-    >>> find_sector(1, 1)
-        1
-    >>> find_sector(-1, 1)
-        2
-    >>> find_sector(-1, -1)
-        4
-    >>> find_sector(1, -1)
-        6
-    """
+        Examples
+        --------
+        >>> find_sector(1, 1)
+            1
+        >>> find_sector(-1, 1)
+            2
+        >>> find_sector(-1, -1)
+            4
+        >>> find_sector(1, -1)
+            6
+        """
         sector = np.arctan2(v_beta, v_alpha) * 180 / np.pi
         if sector < 0:
             sector += 360
@@ -833,91 +836,91 @@ class controle_inversor:
             return 6
 
     def calculate_times(self, v_alpha, v_beta):
-    """Calcula os tempos de comutação T1, T2 e T0.
+        """Calcula os tempos de comutação T1, T2 e T0.
 
-    A função calcula os tempos de comutação T1, T2 e T0 com base nas componentes alfa (v_alpha) e beta (v_beta) 
-    da tensão, no tempo de comutação total (t_s) e na tensão do barramento (v_dc).
+        A função calcula os tempos de comutação T1, T2 e T0 com base nas componentes alfa (v_alpha) e beta (v_beta) 
+        da tensão, no tempo de comutação total (t_s) e na tensão do barramento (v_dc).
 
-    Returns
-    -------
-    t1 : float
-        Tempo de comutação T1.
-    t2 : float
-        Tempo de comutação T2.
-    t0 : float
-        Tempo de comutação T0.
+        Returns
+        -------
+        t1 : float
+            Tempo de comutação T1.
+        t2 : float
+            Tempo de comutação T2.
+        t0 : float
+            Tempo de comutação T0.
 
-    Examples
-    --------
-    >>> self.t_s = 0.001
-    >>> self.v_dc = 400
-    >>> v_alpha = 100
-    >>> v_beta = 50
-    >>> calculate_times(v_alpha, v_beta)
-        (0.000125, 0.00025, 0.000625)
-    """
+        Examples
+        --------
+        >>> self.t_s = 0.001
+        >>> self.v_dc = 400
+        >>> v_alpha = 100
+        >>> v_beta = 50
+        >>> calculate_times(v_alpha, v_beta)
+            (0.000125, 0.00025, 0.000625)
+        """
         t1 = v_beta * self.t_s / self.v_dc
         t2 = v_alpha * self.t_s / self.v_dc
         t0 = self.t_s - t1 - t2
         return t1, t2, t0
 
     def svm(self):
-    """Modulação por vetor espacial (SVM).
+        """Modulação por vetor espacial (SVM).
 
-    Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
+        Executa a modulação por vetor espacial (SVM) para tensões trifásicas de referência.
 
-    O procedimento inclui a transformação de Clarke das tensões trifásicas, a identificação do setor de referência, 
-    e o cálculo dos tempos de comutação T1, T2 e T0.
+        O procedimento inclui a transformação de Clarke das tensões trifásicas, a identificação do setor de referência, 
+        e o cálculo dos tempos de comutação T1, T2 e T0.
 
-    Returns
-    -------
-    v_alpha : float
-        Componente alfa da transformação de Clarke.
-    v_beta : float
-        Componente beta da transformação de Clarke.
-    sector : int
-        Setor onde o vetor de referência está localizado.
-    t1 : float
-        Tempo de comutação T1.
-    t2 : float
-        Tempo de comutação T2.
-    t0 : float
-        Tempo de comutação T0.
+        Returns
+        -------
+        v_alpha : float
+            Componente alfa da transformação de Clarke.
+        v_beta : float
+            Componente beta da transformação de Clarke.
+        sector : int
+            Setor onde o vetor de referência está localizado.
+        t1 : float
+            Tempo de comutação T1.
+        t2 : float
+            Tempo de comutação T2.
+        t0 : float
+            Tempo de comutação T0.
 
-    Examples
-    --------
-    >>> self.v_a = 220
-    >>> self.v_b = 110
-    >>> self.v_c = -110
-    >>> self.t_s = 0.001
-    >>> self.v_dc = 400
-    >>> svm()
-        (146.66666666666666, 190.5255888325765, 1, 0.0004763147220814413, 0.0003666666666666667, 0.00015601861125189196)
-    """
+        Examples
+        --------
+        >>> self.v_a = 220
+        >>> self.v_b = 110
+        >>> self.v_c = -110
+        >>> self.t_s = 0.001
+        >>> self.v_dc = 400
+        >>> svm()
+            (146.66666666666666, 190.5255888325765, 1, 0.0004763147220814413, 0.0003666666666666667, 0.00015601861125189196)
+        """
         v_alpha, v_beta = self.transform_clarke(self.v_a, self.v_b, self.v_c)
         sector = self.find_sector(v_alpha, v_beta)
         t1, t2, t0 = self.calculate_times(v_alpha, v_beta)
         return v_alpha, v_beta, sector, t1, t2, t0
 
     def first_order_system(self, omega_n, zeta):
-    """Define uma função de transferência de primeira ordem.
+        """Define uma função de transferência de primeira ordem.
 
-    Esta função cria uma função de transferência para um sistema de primeira ordem com frequência natural `omega_n` 
-    e fator de amortecimento `zeta`. A função de transferência resultante é dada por: H(s) = omega_n^2 / (s^2 + 2 * zeta * omega_n * s + omega_n^2)
+        Esta função cria uma função de transferência para um sistema de primeira ordem com frequência natural `omega_n` 
+        e fator de amortecimento `zeta`. A função de transferência resultante é dada por: H(s) = omega_n^2 / (s^2 + 2 * zeta * omega_n * s + omega_n^2)
 
-    Parameters
-    ----------
-    omega_n : float
-        Frequência natural do sistema.
-    zeta : float
-        Fator de amortecimento do sistema.
+        Parameters
+        ----------
+        omega_n : float
+            Frequência natural do sistema.
+        zeta : float
+            Fator de amortecimento do sistema.
 
-    Returns
-    -------
-    transfer_function : scipy.signal.TransferFunction
-        A função de transferência de primeira ordem definida pelos parâmetros fornecidos.
-        
-    """
+        Returns
+        -------
+        transfer_function : scipy.signal.TransferFunction
+            A função de transferência de primeira ordem definida pelos parâmetros fornecidos.
+            
+        """
         num = [omega_n**2]
         den = [1, 2 * zeta * omega_n, omega_n**2]
         return signal.TransferFunction(num, den)
@@ -987,8 +990,7 @@ class controle_inversor:
         plt.show()
 
     def plot_tensoes(self):
-        """
-        Plota as tensões de fase e as componentes Alpha-Beta e D-Q.
+        """Plota as tensões de fase e as componentes Alpha-Beta e D-Q.
         """
         plt.figure(figsize=(10, 8))
 
@@ -1117,7 +1119,7 @@ class peso:
     def peso_total(self):
         """Peso total dos componentes do sistema de powertrain
 
-         Calcula o peso total dos componentes do sistema de powertrain, somando o peso da bateria, do inversor e do motor.
+        Calcula o peso total dos componentes do sistema de powertrain, somando o peso da bateria, do inversor e do motor.
 
         Returns
         -------
