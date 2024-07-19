@@ -100,9 +100,7 @@ class inversor:
         self.V_o1 = (2 * V_dc / np.pi) * m # Cálculo da tensão de saída fundamental
 
     def gerar_tensoes_saida(self, t):
-        """Tensões de saída.
-
-        Essa função gera as tensõs de saída do inversor.
+        """Gera as tensõs de saída do inversor.
 
         Returns
         -------
@@ -135,10 +133,8 @@ class inversor:
         return v_a, v_b, v_c
 
     def gerar_correntes_saida(self, t):
-       """Correntes de saída.
-
-        Função que gera as correntes de saída do inversor.
-
+       """Gera as correntes de saída do inversor.
+       
         Returns
         -------
         i_a : np
@@ -366,14 +362,12 @@ class motor_gaiola:
         return Z1 + Z2_prime, Z1
 
     def calcular_corrente(self, V_fase, s):
-        """Calculo para a corrente.
-
-        Cálculo da corrente de fase no sistema proposto.
+        """Cálculo da corrente de fase no sistema.
 
         Returns
         -------
         I_fase : np
-        Corrente da fase
+            Corrente da fase
 
         Examples
         --------
@@ -385,9 +379,7 @@ class motor_gaiola:
         return I_fase
 
     def calcular_tensao_induzida(self, V_fase, s):
-        """Calculo da tensão induzida.
-
-        Calcula a tensão induzida do motor.
+        """Calcula a tensão induzida do motor..
 
         Returns
         -------
@@ -420,9 +412,9 @@ class motor_gaiola:
         return I2
 
     def calcular_torque(self, V_fase, s):
-        """Carcular torque.
+        """Calcuclo do torque do motor
 
-        Calcuclo do torque do motor elétrico.
+        Calcuclo do torque do motor elétrico aplicando a constante de proporcionalidade
 
         Returns
         -------
@@ -434,17 +426,13 @@ class motor_gaiola:
         >>> torque = (12000/314)
             38.22 Nm ; se K for 1 
         """
-        # Corrente do rotor
-        I2 = self.calcular_corrente_de_partida(V_fase, s)
-        # Potência no rotor e torque
-        P_r = 3 * abs(I2)**2 * (self.R2 / s)
+        I2 = self.calcular_corrente_de_partida(V_fase, s) # Corrente do rotor
+        P_r = 3 * abs(I2)**2 * (self.R2 / s)# Potência no rotor e torque
         torque = P_r / self.w_s
-        return self.K * torque  # Aplica a constante de proporcionalidade
+        return self.K * torque 
 
     def encontrar_maior_torque(self, V_fase, escorregamentos):
-        """Encontrar o maior torque.
-
-        Encontra o maior valor de torque gerado
+        """Encontrar o maior torque gerado.
 
         Returns
         -------
