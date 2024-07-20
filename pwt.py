@@ -607,9 +607,140 @@ def example_motor():
 
     
 class controle_fluxo:
-    def __init__(self,):
-        return
+    def __init__(self, k, amp_fluxo, r_s, v_s, i_s, r_r, v_r, i_r, ref_torque, ref_fluxo_rotor, ref_fluxo_estator, t, w1, wr):
+        self.k = k
+        self.amp_fluxo = amp_fluxo
+        self.r_s = r_s
+        self.v_s = v_s
+        self.i_s = i_s
+        self.r_r = r_r
+        self.v_r = v_r
+        self.i_r = i_r
+        self.ref_torque = ref_torque
+        self.ref_fluxo_rotor = ref_fluxo_rotor
+        self.ref_fluxo_estator = ref_fluxo_estator
+        self.t = t
+        self.w1 = w1
+        self.wr = wr
+        self.dt = t[1] - t[0]
+        self.psi_r = np.zeros_like(t)
+        self.psi_s = np.zeros_like(t)
+        self.erro_torque = np.zeros_like(t)
+        self.erro_fluxo_rotor = np.zeros_like(t)
+        self.erro_fluxo_estator = np.zeros_like(t)
 
+    def calcular_fluxo_rotorico(self):
+        """Calcula o fluxo do rotor por integração da tensão do rotor.
+
+        Utiliza a tensão do rotor e a corrente do rotor ajustada pela resistência do rotor para calcular
+        o fluxo do rotor ao longo do tempo.
+
+        Returns
+        -------
+        psi_r : array_like
+            Fluxo do rotor calculado ao longo do tempo.
+        """
+        self.psi_r = np.cumsum((self.v_r - self.i_r * self.r_r) * self.dt)
+        return self.psi_r
+
+    def calcular_fluxo_estatorico(self):
+        """Calcula o fluxo do estator por integração da tensão do estator.
+
+        Utiliza a tensão do estator e a corrente do estator ajustada pela resistência do estator para calcular
+        o fluxo do estator ao longo do tempo.
+
+        Returns
+        -------
+        psi_s : array_like
+            Fluxo do estator calculado ao longo do tempo.
+        """
+        self.psi_s = np.cumsum((self.v_s - self.i_s * self.r_s) * self.dt)
+        return self.psi_s
+
+    def calcular_torque(self):
+        """Calcula o torque eletromagnético com base no fluxo do rotor e nas velocidades.
+
+        Utiliza o fluxo do rotor e as velocidades do estator e do rotor para calcular o torque
+        eletromagnético ao longo do tempo.
+
+        Returns
+        -------
+        ce : array_like
+            Torque eletromagnético calculado ao longo do tempo.
+        """
+        self.ce = self.k * (self.psi_r ** 2) * (self.w1 - self.wr)
+        return self.ce
+
+    def controle(self):
+        """Realiza o controle ajustando o fluxo e o torque de acordo com os valores de referência.
+
+        Calcula o fluxo do rotor, o fluxo do estator e o torque, e ajusta as tensões baseadas nos erros
+        entre os valores calculados e os valores de referência.
+
+        Returns
+        -------
+        v_s_corrigido_rotor : array_like
+            Tensão corrigida do rotor.
+        v_s_corrigido_estator : array_like
+            Tensão corrigida do estator.
+        erro_torque : array_like
+            Erro de torque calculado ao longo do tempo.
+        erro_fluxo_rotor : array_like
+            Erro de fluxo do rotor calculado ao longo do tempo.
+        erro_fluxo_estator : array_like
+            Erro de fluxo do estator calculado ao longo do tempo.
+        """
+        self.calcular_fluxo_rotorico()
+        self.calcular_fluxo_estatorico()
+        self.calcular_torque()
+        self.erro_torque = self.ref_torque - self.ce
+        self.erro_fluxo_rotor = self.ref_fluxo_rotor - self.psi_r
+        self.erro_fluxo_estator = self.ref_fluxo_estator - self.psi_s
+        v_s_corrigido_rotor = self.v_r + self.erro_torque * 0.1 + self.erro_fluxo_rotor * 0.1
+        v_s_corrigido_estator = self.v_s + self.erro_torque * 0.1 + self.erro_fluxo_estator * 0.1
+        return v_s_corrigido_rotor, v_s_corrigido_estator, self.erro_torque, self.erro_fluxo_rotor, self.erro_fluxo_estator
+
+def customPlot(subplot, x, y, label, xlabel, ylabel):
+    plt.subplot(5, 1, subplot)
+    plt.plot(x, y, label=label)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+    plt.grid(True)
+
+def generatePlots(t, controle, erro_torque, erro_fluxo_rotor, saveFig):
+    plt.figure(figsize=(10, 20))  # Aumentar o tamanho da figura
+
+    customPlot(1, t, erro_torque, 'Erro de Torque', 'Tempo (s)', 'Erro de Torque') # Gráfico do erro do torque
+    customPlot(2, t, erro_fluxo_rotor, 'Erro de Fluxo Rotorico', 'Tempo (s)', 'Erro de Fluxo Rotorico')  # Gráfico do erro do fluxo rotorico
+    customPlot(3, t, controle.ce, 'Conjugado Eletromagnético', 'Tempo (s)', 'Torque') # Gráfico do conjugado eletromagnético   
+    customPlot(4, t, controle.psi_r, 'Fluxo do Rotor', 'Tempo (s)', 'Fluxo do Rotor') # Gráfico do fluxo do rotor
+    customPlot(5, t, controle.psi_s, 'Fluxo do Estator', 'Tempo (s)', 'Fluxo do Estator') # Gráfico do fluxo do estator
+
+    plt.tight_layout(pad=3.0)  # Aumentar o espaço entre os subplots
+
+    if saveFig:
+        plt.savefig('controle_fluxo.png')
+    else:
+        plt.show()
+
+def example_controle_fluxo(saveToFile=False):
+    # Simulação
+    t = np.linspace(0, 1, 1000)
+    v_s = np.sin(2 * np.pi * 50 * t) * np.exp(t)  # Tensão do estator (exemplo)
+    i_s = np.sin(2 * np.pi * 50 * t) * np.exp(t)  # Corrente do estator (exemplo)
+    v_r = np.sin(2 * np.pi * 50 * t) * np.exp(t)  # Tensão do rotor (exemplo)
+    i_r = np.sin(2 * np.pi * 50 * t) * np.exp(t)  # Corrente do rotor (exemplo)
+    ref_torque = 1  # Referência de torque
+    ref_fluxo_rotor = 1  # Referência de fluxo do rotor
+    ref_fluxo_estator = 1  # Referência de fluxo do estator
+
+    # Instanciar o objeto controle_fluxo com os parâmetros necessários
+    controle = controle_fluxo(k=1, amp_fluxo=1, r_s=0.1, v_s=v_s, i_s=i_s, r_r=0.1, v_r=v_r, i_r=i_r, ref_torque=ref_torque, ref_fluxo_rotor=ref_fluxo_rotor, ref_fluxo_estator=ref_fluxo_estator, t=t, w1=50, wr=40)
+
+    # Controle
+    v_s_corrigido_rotor, v_s_corrigido_estator, erro_torque, erro_fluxo_rotor, erro_fluxo_estator = controle.controle()
+    generatePlots(t, controle, erro_torque, erro_fluxo_rotor, saveFig=saveToFile)
 
 
 
@@ -1189,5 +1320,6 @@ def example_peso():
 # example_inversor()
 # plotar_potencia_vs_frequencia()
 # example_motor()
+# example_controle_fluxo(saveToFile=False)
 # example_controle_inversor()
 # example_peso()
