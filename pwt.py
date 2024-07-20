@@ -119,9 +119,9 @@ class inversor:
         >>> v_a, v_b, v_c = tensoes.gerar_tensoes_saida(t)
             [...]
         """
-        u_a = self._gerar_funcao_comutacao(t, self.theta_m)
-        u_b = self._gerar_funcao_comutacao(t, self.theta_m + 2 * np.pi / 3)
-        u_c = self._gerar_funcao_comutacao(t, self.theta_m + 4 * np.pi / 3)
+        u_a = self.gerar_funcao_comutacao(t, self.theta_m)
+        u_b = self.gerar_funcao_comutacao(t, self.theta_m + 2 * np.pi / 3)
+        u_c = self.gerar_funcao_comutacao(t, self.theta_m + 4 * np.pi / 3)
 
         v_sw_a = self.V_dc * u_a
         v_sw_b = self.V_dc * u_b
