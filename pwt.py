@@ -33,8 +33,8 @@ class bateria:
 
         Returns
         -------
-        time_points : np
-            É uma array do NumPy contendo 100 valores, entre '0' e 'self.time'.
+        time_points : np.ndarray
+            Array do NumPy contendo 100 valores, entre '0' e 'self.time'.
         discharge_voltages : list
             Valores das tensões de descarga
         charge_voltages : list
@@ -44,7 +44,7 @@ class bateria:
         --------
         >>> my_battery = bateria('S', 10, 5, 1, 12, 0.1, 100, 1, 0.01, 1, 0.05)
         >>> time, discharge_voltage, charge_voltage = my_battery.battery()
-            [...]
+            print(time, discharge_voltage, charge_voltage)
         """
         time_points = np.linspace(0, self.time, 100)  # 100 time points
         discharge_voltages = []
@@ -104,11 +104,11 @@ class inversor:
 
         Returns
         -------
-        v_a : np
+        v_a : np.ndarray
             Tensão da Fase A do inversor
-        v_b : np
+        v_b : np.ndarray
             Tensão da Fase B do inversor
-        v_c : np
+        v_c : np.ndarray
             Tensão da Fase C do inversor
 
         Examples
@@ -137,11 +137,11 @@ class inversor:
         
         Returns
         -------
-        i_a : np
+        i_a : np.ndarray
             Corrente da Fase A do inversor
-        i_b : np
+        i_b : np.ndarray
             Corrente da Fase B do inversor
-        i_c : np
+        i_c : np.ndarray
             Corrente da Fase C do inversor.
       
         Examples
@@ -163,11 +163,11 @@ class inversor:
 
         Returns
         -------
-        P : np
+        P : float
             Potencia ativa.
-        Q : np
+        Q : float
             Potencia reativa.
-        S : np
+        S : float
             Potencia aparente. 
 
         Examples
@@ -191,7 +191,7 @@ class inversor:
 
         Returns
         -------
-        u : np
+        u : np.ndarray
             Defini a corrente como contínua ou alternada.
 
         Examples
@@ -208,14 +208,20 @@ class inversor:
         return u
 
 def deriv(y, t, V_d, V_q, omega):
-        """Calculo da derivada dos fluxos magneticos 
+        """Calculo da derivada dos fluxos magneticos.
+
+        Calcula as derivadas das componentes do fluxo magnético no referencial dq e as componentes da corrente no eixo d e q em relação ao tempo.
 
         Returns
         -------
-        I_D : np
+        I_d : float
             Componente da corrente no eixo d.
-        I_q : np 
-            Componente da correo de q em relação ao tempo.
+        I_q : float
+            Componente da corrente no eixo q.
+        d_lambda_d_dt : float
+            Derivada da componente do fluxo magnético no eixo d.
+        d_lambda_q_dt : float
+            Derivada da componente do fluxo magnético no eixo q.
 
         Examples
         --------
@@ -345,14 +351,17 @@ class motor_gaiola:
 
         Returns
         -------
-        Z1 + Z2_prime : np
+        Z1 + Z2_prime : np.ndarray
             Somatorio da impedância do rotor e a do estator
-        Z1 : np
+        Z1 : np.ndarray
             Valor de impedância do estator
 
         Examples
         --------
-        >>> example
+        >>> s = 5
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> soma_impedancia, impedancia_estator = motor.calcular_impedancia
+            (0.14098964096979372+0.8908940265114892j), (0.135+0.768j)
         """
         j = complex(0, 1)
         Z1 = self.R1 + j * self.X1
@@ -363,32 +372,41 @@ class motor_gaiola:
 
     def calcular_corrente(self, V_fase, s):
         """Cálculo da corrente de fase no sistema.
+        
+        Calcula a corrente de fase para um motor de indução de gaiola de esquilo, dado o valor da tensão de fase e do escorregamento.
 
         Returns
         -------
-        I_fase : np
+        I_fase : complex
             Corrente da fase
 
         Examples
         --------
-        >>> I_fase(230, 10 + 5j)
-            18.4 - 9.2j 
+        >>> V_fase, s = (10, 5)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> corrente = motor.calcular_corrente(V_fase, s)
+            (1.73297440237383-10.950425382691304j)
         """
         Z = self.calcular_impedancia(s)[0]
         I_fase = V_fase / Z
         return I_fase
 
     def calcular_tensao_induzida(self, V_fase, s):
-        """Calcula a tensão induzida do motor..
+        """Calcula a tensão induzida do motor.
+
+        Calcula a tensão induzida (E2) no motor de indução de gaiola de esquilo, subtraindo a queda de tensão na impedância do estator da tensão de fase aplicada.
 
         Returns
         -------
-        E2 : np
+        E2 : complex
             Valor total da tensão induzida.
 
         Examples
         --------
-        >>> example
+        >>> V_fase, s = (10, 5)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> exemple_E2 = motor.calcular_tensao_induzida(V_fase, s)
+            (1.3561217617726111+0.1473830856402245j)
         """
         E2 = V_fase - self.calcular_corrente(V_fase, s) * self.calcular_impedancia(s)[1]
         return E2
@@ -396,16 +414,19 @@ class motor_gaiola:
     def calcular_corrente_de_partida(self, V_fase, s):
         """Calculo da corrente de partida do motor.
 
-        Função para a corrente necessária para o iniciar a operação do motor.
+        Calcula a corrente necessária para iniciar a operação do motor, considerando a impedância magnetizante.
 
         Returns
         -------
-        I2 : np
-            Retorna o valor da corrente necessária para partida
+        I2 : complex
+            Valor da corrente necessária para partida.
 
         Examples
         --------
-        >>> example
+        >>> V_fase, s = (10, 5)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> corrente = motor.calcular_corrente_de_partida(V_fase, s)
+            (1.7234443829657302-10.951461103602337j)
         """
         Im = self.calcular_tensao_induzida(V_fase, s) / self.Xm
         I2 = self.calcular_corrente(V_fase, s) - Im
@@ -418,13 +439,15 @@ class motor_gaiola:
 
         Returns
         -------
-        self.K * torque : np 
+        self.K * torque : float 
             Torque com a constante de proporcionalidade 
 
         Examples
         --------
-        >>> torque = (12000/314)
-            38.22 Nm ; se K for 1 
+        >>> V_fase, s = (10, 5)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> calculo_torque = motor.calcular_torque(V_fase, s)
+            (0.011149713124255235)
         """
         I2 = self.calcular_corrente_de_partida(V_fase, s) # Corrente do rotor
         P_r = 3 * abs(I2)**2 * (self.R2 / s)# Potência no rotor e torque
@@ -433,17 +456,23 @@ class motor_gaiola:
 
     def encontrar_maior_torque(self, V_fase, escorregamentos):
         """Encontrar o maior torque gerado.
+        
+        Calcula o torque para diferentes valores de escorregamento e retorna o escorregamento correspondente ao maior torque gerado.
 
         Returns
         -------
-        max_s : np
+        max_s : float
             Escorregamento do torque máximo.
-        max_torque : np
+        max_torque : float
             Torque máximo.
 
         Examples
         --------
-        >>> example
+        >>> V_fase = 220
+        >>> escorregamentos = [0.01, 0.05, 0.1, 0.15]
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> max_s_exemple, max_torque_exemple = motor.encontrar_maior_torque(V_fase, escorregamentos)
+            (0.05, 325.6747000287233)
         """
         torques = [self.calcular_torque(V_fase, s) for s in escorregamentos]
         max_torque = max(torques)
@@ -457,29 +486,34 @@ class motor_gaiola:
 
         Returns
         -------
-        (self.w_s * (1 - escorregamentos)) * (30 / np.pi): np
+        escorregamentos :  np.ndarray
             Retorna o valor da velocidade de giro do rotor 
 
         Examples
         --------
-        >>> example
+        >>> escorregamentos = [0.01, 0.05, 0.1, 0.15]
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> velocidade_angular_ex = motor.calcular_velocidade_angular(escorregamentos)
+            [1782. 1710. 1620.]
         """
         return (self.w_s * (1 - escorregamentos)) * (30 / np.pi)
 
     def calcular_fator_potencia(self, s):
-        """calcula o fator de potencia.
+        """Calcula o fator de potencia.
 
         calcula o fator de potência e no retorno deve-se subtrair o fator de potencia por 1, para se ter o valor esperado 
 
         Returns
         -------
-        1 - fator_potencia : numb 
+        fator_potencia : float
             Fator de potencia menos 1 
 
         Examples
         --------
-        >>> 1 - fator_potencia (0.8944) 
-            0.1056
+        >>> s = (5) 
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> calculo_fator_potencia = motor.calcular_fator_potencia(s)
+            0.8436889515099687
         """
         Z, _ = self.calcular_impedancia(s)
         fator_potencia = np.cos(np.angle(Z))
@@ -928,26 +962,39 @@ class controle_inversor:
     def second_order_system(self, omega_n, zeta):
         """Define uma função de transferência de segunda ordem.
 
+        Esta função cria um sistema de segunda ordem com a frequência natural `omega_n` e o fator de amortecimento `zeta`.
+
         Returns
         -------
-        Bat : variable type
-        Description.
+        system : signal.TransferFunction
+            Função de transferência do sistema de segunda ordem.
 
         Examples
         --------
-        =>>> example
+        >>> omega_n = 5.0
+        >>> zeta = 0.7
+        >>> system = second_order_system(omega_n, zeta)
+
         """
         num = [omega_n**2]
         den = [1, 2 * zeta * omega_n, omega_n**2]
         return signal.TransferFunction(num, den)
 
     def frequency_sweep(self):
-        """Gera uma varredura de frequência.
+        """Gera uma varredura de frequência logarítmica.
+
+        Esta função cria uma série de pontos de frequência em uma escala logarítmica, começando de `w_start` até `w_end` com `num_points` pontos.
 
         Returns
         -------
-        Bat : variable type
-        Description.
+        w : np.ndarray
+            Array de frequências em uma escala logarítmica.
+
+        Examples
+        --------
+        >>> sweeper = YourClassName(w_start=1, w_end=1000, num_points=100)
+        >>> frequencies = sweeper.frequency_sweep()
+            [ 1.   1.04712855   1.0964782   ...   953.03136355    1000. ]
         """
         self.w = np.logspace(np.log10(self.w_start), np.log10(self.w_end), self.num_points)
         return self.w
@@ -965,10 +1012,8 @@ class controle_inversor:
         w, mag1, phase1 = signal.bode(system1, w)
         w, mag2, phase2 = signal.bode(system2, w)
 
-        # Cria o Bode plot
         plt.figure(figsize=(10, 6))
 
-        # Plot de Magnitude (dB)
         plt.subplot(2, 1, 1)
         plt.semilogx(w, mag1, label='System 1')
         plt.semilogx(w, mag2, label='System 2')
@@ -977,7 +1022,6 @@ class controle_inversor:
         plt.grid(True, which="both", ls="--")
         plt.legend()
 
-        # Plot de Fase (graus)
         plt.subplot(2, 1, 2)
         plt.semilogx(w, phase1, label='System 1')
         plt.semilogx(w, phase2, label='System 2')
@@ -994,7 +1038,6 @@ class controle_inversor:
         """
         plt.figure(figsize=(10, 8))
 
-        # Plot das tensões de fase
         plt.subplot(3, 1, 1)
         plt.plot(self.t, self.v_a, label='Va')
         plt.plot(self.t, self.v_b, label='Vb')
@@ -1004,7 +1047,6 @@ class controle_inversor:
         plt.ylabel('Tensão (V)')
         plt.legend()
 
-        # Plot das componentes Alpha-Beta
         plt.subplot(3, 1, 2)
         plt.plot(self.t, self.v_alpha, label='Alpha')
         plt.plot(self.t, self.v_beta, label='Beta')
@@ -1013,7 +1055,6 @@ class controle_inversor:
         plt.ylabel('Tensão (V)')
         plt.legend()
 
-        # Plot das componentes D-Q
         plt.subplot(3, 1, 3)
         plt.plot(self.t, self.D, label='D')
         plt.plot(self.t, self.Q, label='Q')
