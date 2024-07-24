@@ -332,7 +332,7 @@ def example_inversor():
 
 
 class motor_gaiola:
-    def __init__(self, frequencia, P, R1, X1, R2, X2, Xm, K, V_m):
+    def __init__(self, frequencia, P, R1, X1, R2, X2, Xm, K, V_m, N):
         self.frequencia = frequencia # frequência em Hz
         self.P = P  # Número de polos
         self.R1 = R1 # Resistência do estator
@@ -343,6 +343,7 @@ class motor_gaiola:
         self.K = K  # Constante de proporcionalidade para o torque
         self.w_s = 2 * np.pi * self.frequencia / (self.P / 2)  # Velocidade síncrona
         self.V_m = V_m  # Tensão de entrada RMS (V)
+        self.N = N  # Espiras do Estator
 
     def calcular_impedancia(self, s):
         """Calculo da impedância do motor.
@@ -519,21 +520,46 @@ class motor_gaiola:
         fator_potencia = np.cos(np.angle(Z))
         return 1-fator_potencia
 
+     def calcular_Fluxo(self,V_fase, s):
+        """Description.
+
+        Detailed description.
+
+        Returns
+        -------
+        Bat : variable type
+        Description.
+
+        Examples
+        --------
+        =>>> example
+        """
+
+        """ N pode ser calculado por raiz de Xm/We*R
+            onde 
+            Xm = Reatância indutiva
+            We = velocidade angula da rede eletrica
+            R = Relutância magnética
+        """
+        Fluxo = ((self.X1/ 2 * np.pi * self.frequencia)* (self.calcular_corrente(V_fase, s)))/self.N
+        return Fluxo
+
     def simular_motor(self, t_final, num_steps):
         
         t = np.linspace(0, t_final, num_steps)
         s = np.linspace(0.0001, 1, num_steps)  # Slip varies from 0 to 1 during simulation
 
-        corrente = [self.calcular_corrente(220, si) for si in s]
-        torque = [self.calcular_torque(220, si) for si in s]
+        corrente = [self.calcular_corrente(self.V_m, si) for si in s]
+        torque = [self.calcular_torque(self.V_m, si) for si in s]
         fator_potencia = [self.calcular_fator_potencia(si) for si in s]
+        Fluxo = [self.calcular_Fluxo(self.V_m,si) for si in s]
 
-        return t, torque, corrente, fator_potencia
+        return t, torque, corrente, fator_potencia, Fluxo
 
-def plotar_motor(t, torque, corrente, fator_potencia):
+def plotar_motor(t, torque, corrente, fator_potencia, Fluxo):
     plt.figure(figsize=(10, 10))
 
-    plt.subplot(3, 1, 1)
+    plt.subplot(4, 1, 1)
     plt.plot(t, torque, label='Torque')
     plt.xlabel('Tempo (s)')
     plt.ylabel('Torque (Nm)')
@@ -541,7 +567,7 @@ def plotar_motor(t, torque, corrente, fator_potencia):
     plt.grid(True)
     plt.legend()
 
-    plt.subplot(3, 1, 2)
+    plt.subplot(4, 1, 2)
     plt.plot(t, corrente, label='Corrente')
     plt.xlabel('Tempo (s)')
     plt.ylabel('Corrente (A)')
@@ -549,7 +575,7 @@ def plotar_motor(t, torque, corrente, fator_potencia):
     plt.grid(True)
     plt.legend()
 
-    plt.subplot(3, 1, 3)
+    plt.subplot(4, 1, 3)
     plt.plot(t, fator_potencia, label='Fator de Potência')
     plt.xlabel('Tempo (s)')
     plt.ylabel('Fator de Potência')
@@ -557,14 +583,22 @@ def plotar_motor(t, torque, corrente, fator_potencia):
     plt.grid(True)
     plt.legend()
 
+    plt.subplot(4, 1, 4)
+    plt.plot(t, Fluxo, label='Fator de Potência')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Fluxo(Wb)')
+    plt.title('Fluxo magnético em função do Tempo')
+    plt.grid(True)
+    plt.legend()
+
     plt.tight_layout()
     plt.show()
 
-def plotar_motor_dinamico(t, torque, corrente, fator_potencia):
+def plotar_motor_dinamico(t, torque, corrente, fator_potencia, Fluxo):
     plt.figure(figsize=(10, 10))
-    
+
     for i in range(len(t)):
-        plt.subplot(3, 1, 1)
+        plt.subplot(4, 1, 1)
         plt.plot(t[:i], torque[:i], label='Torque')
         plt.xlabel('Tempo (s)')
         plt.ylabel('Torque (Nm)')
@@ -572,7 +606,7 @@ def plotar_motor_dinamico(t, torque, corrente, fator_potencia):
         plt.grid(True)
         plt.legend()
 
-        plt.subplot(3, 1, 2)
+        plt.subplot(4, 1, 2)
         plt.plot(t[:i], corrente[:i], label='Corrente')
         plt.xlabel('Tempo (s)')
         plt.ylabel('Corrente (A)')
@@ -580,29 +614,36 @@ def plotar_motor_dinamico(t, torque, corrente, fator_potencia):
         plt.grid(True)
         plt.legend()
 
-        plt.subplot(3, 1, 3)
+        plt.subplot(4, 1, 3)
         plt.plot(t[:i], fator_potencia[:i], label='Fator de Potência')
         plt.xlabel('Tempo (s)')
         plt.ylabel('Fator de Potência')
         plt.title('Fator de Potência em função do Tempo')
         plt.grid(True)
         plt.legend()
+        
+        plt.subplot(4, 1, 4)
+        plt.plot(t, Fluxo, label='Fator de Potência')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Fluxo(Wb)')
+        plt.title('Fluxo magnético em função do Tempo')
+        plt.grid(True)
+        plt.legend()
 
         plt.tight_layout()
         plt.draw()
-        plt.pause(0.01)
+        plt.pause(0.000001)
         plt.clf()
-
 def example_motor():
 
-    motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+    motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
 
     t_final = 3
     num_steps = 1000
-    t, torque, corrente, fator_potencia = motor.simular_motor(t_final, num_steps)
+    t, torque, corrente, fator_potencia, Fluxo = motor.simular_motor(t_final, num_steps)
 
-    plotar_motor(t, torque, corrente, fator_potencia)
-    plotar_motor_dinamico(t, torque, corrente, fator_potencia)
+    plotar_motor(t, torque, corrente, fator_potencia, Fluxo)
+    plotar_motor_dinamico(t, torque, corrente, fator_potencia, Fluxo)
 
 
     
@@ -1207,7 +1248,7 @@ class controle_inversor:
 
         # Geração da onda senoidal de referência
         V_out_peak = self.v_dc / 2  # Amplitude de pico da tensão de saída CA
-        omega = 2 * np.pi * self.f  # Frequência angular
+        omega = 2 * np.pi * self.f  # Frequência angular,
         V_ref = V_out_peak * np.sin(omega * t)  # Onda senoidal de referência
 
         # Geração do sinal PWM
