@@ -360,7 +360,7 @@ class motor_gaiola:
         Examples
         --------
         >>> s = 5
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> soma_impedancia, impedancia_estator = motor.calcular_impedancia
             (0.14098964096979372+0.8908940265114892j), (0.135+0.768j)
         """
@@ -384,7 +384,7 @@ class motor_gaiola:
         Examples
         --------
         >>> V_fase, s = (10, 5)
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> corrente = motor.calcular_corrente(V_fase, s)
             (1.73297440237383-10.950425382691304j)
         """
@@ -405,7 +405,7 @@ class motor_gaiola:
         Examples
         --------
         >>> V_fase, s = (10, 5)
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> exemple_E2 = motor.calcular_tensao_induzida(V_fase, s)
             (1.3561217617726111+0.1473830856402245j)
         """
@@ -425,7 +425,7 @@ class motor_gaiola:
         Examples
         --------
         >>> V_fase, s = (10, 5)
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> mmotor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> corrente = motor.calcular_corrente_de_partida(V_fase, s)
             (1.7234443829657302-10.951461103602337j)
         """
@@ -446,7 +446,7 @@ class motor_gaiola:
         Examples
         --------
         >>> V_fase, s = (10, 5)
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> calculo_torque = motor.calcular_torque(V_fase, s)
             (0.011149713124255235)
         """
@@ -471,7 +471,7 @@ class motor_gaiola:
         --------
         >>> V_fase = 220
         >>> escorregamentos = [0.01, 0.05, 0.1, 0.15]
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> max_s_exemple, max_torque_exemple = motor.encontrar_maior_torque(V_fase, escorregamentos)
             (0.05, 325.6747000287233)
         """
@@ -493,7 +493,7 @@ class motor_gaiola:
         Examples
         --------
         >>> escorregamentos = [0.01, 0.05, 0.1, 0.15]
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> velocidade_angular_ex = motor.calcular_velocidade_angular(escorregamentos)
             [1782. 1710. 1620.]
         """
@@ -512,7 +512,7 @@ class motor_gaiola:
         Examples
         --------
         >>> s = (5) 
-        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220)
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
         >>> calculo_fator_potencia = motor.calcular_fator_potencia(s)
             0.8436889515099687
         """
@@ -521,26 +521,29 @@ class motor_gaiola:
         return 1-fator_potencia
 
      def calcular_Fluxo(self,V_fase, s):
-        """Description.
-
-        Detailed description.
+        """Calculo de Fluxo magnético no motor
+        N pode ser calculado por raiz de Xm/We*R
+        onde: 
+        Xm = Reatância indutiva
+        We = velocidade angula da rede eletrica
+        R = Relutância magnética
 
         Returns
         -------
-        Bat : variable type
-        Description.
-
+        Fluxo: float
+            Fluxo magnético gerado pela indução de corrente no estator.
+            
         Examples
         --------
-        =>>> example
+        >>> s = [0.01, 0.05, 0.1, 0.15]
+        >>> motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
+        >>> Fluxo = motor.calcular_Fluxo(V_m,s)
+            [2.11682942-0.64546962j
+             3.97381726-4.83719505j
+             3.19734076-6.56072368j
+             2.67308005-7.11833011j]
         """
 
-        """ N pode ser calculado por raiz de Xm/We*R
-            onde 
-            Xm = Reatância indutiva
-            We = velocidade angula da rede eletrica
-            R = Relutância magnética
-        """
         Fluxo = ((self.X1/ 2 * np.pi * self.frequencia)* (self.calcular_corrente(V_fase, s)))/self.N
         return Fluxo
 
@@ -1353,8 +1356,6 @@ def example_peso():
     total = peso_pwt.peso_total()
     
     print(f"O peso total é {total} Kg")
-
-
 
 # testes
 # example_bateria()
