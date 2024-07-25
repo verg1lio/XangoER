@@ -1,10 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Definindo uma classe chamada Tire
 class Tire:
-    def __init__(self, tire_Fz=None, tire_Sa=None, tire_Ls=None, tire_friction_coef=None, tire_Ca=None, B0=0, B1=None, 
-                B2=0, B3=None, omega=315, slip_angle_start=-10, slip_angle_end=10, angle_step=0.5, WB=1500, rear_axle_length=1600):
+    def __init__(self, tire_Fz=None, tire_Sa=None, tire_Ls=None, tire_friction_coef=None, tire_Ca=0, B0=0, B1=None, 
+                B2=0, B3=None, omega=315, slip_angle_start=-10, slip_angle_end=10, angle_step=0.5, WB=1500, rear_axle_length=1600, track_y=0, tire_k=0):
         # Inicializando parâmetros para o modelo de pneu
         self.tire_Fz = tire_Fz  # Carga vertical no pneu [N]
         self.tire_Sa = tire_Sa  # Ângulo de deslizamento lateral do pneu [rad]
@@ -14,9 +10,9 @@ class Tire:
         self.tire_Ca = tire_Ca  # Ângulo de camber do pneu
 
         # Comprimentos das barras do mecanismo de quatro barras
-        self.L0 = B0  # Comprimento da primeira barra
+        self.L0 = B0  # Comprimento da barra de direção
         self.L1 = B1  # Comprimento do braço de direção
-        self.L2 = B2  # Comprimento da barra de direção
+        self.L2 = B2  # Comprimento da bitola
         self.L3 = B3  # Comprimento do braço de direção
 
         # Ângulo de orientação da barra longitudinal em relação ao eixo horizontal
@@ -50,6 +46,11 @@ class Tire:
         self.WB = WB  # Entre-eixos (wheelbase) fixo
         self.rear_axle_length = rear_axle_length  # Comprimento do eixo traseiro fixo
         self.rear_axle_center = (B0 / 2, 0)
+
+        # Entradas de rigidez do pneu
+        self.track_y = track_y
+        self.tire_k = tire_k
+
 
     def calculate_kinematics(self):
         for i in range(len(self.theta2)):
@@ -134,6 +135,85 @@ class Tire:
         # Retornando as forças calculadas e o momento de auto-alinhamento
         return tire_lateral_force + 0.5 * camber_thrust, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
     
+    def calcular_forca(self):
+        """Calcula a força com base na deformção do pneu"""
+        force = self.track_y * self.tire_k
+        return force
+    
+    # Função que calcula a razão de escorregamento (slip ratio) com base na velocidade angular e no raio do pneu
+    def slip_ratio_1(self, velocidade_angular, raio_pneu):
+        velocidade_linear = initial_speed
+        value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
+
+        return value
+    
+    # Função que plota o gráfico do slip ratio em relação à força do pedal
+    def plot_graph_slip_ratio(self, value=None):
+        plt.figure(figsize=(10, 6))
+        plt.plot(pedal_forces, value, label="Slip Ratio vs. Força do Pedal")
+
+        # Invertendo o eixo y
+        plt.gca().invert_yaxis()
+        plt.xlabel("Força no Pedal (N)")
+        plt.ylabel("Slip Ratio")
+        plt.title("Força no Pedal em Relação ao Slip Ratio de Frenagem")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+    # Função que mostra valores de slip ratio em relação ao rpm
+    def show_slip_ratio(self, rpm_values, slip_ratio, velocidade_angular):
+        
+        print("Valores do Slip Ratio: ")
+        for dado in slip_ratio:
+            print(dado)
+            
+        plt.figure(figsize=(15, 5))
+        
+        plt.subplot(1, 2, 1)
+        plt.plot(rpm_values, slip_ratio, label = 'Slip Ratio', color = 'blue')
+        plt.xlabel('RPM')
+        plt.ylabel('Slip Ratio')
+        plt.title('Slip Ratio x RPM') 
+        plt.legend()
+        
+        plt.subplot(1, 2, 2)
+        plt.plot(rpm_values, velocidade_angular, label = 'Velocidade Angular', color = 'red')
+        plt.xlabel('RPM')
+        plt.ylabel('Velocidade Angular (rad/s)')
+        plt.title('Velocidade Angular x RPM')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    # Função que plota valores de força longitudinal em função do rpm
+    def show_longitudinal_rpm(rpm_values, tire_longitudinal_force):
+        plt.figure(figsize=(10, 6))
+        plt.plot(rpm_values, tire_longitudinal_force, label='Longitudinal Force', color='blue')
+        plt.xlabel('RPM')
+        plt.ylabel('Longitudinal Force (N)')
+        plt.title('Longitudinal Force vs. RPM')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+    
+    def plotar_deformacao(self, track_y_values):
+        """Plota o gráfico com base em uma lista de valores fornecidos que representam a variação da pista"""
+        force_values = []
+
+        for y in track_y_values:
+            self.track_y = y
+            force_values.append(self.calcular_forca())
+
+        # Criando o gráfico
+        plt.figure(figsize=(8, 6))
+        plt.plot(track_y_values, force_values, color='b')
+        plt.title('Carregamento Aplicado vs Deformação')
+        plt.xlabel('Deformação (mm)')
+        plt.ylabel('Carregamento (N)')
+        plt.grid(True)
+        plt.show()
+    
     def plot_camber(self, predicted_tire_lateral_forces, predicted_tire_lateral_forces_1, predicted_tire_lateral_forces_2, tire_lateral_experimental=None, tire_lateral_experimental_1=None, tire_lateral_experimental_2=None, angles=None, ratio=None):
         # Configuração da figura e tamanho
         plt.figure(figsize=(20, 7))
@@ -213,6 +293,7 @@ class Tire:
             plt.plot([self.Ox[i], self.Ax[i]], [self.Oy[i], self.Ay[i]], 'r', linewidth=1)
             plt.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], 'k', linewidth=2)
             plt.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i]], 'r', linewidth=1)
+            plt.plot([self.Ox[i], self.Cx[i]], [self.Oy[i], self.Cy[i]], 'r', linewidth=1, linestyle = 'dotted')
 
             # Desenho da barra do entre-eixos
             midpoint_x = (self.Ox[i] + self.Cx[i]) / 2
@@ -253,6 +334,7 @@ class Tire:
             plt.plot([self.Ox[i], self.Ax[i]], [self.Oy[i], self.Ay[i]], 'r', linewidth=1)
             plt.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], 'k', linewidth=2)
             plt.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i]], 'r', linewidth=1)
+            plt.plot([self.Ox[i], self.Cx[i]], [self.Oy[i], self.Cy[i]], 'r', linewidth=1, linestyle = 'dotted')
 
             # Desenho da barra do entre-eixos
             midpoint_x = (self.Ox[i] + self.Cx[i]) / 2
@@ -292,49 +374,3 @@ class Tire:
             print(f"O ângulo de toe é : {self.static_slip_angle:.2f}°")
         else:
             print("Não foi possível determinar um ângulo estático para as rodas dentro do intervalo fornecido.")
-
-# Criação do mecanismo
-mechanism = Tire(B0 = 1393, B1 = 300, B2 = 1400, B3 = 300)
-# Cálculos
-mechanism.calculate_kinematics()
-# Plots
-mechanism.run()
-
-# Valores para a instância da classe Tire
-slip_ratio = np.linspace(-1, 1, 1000)
-slip_angles = np.linspace(-9, 9, 1000)
-
-# Dados experimentais
-ratio = np.linspace(-1, 1, 19)
-angles = np.array([-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
-tire_lateral_forces_1 = np.array([-2300, -2200, -2060, -1880, -1680, -1450, -1190, -850, -430, 60, 520, 890, 1170, 1390, 1580, 1730, 1890, 2000, 2090])
-tire_auto_align_moment_1 = np.array([-28.84, -28.68, -27.21, -26.41, -27.70, -24.21, -24.15, -15.88, -4.91, 14.72, 33.80, 43.79, 46.93, 49.09, 50.90, 50.10, 50.81, 48.12, 48.83])
-
-camber_experimental = [-2060.0, -1950.0, -1840.0, -1700.0, -1540.0, -1350.0, -1130.0, -860.0, -480.0, -30.0, 460.0, 880.0, 1230.0, 1490.0, 1720.0, 1910.0, 2090.0, 2230.0, 2310.0]
-camber_experimental_1 = [-1940.0, -1860.0, -1750.0, -1610.0, -1450.0, -1260.0, -1050.0, -760.0, -400.0, 60.0, 540.0, 970.0, 1290.0, 1550.0, 1780.0, 1980.0, 2150.0, 2280.0, 2370.0]
-camber_experimental_15 = [-1840.0, -1750.0, -1670.0, -1520.0, -1370.0, -1180.0, -960.0, -680.0, -310.0, 130.0, 610.0, 1020.0, 1360.0, 1630.0, 1850.0, 2040.0, 2220.0, 2360.0, 2430.0]
-
-# Parâmetros de Pacejka Atrelados ao pneu
-result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
-
-# Instanciando a classe Tire sem camber
-dynamics_instance = Tire(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45, tire_Ca=0)
-
-# Calculando as forças previstas e o momento de auto-alinhamento
-predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces = dynamics_instance.Tire_forces(result)
-
-# Instanciando a classe Tire com diferentes valores de camber
-dynamics_camber = Tire(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45, tire_Ca=0.5)
-dynamics_camber_1 = Tire(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45, tire_Ca=1)
-dynamics_camber_15 = Tire(tire_Fz=1500, tire_Sa=slip_angles, tire_Ls=slip_ratio, tire_friction_coef=1.45, tire_Ca=1.5)
-
-# Calculando as forças laterais previstas para diferentes valores de camber
-forca_camber = dynamics_camber.Tire_forces(result)[0]
-forca1_camber_1 = dynamics_camber_1.Tire_forces(result)[0]
-forca2_camber_15 = dynamics_camber_15.Tire_forces(result)[0]
-
-# Plotando as curvas com camber comparadas com dados experimentais
-dynamics_camber.plot_camber(forca_camber, forca1_camber_1, forca2_camber_15, camber_experimental, camber_experimental_1, camber_experimental_15, angles)
-
-# Plotando as curvas previstas com os dados experimentais
-dynamics_instance.plot_graph(predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces)
