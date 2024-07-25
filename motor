@@ -1,0 +1,216 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+class motor_gaiola:
+    def __init__(self, frequencia, P, R1, X1, R2, X2, Xm, K, V_m, N):
+        self.frequencia = frequencia # frequência em Hz
+        self.P = P  # Número de polos
+        self.R1 = R1 # Resistência do estator
+        self.X1 = X1 # Reatância do estator
+        self.R2 = R2 # Resistência do rotor
+        self.X2 = X2 # Reatância do rotor
+        self.Xm = Xm # Reatância magnética
+        self.K = K  # Constante de proporcionalidade para o torque
+        self.w_s = 2 * np.pi * self.frequencia / (self.P / 2)  # Velocidade síncrona
+        self.V_m = V_m  # Tensão de entrada RMS (V)
+        self.N = N  # Espiras do Estator
+
+    def calcular_impedancia(self, s):
+        """Calculo da impedância do motor.
+
+        Representa a oposição que um circuito elétrico oferece à passagem da corrente elétrica alternada.
+
+        Returns
+        -------
+        Z1 + Z2_prime : np.ndarray
+            Somatorio da impedância do rotor e a do estator
+        Z1 : np.ndarray
+            Valor de impedância do estator
+        """
+        j = complex(0, 1)
+        Z1 = self.R1 + j * self.X1
+        Z2 = (self.R2 / s) + j * self.X2
+        Zm = j * self.Xm
+        Z2_prime = Z2 * Zm / (Z2 + Zm)
+        return Z1 + Z2_prime, Z1
+
+    def calcular_corrente(self, V_fase, s):
+        """Cálculo da corrente de fase no sistema.
+        
+        Calcula a corrente de fase para um motor de indução de gaiola de esquilo, dado o valor da tensão de fase e do escorregamento.
+
+        Returns
+        -------
+        I_fase : complex
+            Corrente da fase
+
+        """
+        Z = self.calcular_impedancia(s)[0]
+        I_fase = V_fase / Z
+        return I_fase
+
+    def calcular_tensao_induzida(self, V_fase, s):
+        """Calcula a tensão induzida do motor.
+
+        Calcula a tensão induzida (E2) no motor de indução de gaiola de esquilo, subtraindo a queda de tensão na impedância do estator da tensão de fase aplicada.
+
+        Returns
+        -------
+        E2 : complex
+            Valor total da tensão induzida.
+        """
+        E2 = V_fase - self.calcular_corrente(V_fase, s) * self.calcular_impedancia(s)[1]
+        return E2
+
+    def calcular_corrente_de_partida(self, V_fase, s):
+        """Calculo da corrente de partida do motor.
+
+        Calcula a corrente necessária para iniciar a operação do motor, considerando a impedância magnetizante.
+
+        Returns
+        -------
+        I2 : complex
+            Valor da corrente necessária para partida.
+        """
+        Im = self.calcular_tensao_induzida(V_fase, s) / self.Xm
+        I2 = self.calcular_corrente(V_fase, s) - Im
+        return I2
+
+    def calcular_torque(self, V_fase, s):
+        """Calcuclo do torque do motor
+
+        Calcuclo do torque do motor elétrico aplicando a constante de proporcionalidade
+
+        Returns
+        -------
+        self.K * torque : float 
+            Torque com a constante de proporcionalidade 
+        """
+        I2 = self.calcular_corrente_de_partida(V_fase, s) # Corrente do rotor
+        P_r = 3 * abs(I2)**2 * (self.R2 / s)# Potência no rotor e torque
+        torque = P_r / self.w_s
+        return self.K * torque 
+
+    def encontrar_maior_torque(self, V_fase, escorregamentos):
+        """Encontrar o maior torque gerado.
+        
+        Calcula o torque para diferentes valores de escorregamento e retorna o escorregamento correspondente ao maior torque gerado.
+
+        Returns
+        -------
+        max_s : float
+            Escorregamento do torque máximo.
+        max_torque : float
+            Torque máximo.
+        """
+        torques = [self.calcular_torque(V_fase, s) for s in escorregamentos]
+        max_torque = max(torques)
+        max_s = escorregamentos[torques.index(max_torque)]
+        return max_s, max_torque
+
+    def calcular_velocidade_angular(self, escorregamentos):
+        """Calculo da valocidade angular do rotor.
+
+        Função que calcula a velocidade de giro do rotor.
+
+        Returns
+        -------
+        escorregamentos :  np.ndarray
+            Retorna o valor da velocidade de giro do rotor 
+        """
+        return (self.w_s * (1 - escorregamentos)) * (30 / np.pi)
+
+    def calcular_fator_potencia(self, s):
+        """Calcula o fator de potencia.
+
+        calcula o fator de potência e no retorno deve-se subtrair o fator de potencia por 1, para se ter o valor esperado 
+
+        Returns
+        -------
+        fator_potencia : float
+            Fator de potencia menos 1 
+
+        """
+        Z, _ = self.calcular_impedancia(s)
+        fator_potencia = np.cos(np.angle(Z))
+        return 1-fator_potencia
+
+    def calcular_Fluxo(self,V_fase, s):
+        """Calculo de Fluxo magnético no motor
+        N pode ser calculado por raiz de Xm/We*R
+        onde: 
+        Xm = Reatância indutiva
+        We = velocidade angula da rede eletrica
+        R = Relutância magnética
+
+        Returns
+        -------
+        Fluxo: float
+            Fluxo magnético gerado pela indução de corrente no estator.
+        """
+
+        Fluxo = ((self.X1/ 2 * np.pi * self.frequencia)* (self.calcular_corrente(V_fase, s)))/self.N
+        return Fluxo
+
+    def simular_motor(self, t_final, num_steps):
+        
+        t = np.linspace(0, t_final, num_steps)
+        s = np.linspace(0.0001, 1, num_steps)  # Slip varies from 0 to 1 during simulation
+
+        corrente = [self.calcular_corrente(self.V_m, si) for si in s]
+        torque = [self.calcular_torque(self.V_m, si) for si in s]
+        fator_potencia = [self.calcular_fator_potencia(si) for si in s]
+        Fluxo = [self.calcular_Fluxo(self.V_m,si) for si in s]
+
+        return t, torque, corrente, fator_potencia, Fluxo
+    
+def plotar_motor(t, torque, corrente, fator_potencia, Fluxo):
+    plt.figure(figsize=(10, 10))
+
+    plt.subplot(4, 1, 1)
+    plt.plot(t, torque, label='Torque')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Torque (Nm)')
+    plt.title('Torque em função do Tempo')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(4, 1, 2)
+    plt.plot(t, corrente, label='Corrente')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Corrente (A)')
+    plt.title('Corrente em função do Tempo')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(4, 1, 3)
+    plt.plot(t, fator_potencia, label='Fator de Potência')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Fator de Potência')
+    plt.title('Fator de Potência em função do Tempo')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(4, 1, 4)
+    plt.plot(t, Fluxo, label='Fluxo')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Fluxo(Wb)')
+    plt.title('Fluxo magnético em função do Tempo')
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+def example_motor():
+    
+    motor = motor_gaiola(60, 4, 0.135, 0.768, 0.03, 0.123, 142.3, 0.95, 220, 2.2e3)
+
+    t_final = 3
+    num_steps = 1000
+    t, torque, corrente, fator_potencia, Fluxo = motor.simular_motor(t_final, num_steps)
+
+    plotar_motor(t, torque, corrente, fator_potencia, Fluxo)
+
+example_motor()
