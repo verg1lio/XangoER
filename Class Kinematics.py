@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 class Kinematics:
     def __init__(self, L0=None, L1=None, L2=0, L3=None, alpha=60, Py_start=100, Py_end=400, Py_step=5,
-                spring_type=None, spring_k=None, spring_F=None, spring_non_lin_coef=None,
+                spring_type=None, spring_k=None, spring_x=None, spring_y=None, spring_non_lin_coef=None, spring_angle = 45,
                 damper_type=None, damper_V=None, damper_F_viscous=None, damper_K_friction=None, damper_F_static=None):
         # Inicialização dos comprimentos das barras e outros parâmetros do mecanismo
         self.L0 = L0  # Comprimento da barra fixa
@@ -33,12 +33,16 @@ class Kinematics:
         self.om2, self.om4 = [], []  # Listas para armazenar as velocidades angulares de theta2 e theta4
         self.alpha_dot = []  # Lista para armazenar as acelerações angulares
         self.V_Px, self.V_Py = [], []  # Listas para armazenar as velocidades de P
+        self.V_Ax, self.V_Ay = [], []  # Listas para armazenar as velocidades de A
+        self.V_A, self.P_A = [], [] # # Listas para armazenar a magnitude das velocidades e posições de A
 
         # Inicialização dos parâmetros do modelo de mola
         self.spring_type = spring_type  # Hooke, Softening
         self.spring_k = spring_k  # rigidez da mola [N/m]
-        self.spring_F = spring_F  # força que a mola recebe [N]
+        self.spring_x = spring_x  # força que a mola recebe [N]
+        self.spring_y = spring_y  # força que a mola recebe [N]
         self.spring_non_lin_coef = spring_non_lin_coef  # coeficiente de ganho não-linear
+        self.spring_angle = np.radians(spring_angle) # Ângulo da mola em relação a vertical
 
         # Inicialização dos parâmetros do modelo de amortecedor
         self.damper_type = damper_type # Coulumb, Integrated, Stribeck
@@ -48,12 +52,12 @@ class Kinematics:
         self.damper_K_friction = damper_K_friction # rigidez de fricção [N/m]
 
     def Spring(self):
-        """Calcula a deformação da mola com base no tipo de mola."""
+        """Calcula a força da mola com base na deformação e no tipo de mola."""
         if self.spring_type == 'Hooke':
-            spring_x = self.spring_F / self.spring_k
+            spring_F = self.spring_x * self.spring_k
         if self.spring_type == 'Softening':
-            spring_x = self.spring_F / (self.spring_non_lin_coef * (self.spring_k) ** 2)
-        return spring_x
+            spring_F = self.spring_k * (self.spring_x ** self.spring_non_lin_coef)
+        return spring_F
 
     def Damper(self):
         """Calcula a força do amortecedor com base no tipo de amortecedor."""
@@ -138,6 +142,13 @@ class Kinematics:
                           (self.L2 * np.cos(self.alpha) + self.L_AP * np.cos(self.alpha))
             self.alpha_dot.append(alpha_dot_i)
 
+            # Cálculo das velocidadees de A
+            V_Ax_i = self.om2[i] * Ax_i
+            V_Ay_i = self.om2[i] * Ay_i
+
+            self.V_Ax.append(V_Ax_i)
+            self.V_Ay.append(V_Ay_i)
+
             # Cálculo das velocidades de P
             V_Px_i = alpha_dot_i * Px_i
             V_Py_i = alpha_dot_i * Py_i
@@ -145,9 +156,22 @@ class Kinematics:
             self.V_Px.append(V_Px_i)
             self.V_Py.append(V_Py_i)
 
+            # Cálculo da magnitude da velocidade e da posição de A
+            V_A_i = np.sqrt((V_Ax_i**2) + (V_Ay_i**2))
+            P_A_i = np.sqrt((Ax_i**2) + (Ay_i**2))
+
+            self.V_A.append(V_A_i)
+            self.P_A.append(P_A_i)
+
+        # Calculo da variação de Ax em relação ao caso estático
+        Ax_d = []
+        for i in range(len(self.Py)):
+            Ax_d_i = self.Ax[int(self.num_points/2)] - self.Ax[i]
+            Ax_d.append(Ax_d_i)
+
         # Calculando ângulo de câmber
         angulo_camber = self.calcular_camber(self.Ax[int(self.num_points - 1)], self.Ay[int(self.num_points - 1)], self.Bx[int(self.num_points - 1)], self.By[int(self.num_points - 1)])
-        return angulo_camber
+        return angulo_camber, Ax_d, self.V_Ax, self.Ay, self.V_Ay
     
     def plotar_cinematica(self):
         """Plota a cinemática do mecanismo."""
@@ -218,30 +242,63 @@ class Kinematics:
         print(f"Ângulo de câmber bump: {camber_final:.2f}°")
         print(f"Taxa de variação de câmber: {taxa_variacao:.2f}°/ mm")
 
-    def plot_damper(self):
+    def plot_damper(self, damper_Vx_values, damper_Vy_values):
         """Plota a força do amortecedor em função da velocidade."""
-        damper_V_values = np.linspace(-5, 5, 1000)
-        self.damper_V = damper_V_values
-        damper_F_values = self.Damper()
+        damper_Fy_values = []
+        damper_Fx_values = []
+
+        for vx in damper_Vx_values:
+            self.damper_V = vx
+            damper_Fx_values.append(self.Damper())
+
+        for vy in damper_Vy_values:
+            self.damper_V = vy
+            damper_Fy_values.append(self.Damper())
 
         plt.figure(figsize=(8, 6))
-        plt.plot(damper_V_values, damper_F_values, label='Velocidade')
-        plt.title('Força em função da velocidade')
-        plt.xlabel('Velocidade [m/s]')
+        plt.plot(damper_Vx_values, damper_Fx_values, label='Velocidade')
+        plt.title('Força em função da velocidade em X')
+        plt.xlabel('Velocidade [mm/s]')
         plt.ylabel('Força [N]')
         plt.grid(True)
         plt.legend()
         plt.show()
 
-# Instância para o amortecedor do tipo 'Integrated'
-teste_integrated = Kinematics(damper_type='Integrated', damper_F_static=50, damper_K_friction=10, damper_F_viscous=10)
-teste_integrated.plot_damper()
+        plt.figure(figsize=(8, 6))
+        plt.plot(damper_Vy_values, damper_Fy_values, label='Velocidade')
+        plt.title('Força em função da velocidade em Y')
+        plt.xlabel('Velocidade [mm/s]')
+        plt.ylabel('Força [N]')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
 
-# Instância para o amortecedor do tipo 'Coulumb'
-teste_coulumb = Kinematics(damper_type='Coulumb', damper_F_static=50, damper_K_friction=10)
-teste_coulumb.plot_damper()
+    def plot_spring(self, spring_x_values, spring_y_values):
+        """Plota a força do amortecedor em função da velocidade."""
+        spring_Fx_values = []
+        spring_Fy_values = []
 
-# Criação do objeto Kinematics e execução dos cálculos
-kinematics = Kinematics(L0=500, L1=500, L2=450, L3=500)
-kinematics.calcular_cinematica()
-kinematics.plotar_cinematica()
+        for x in spring_x_values:
+            self.spring_x = x
+            spring_Fx_values.append(self.Spring())
+        for y in spring_y_values:
+            self.spring_x = y
+            spring_Fy_values.append(self.Spring())
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(spring_x_values, spring_Fx_values, label='Deformação')
+        plt.title('Força em função da deformação em X')
+        plt.xlabel('Deformação [mm]')
+        plt.ylabel('Força [N]')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(spring_y_values, spring_Fy_values, label='Deformação')
+        plt.title('Força em função da deformação em Y')
+        plt.xlabel('Deformação [mm]')
+        plt.ylabel('Força [N]')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
