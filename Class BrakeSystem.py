@@ -27,7 +27,7 @@ class BrakeSystem:
         self.m_tire = params['m_tire']  # Massa do pneu
         self.m_wheel = params['m_wheel']  # Massa da roda
     
-    def calculate_params(self, pedal_force):
+    def calculate_params(self, pedal_force=300):
         """
         Aplica o freio e calcula diversos parâmetros relacionados à frenagem com base na força aplicada ao pedal.
 
@@ -73,16 +73,14 @@ class BrakeSystem:
                 'τF': τF, 'τR': τR, 'FnF': FnF, 'FnR': FnR, 'Awc': Awc, 'Acm': Acm,
                 'PF': PF, 'PR': PR, 'FaCM': FaCM, 'lF': lF, 'lR': lR
             }
-            
-        >>> pedal_force = 300
-        
+         
         >>> print("Resultados Calculados:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
                 
         Instanciando:        
         >>> BrakeSystem = BrakeSystem(params)
-        >>> brake_system.calculate_params(300)
+        >>> BrakeSystem.calculate_params()
         >>> Resultados Calculados:
         (BF: 0.9, χ: 0.3333333333333333, W: 2452.5, FzF_dyn: 1929.3, FzR_dyn: 523.1999999999999, τF: 868.185,
         τR: 235.43999999999997, FnF: 1302.2775, FnR: 353.15999999999997, Awc: 0.00080384, Acm: 0.00031400000000000004
@@ -127,7 +125,7 @@ class BrakeSystem:
    
         return BF, χ, W, FzF_dyn, FzR_dyn, τF, τR, FnF, FnR, Awc, Acm, PF, PR, FaCM, lF, lR
 
-    def apply_brake(self, pedal_force):
+    def apply_brake(self, pedal_force=300):
         """
         Aplica o freio e calcula os resultados com base na força aplicada ao pedal.
 
@@ -158,16 +156,14 @@ class BrakeSystem:
                 'forca gerada pelo disco': forca_f, 'torque do disco de freio': torque_disco_freio, 
                 'resistencia ao rolamento': resistencia_rolamento, 'torque de resistencia ao rolamento': torque_resistencia_rolamento
             }
-            
-        >>> pedal_force = 300
-        
+    
         >>> print("Resultados Calculados:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
 
         Instanciando:
         >>> BrakeSystem = BrakeSystem(params)
-        >>> BrakeSystem.apply_brake(300)
+        >>> BrakeSystem.apply_brake()
         >>> (Forca de Frenagem: 687.46640625, Torque Ajustado: 190.56374999999997, 
             Forca Gerada Pelo Disco: 635.2125, Torque do Disco de Freio: 201.59999999999997, 
             Resistencia ao Rolamento: 36.7875, Torque de Resistencia ao Rolamento: 11.03625)
@@ -235,7 +231,7 @@ class BrakeSystem:
         return forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
     # Calcula a velocidade angular das rodas durante a frenagem
-    def calculate_angular_velocity(self, torque_ajustado):
+    def calculate_angular_velocity(self, torque_ajustado=190):
         ''' 
         Velocidade angular é uma medida da rapidez com que um objeto gira em torno de um eixo específico. 
         Ela é definida como a taxa de mudança do ângulo em relação ao tempo e é frequentemente medida 
@@ -265,15 +261,13 @@ class BrakeSystem:
                 'Inércia do pneu': inertia_wheel 
             }
             
-        >>> torque_ajustado = 190
-        
         >>> print("Resultados Calculados de calculate_angular_velocity:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
 
         Instanciando:
         >>> BrakeSystem = BrakeSystem(params)
-        >>> BrakeSystem.calculate_angular_velocity(190)
+        >>> BrakeSystem.calculate_angular_velocity()
         >>> (Desaceleração angular: 7.916666666666667, Velocidade angular: 50.67340067340082,
             Primeiro resultado da lista de Velocidades angulares: 66.506734006734, Inércia do pneu: 6.0 )
 
