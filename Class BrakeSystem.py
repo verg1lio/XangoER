@@ -73,9 +73,13 @@ class BrakeSystem:
                 'τF': τF, 'τR': τR, 'FnF': FnF, 'FnR': FnR, 'Awc': Awc, 'Acm': Acm,
                 'PF': PF, 'PR': PR, 'FaCM': FaCM, 'lF': lF, 'lR': lR
             }
+            
+        >>> pedal_force = 300
+        
         >>> print("Resultados Calculados:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
+                
         Instanciando:        
         >>> BrakeSystem = BrakeSystem(params)
         >>> brake_system.calculate_params(300)
@@ -154,7 +158,9 @@ class BrakeSystem:
                 'forca gerada pelo disco': forca_f, 'torque do disco de freio': torque_disco_freio, 
                 'resistencia ao rolamento': resistencia_rolamento, 'torque de resistencia ao rolamento': torque_resistencia_rolamento
             }
-
+            
+        >>> pedal_force = 300
+        
         >>> print("Resultados Calculados:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
@@ -258,7 +264,9 @@ class BrakeSystem:
                 'Primeiro resultado da lista de Velocidades angulares': angular_velocities[0], 
                 'Inércia do pneu': inertia_wheel 
             }
-
+            
+        >>> torque_ajustado = 190
+        
         >>> print("Resultados Calculados de calculate_angular_velocity:")
             for i, result in resultados.items():
                 print(f"{i}: {result}")
