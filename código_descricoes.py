@@ -27,7 +27,7 @@ class BrakeSystem:
         self.m_tire = params['m_tire']  # Massa do pneu
         self.m_wheel = params['m_wheel']  # Massa da roda
     
-    def calculate_params(self, pedal_force):
+    def calculate_params(self, pedal_force=300):
         """
         Aplica o freio e calcula diversos parâmetros relacionados à frenagem com base na força aplicada ao pedal.
 
@@ -123,7 +123,7 @@ class BrakeSystem:
    
         return BF, χ, W, FzF_dyn, FzR_dyn, τF, τR, FnF, FnR, Awc, Acm, PF, PR, FaCM, lF, lR
 
-    def apply_brake(self, pedal_force):
+    def apply_brake(self, pedal_force=300):
         """
         Aplica o freio e calcula os resultados com base na força aplicada ao pedal.
 
@@ -229,7 +229,7 @@ class BrakeSystem:
         return forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
     # Calcula a velocidade angular das rodas durante a frenagem
-    def calculate_angular_velocity(self, torque_ajustado):
+    def calculate_angular_velocity(self, torque_ajustado=190):
         ''' 
         Velocidade angular é uma medida da rapidez com que um objeto gira em torno de um eixo específico. 
         Ela é definida como a taxa de mudança do ângulo em relação ao tempo e é frequentemente medida 
