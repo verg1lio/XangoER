@@ -1,21 +1,30 @@
-```python
+import numpy as np
+import matplotlib.pyplot as plt
+
 class Tire:
-    """Tire Model.
+    """
+    Modelo de Pneu.
 
-    This class represents a tire model with various parameters for calculating
-    tire forces, kinematics, and plotting relevant graphs.
+    Esta classe representa um modelo de pneu com vários parâmetros para calcular
+    forças de pneus, cinemática e plotar gráficos relevantes. O modelo se baseia
+    nas equações descritas em "Tire and Vehicle Dynamics" de Hans B. Pacejka, um 
+    dos principais recursos sobre a dinâmica de pneus.
 
-    Returns
+    Returns:
     -------
-    Tire : object
-        An instance of the Tire class.
+    Tire : objeto
+        Uma instância da classe Tire.
 
-    Examples
+    Examples:
     --------
     >>> tire = Tire(tire_Fz=5000, tire_Sa=0.1, tire_Ls=0.05, tire_friction_coef=1.0, tire_Ca=0.02)
     >>> tire.run()
-    """
     
+    References
+    ----------
+    Pacejka, H. B. (2002). Tire and Vehicle Dynamics. Elsevier.
+    """
+
     def __init__(self, tire_Fz=None, tire_Sa=None, tire_Ls=None, tire_friction_coef=None, tire_Ca=0, B0=0, B1=None, 
                 B2=0, B3=None, omega=315, slip_angle_start=-10, slip_angle_end=10, angle_step=0.5, WB=1500, rear_axle_length=1600, track_y=0, tire_k=0):
         # Inicializando parâmetros para o modelo de pneu
@@ -69,20 +78,26 @@ class Tire:
         self.tire_k = tire_k
 
     def calculate_kinematics(self):
-        """Calculate Kinematics.
+        """
+        Calcular Cinemática.
 
-        Calculates the kinematics of the four-bar linkage mechanism for each slip angle.
+        Calcula a cinemática do mecanismo de quatro barras para cada ângulo de deslizamento.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method updates the instance attributes with calculated values.
+        Nenhum : NoneType
+            O método atualiza os atributos da instância com valores calculados.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire(tire_Fz=5000, tire_Sa=0.1, tire_Ls=0.05, tire_friction_coef=1.0, tire_Ca=0.02)
         >>> tire.calculate_kinematics()
+
+        References
+        ----------
+        Textbook reference for four-bar linkage mechanisms and calculations.
         """
+
         for i in range(len(self.theta2)):
             # Cálculos intermediários
             AC_i = np.sqrt(self.L0**2 + self.L1**2 - 2 * self.L0 * self.L1 * np.cos(self.theta2_rad[i]))
@@ -139,25 +154,30 @@ class Tire:
                 self.static_slip_angle = self.inner_slip[i]
 
     def Tire_forces(self, params):
-        """Calculate Tire Forces.
+        """
+        Calcular Forças do Pneu.
 
-        Calculates the tire forces and self-aligning moment using the Pacejka model parameters.
+        Calcula as forças do pneu e o momento de auto-alinhamento usando os parâmetros do modelo Pacejka.
 
-        Parameters
+        Parâmetros
         ----------
         params : tuple
-            The parameters for the Pacejka model.
+            Os parâmetros para o modelo de Pacejka.
 
-        Returns
+        Returns:
         -------
         tuple : (float, float, float)
-            Lateral force, self-aligning moment, and longitudinal force of the tire.
+            Força lateral, momento de auto-alinhamento e força longitudinal do pneu.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire(tire_Fz=5000, tire_Sa=0.1, tire_Ls=0.05, tire_friction_coef=1.0, tire_Ca=0.02)
         >>> tire.Tire_forces((1.5, 1.3, 1.1, 1.0, 2000, 3000))
         (400.0, 10.3, 150.0)
+        
+        References
+        ----------
+        Pacejka, H. B. (2002). Tire and Vehicle Dynamics. Elsevier.
         """
         # Desembalando os parâmetros de Pacejka
         E, Cy, Cx, Cz, c1, c2 = params
@@ -165,9 +185,7 @@ class Tire:
         # Calculando parâmetros intermediários
         Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
         D = self.tire_friction_coef * self.tire_Fz
-        Bz = Cs / (C
-
-z * D)
+        Bz = Cs / (Cz * D)
         Bx = Cs / (Cx * D)
         By = Cs / (Cy * D)
 
@@ -187,70 +205,85 @@ z * D)
         return tire_lateral_force + 0.5 * camber_thrust, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
 
     def calcular_forca(self):
-        """Calculate Tire Force.
+        """
+        Calcular Força.
 
-        Calculates the force based on the tire deformation.
+        Calcula a força com base na deformação do pneu.
 
-        Returns
+        Returns:
         -------
         force : float
-            The calculated force based on track_y and tire_k.
+            A força calculada com base em track_y e tire_k.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire(track_y=10, tire_k=100)
         >>> tire.calcular_forca()
         1000
+        
+        References
+        ----------
+        Custom calculation based on Hooke's Law for spring-like behavior.
         """
         force = self.track_y * self.tire_k
         return force
-    
+
     def slip_ratio_1(self, velocidade_angular, raio_pneu):
-        """Calculate Slip Ratio.
+        """
+        Calcular Razão de Escorregamento.
 
-        Calculates the slip ratio based on angular velocity and tire radius.
+        Calcula a razão de escorregamento com base na velocidade angular e no raio do pneu.
 
-        Parameters
+        Parâmetros
         ----------
         velocidade_angular : float
-            The angular velocity of the tire.
+            A velocidade angular do pneu.
         raio_pneu : float
-            The radius of the tire.
+            O raio do pneu.
 
-        Returns
+        Returns:
         -------
         slip_ratio : float
-            The calculated slip ratio.
+            A razão de escorregamento calculada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.slip_ratio_1(100, 0.3)
         0.33333333333333337
+        
+        References
+        ----------
+        Basic slip ratio calculations from tire dynamics literature.
         """
         velocidade_linear = initial_speed
         value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
         return value
 
     def plot_graph_slip_ratio(self, value=None):
-        """Plot Slip Ratio Graph.
+        """
+        Plotar Gráfico de Razão de Escorregamento.
 
-        Plots the slip ratio versus pedal force.
+        Plota a razão de escorregamento em relação à força no pedal.
 
-        Parameters
+        Parâmetros
         ----------
         value : array-like
-            The slip ratio values.
+            Os valores de razão de escorregamento.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and does not return anything.
+        Nenhum : NoneType
+            O método plota o gráfico e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.plot_graph_slip_ratio([0.1, 0.2, 0.3])
+        
+        References
+        ----------
+        Custom plotting function for visualizing slip ratio.
         """
         plt.figure(figsize=(10, 6))
         plt.plot(pedal_forces, value, label="Slip Ratio vs. Força do Pedal")
@@ -265,28 +298,33 @@ z * D)
         plt.show()
 
     def show_slip_ratio(self, rpm_values, slip_ratio, velocidade_angular):
-        """Show Slip Ratio.
+        """
+        Mostrar Razão de Escorregamento.
 
-        Displays the slip ratio values against RPM and angular velocity.
+        Exibe os valores da razão de escorregamento em relação ao RPM e à velocidade angular.
 
-        Parameters
+        Parâmetros
         ----------
         rpm_values : array-like
-            The RPM values.
+            Os valores de RPM.
         slip_ratio : array-like
-            The slip ratio values.
+            Os valores da razão de escorregamento.
         velocidade_angular : array-like
-            The angular velocity values.
+            Os valores da velocidade angular.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and prints slip ratio values.
+        Nenhum : NoneType
+            O método plota o gráfico e imprime os valores da razão de escorregamento.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.show_slip_ratio([1000, 2000], [0.1, 0.2], [10, 20])
+        
+        References
+        ----------
+        Custom method for displaying slip ratio in graphical form.
         """
         print("Valores do Slip Ratio: ")
         for dado in slip_ratio:
@@ -311,26 +349,31 @@ z * D)
         plt.show()
 
     def show_longitudinal_rpm(rpm_values, tire_longitudinal_force):
-        """Show Longitudinal Force vs. RPM.
+        """
+        Mostrar Força Longitudinal vs. RPM.
 
-        Plots the longitudinal force versus RPM.
+        Plota a força longitudinal em relação ao RPM.
 
-        Parameters
+        Parâmetros
         ----------
         rpm_values : array-like
-            The RPM values.
+            Os valores de RPM.
         tire_longitudinal_force : array-like
-            The longitudinal force values.
+            Os valores da força longitudinal.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and does not return anything.
+        Nenhum : NoneType
+            O método plota o gráfico e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.show_longitudinal_rpm([1000, 2000], [1500, 1600])
+        
+        References
+        ----------
+        Basic longitudinal force vs. RPM calculation method.
         """
         plt.figure(figsize=(10, 6))
         plt.plot(rpm_values, tire_longitudinal_force, label='Longitudinal Force', color='blue')
@@ -340,26 +383,31 @@ z * D)
         plt.legend()
         plt.grid(True)
         plt.show()
-    
+
     def plotar_deformacao(self, track_y_values):
-        """Plot Deformation.
+        """
+        Plotar Deformação.
 
-        Plots the graph based on a list of provided track_y values representing track variation.
+        Plota o gráfico com base em uma lista de valores fornecidos que representam a variação da pista.
 
-        Parameters
+        Parâmetros
         ----------
         track_y_values : array-like
-            The values representing track deformation.
+            Os valores que representam a deformação da pista.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and does not return anything.
+        Nenhum : NoneType
+            O método plota o gráfico e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.plotar_deformacao([0, 5, 10])
+        
+        References
+        ----------
+        Custom plotting method for track deformation vs. force calculation.
         """
         force_values = []
 
@@ -375,40 +423,45 @@ z * D)
         plt.ylabel('Carregamento (N)')
         plt.grid(True)
         plt.show()
-    
+
     def plot_camber(self, predicted_tire_lateral_forces, predicted_tire_lateral_forces_1, predicted_tire_lateral_forces_2, tire_lateral_experimental=None, tire_lateral_experimental_1=None, tire_lateral_experimental_2=None, angles=None, ratio=None):
-        """Plot Camber.
+        """
+        Plotar Camber.
 
-        Plots the camber curves and experimental data.
+        Plota as curvas de camber e dados experimentais.
 
-        Parameters
+        Parâmetros
         ----------
         predicted_tire_lateral_forces : array-like
-            The predicted lateral forces.
+            As forças laterais previstas.
         predicted_tire_lateral_forces_1 : array-like
-            The predicted lateral forces for the first curve.
+            As forças laterais previstas para a primeira curva.
         predicted_tire_lateral_forces_2 : array-like
-            The predicted lateral forces for the second curve.
-        tire_lateral_experimental : array-like, optional
-            The experimental lateral forces (default is None).
-        tire_lateral_experimental_1 : array-like, optional
-            The experimental lateral forces for the first curve (default is None).
-        tire_lateral_experimental_2 : array-like, optional
-            The experimental lateral forces for the second curve (default is None).
-        angles : array-like, optional
-            The slip angles (default is None).
-        ratio : float, optional
-            The ratio for scaling (default is None).
+            As forças laterais previstas para a segunda curva.
+        tire_lateral_experimental : array-like, opcional
+            As forças laterais experimentais (default é None).
+        tire_lateral_experimental_1 : array-like, opcional
+            As forças laterais experimentais para a primeira curva (default é None).
+        tire_lateral_experimental_2 : array-like, opcional
+            As forças laterais experimentais para a segunda curva (default é None).
+        angles : array-like, opcional
+            Os ângulos de deslizamento (default é None).
+        ratio : float, opcional
+            A proporção para escalonamento (default é None).
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and does not return anything.
+        Nenhum : NoneType
+            O método plota o gráfico e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire(tire_Sa=np.linspace(-0.1, 0.1, 100))
         >>> tire.plot_camber([0, 5, 10], [1, 6, 11], [2, 7, 12])
+        
+        References
+        ----------
+        Custom plotting function for visualizing camber effects on tire forces.
         """
         # Configuração da figura e tamanho
         plt.figure(figsize=(20, 7))
@@ -425,9 +478,7 @@ z * D)
 
         # Subplot para torque auto-alinhante
         plt.subplot(1, 3, 2)
-        plt.plot(self.tire_Sa, predicted_tire_lateral
-
-_forces_1, label='Curva com Camber')
+        plt.plot(self.tire_Sa, predicted_tire_lateral_forces_1, label='Curva com Camber')
         plt.scatter(angles, tire_lateral_experimental_1, color='red', label='Dados Experimentais')
         plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
         plt.ylabel('Força Lateral do Pneu (N)')
@@ -446,36 +497,41 @@ _forces_1, label='Curva com Camber')
         plt.grid(True)
 
     def plot_graph(self, predicted_tire_lateral_forces, predicted_tire_auto_align_moment, predicted_tire_longitudinal_forces, tire_lateral_experimental=None, tire_auto_align_experimental=None, angles=None, ratio=None):
-        """Plot Tire Forces Graph.
+        """
+        Plotar Gráfico de Forças do Pneu.
 
-        Plots the tire forces and self-aligning moment against slip angles.
+        Plota as forças do pneu e o momento de auto-alinhamento em relação aos ângulos de deslizamento.
 
-        Parameters
+        Parâmetros
         ----------
         predicted_tire_lateral_forces : array-like
-            The predicted lateral forces.
+            As forças laterais previstas.
         predicted_tire_auto_align_moment : array-like
-            The predicted self-aligning moments.
+            Os momentos de auto-alinhamento previstos.
         predicted_tire_longitudinal_forces : array-like
-            The predicted longitudinal forces.
-        tire_lateral_experimental : array-like, optional
-            The experimental lateral forces (default is None).
-        tire_auto_align_experimental : array-like, optional
-            The experimental self-aligning moments (default is None).
-        angles : array-like, optional
-            The slip angles (default is None).
-        ratio : float, optional
-            The ratio for scaling (default is None).
+            As forças longitudinais previstas.
+        tire_lateral_experimental : array-like, opcional
+            As forças laterais experimentais (default é None).
+        tire_auto_align_experimental : array-like, opcional
+            Os momentos de auto-alinhamento experimentais (default é None).
+        angles : array-like, opcional
+            Os ângulos de deslizamento (default é None).
+        ratio : float, opcional
+            A proporção para escalonamento (default é None).
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the graph and does not return anything.
+        Nenhum : NoneType
+            O método plota o gráfico e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire(tire_Sa=np.linspace(-0.1, 0.1, 100), tire_Ls=np.linspace(0, 0.1, 100))
         >>> tire.plot_graph([0, 5, 10], [1, 6, 11], [2, 7, 12])
+        
+        References
+        ----------
+        Custom plotting method for visualizing tire forces.
         """
         # Configuração da figura e tamanho
         plt.figure(figsize=(20, 7))
@@ -514,20 +570,25 @@ _forces_1, label='Curva com Camber')
         plt.show()
 
     def plot_mechanism(self):
-        """Plot Mechanism.
+        """
+        Plotar Mecanismo.
 
-        Plots the mechanism motion based on calculated kinematics.
+        Plota o movimento do mecanismo com base na cinemática calculada.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method plots the mechanism and does not return anything.
+        Nenhum : NoneType
+            O método plota o mecanismo e não retorna nada.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.calculate_kinematics()
         >>> tire.plot_mechanism()
+        
+        References
+        ----------
+        Custom plotting method for visualizing four-bar linkage mechanism kinematics.
         """
         for i in range(len(self.theta2)):
             plt.figure(1)
@@ -553,7 +614,7 @@ _forces_1, label='Curva com Camber')
 
             # Adicionando os ângulos de slip
             plt.text((self.Cx[i] + self.Bx[i]) / 2, (self.Cy[i] + self.By[i]) / 2, f'{self.outer_slip[i]:.2f}°', fontsize=10, ha='center')
-            plt.text((self.Ox[i] + self.Ax[i]) / 2, (self.Oy[i] + self.Ay[i]) / 2, f'{self.inner_slip[i]:.2f}°', fontsize=10, ha='center')
+            plt.text((self.Ox[i] + self.Ax[i])/2, (self.Oy[i] + self.Ay[i])/2, f'{self.inner_slip[i]:.2f}°', fontsize=10, ha='center')
 
             # Achando primeiro ponto de Ackerman
 
@@ -575,9 +636,7 @@ _forces_1, label='Curva com Camber')
             plt.plot([self.Ox[i], self.Ax[i]], [self.Oy[i], self.Ay[i]], 'r', linewidth=1)
             plt.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], 'k', linewidth=2)
             plt.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i]], 'r', linewidth=1)
-            plt.plot([self.Ox[i], self.Cx[i]], [self.Oy[i], self.Cy[i]], 'r', linewidth=1, linestyle =
-
- 'dotted')
+            plt.plot([self.Ox[i], self.Cx[i]], [self.Oy[i], self.Cy[i]], 'r', linewidth=1, linestyle = 'dotted')
 
             # Desenho da barra do entre-eixos
             midpoint_x = (self.Ox[i] + self.Cx[i]) / 2
@@ -595,7 +654,7 @@ _forces_1, label='Curva com Camber')
 
             # Adicionando os ângulos de slip
             plt.text((self.Cx[i] + self.Bx[i]) / 2, (self.Cy[i] + self.By[i]) / 2, f'{self.outer_slip[i]:.2f}°', fontsize=10, ha='center')
-            plt.text((self.Ox[i] + self.Ax[i]) / 2, (self.Oy[i] + self.Ay[i]) / 2, f'{self.inner_slip[i]:.2f}°', fontsize=10, ha='center')
+            plt.text((self.Ox[i] + self.Ax[i])/2, (self.Oy[i] + self.Ay[i])/2, f'{self.inner_slip[i]:.2f}°', fontsize=10, ha='center')
 
             # Achando primeiro ponto de Ackerman
 
@@ -610,20 +669,25 @@ _forces_1, label='Curva com Camber')
             plt.clf()
 
     def run(self):
-        """Run Calculations and Plot Mechanism.
+        """
+        Executar Cálculos e Plotar Mecanismo.
 
-        Runs the kinematic calculations and plots the mechanism motion.
+        Executa os cálculos cinemáticos e plota o movimento do mecanismo.
 
-        Returns
+        Returns:
         -------
-        None : NoneType
-            The method runs calculations, plots the mechanism, and prints the static slip angle if determined.
+        Nenhum : NoneType
+            O método executa os cálculos, plota o mecanismo e imprime o ângulo de deslizamento estático se determinado.
 
-        Examples
+        Examples:
         --------
         >>> tire = Tire()
         >>> tire.run()
         O ângulo de toe é : 0.00°
+
+        References
+        ----------
+        Custom method combining kinematic calculations and visualization.
         """
         self.calculate_kinematics()
         self.plot_mechanism()
@@ -632,4 +696,3 @@ _forces_1, label='Curva com Camber')
             print(f"O ângulo de toe é : {self.static_slip_angle:.2f}°")
         else:
             print("Não foi possível determinar um ângulo estático para as rodas dentro do intervalo fornecido.")
-```
