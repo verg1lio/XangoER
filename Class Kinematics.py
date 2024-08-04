@@ -283,7 +283,12 @@ class Kinematics:
         if self.spring_type == 'Hooke':
             spring_F = self.spring_x * self.spring_k
         if self.spring_type == 'Softening':
-            spring_F = self.spring_k * (self.spring_x ** self.spring_non_lin_coef)
+            if self.spring_x < 0:
+                spring_F = self.spring_k * (np.absolute(self.spring_x) ** self.spring_non_lin_coef)
+                spring_F = -spring_F
+            else:
+                spring_F = self.spring_k * (self.spring_x ** self.spring_non_lin_coef)
+
         return spring_F
 
     def Damper(self):
@@ -576,3 +581,75 @@ class Kinematics:
         plt.grid(True)
         plt.legend()
         plt.show()
+
+    def kinematics_example():
+        """Exemplo de uso da classe Kinematics.
+
+        Esta função demonstra como criar instâncias da classe Kinematics para diferentes
+        tipos de amortecedores e molas e como usar seus métodos de plotagem.
+
+        Instâncias Criadas
+        ------------------
+        teste_integrated : Kinematics
+        >>> Instância representando um amortecedor do tipo 'Integrated', que utiliza
+            forças estáticas, de fricção e viscosas.
+
+        teste_coulumb : Kinematics
+        >>> Instância representando um amortecedor do tipo 'Coulumb', focando
+            em forças de fricção.
+
+        teste_hooke : Kinematics
+        >>> Instância representando uma mola linear do tipo 'Hooke', que segue
+            a lei de Hooke para molas.
+
+        teste_softening : Kinematics
+        >>> Instância representando uma mola do tipo 'Softening', que possui
+            características de amolecimento não linear.
+
+        kinematics : Kinematics
+        >>> Instância para a análise cinemática de um mecanismo de quatro barras.
+
+        Métodos Chamados
+        ----------------
+        kinematics.plotar_cinematica() : method
+        >>> Plota a cinemática do mecanismo de quatro barras.
+
+        teste_integrated.plot_damper() : method
+        >>> Plota as características do amortecedor do tipo 'Integrated', variando as
+            velocidades Vx e Vy.
+
+        teste_coulumb.plot_damper() : method
+        >>> Plota as características do amortecedor do tipo 'Coulumb', variando as
+            velocidades Vx e Vy.
+
+        teste_hooke.plot_spring() : method
+        >>> Plota as características da mola do tipo 'Hooke', variando os deslocamentos
+            x e y.
+
+        teste_softening.plot_spring() : method
+        >>> Plota as características da mola do tipo 'Softening', variando os deslocamentos
+            x e y.
+
+        Returns
+        -------
+        None
+        >>> Esta função não retorna valores, mas gera plots das características dos
+            amortecedores e molas, além da cinemática do mecanismo.
+
+        Examples
+        --------
+        >>> kinematics_example()
+        """
+        
+        teste_integrated = Kinematics(damper_type='Integrated', damper_F_static=50, damper_K_friction=1, damper_F_viscous=1)
+        teste_coulumb = Kinematics(damper_type='Coulumb', damper_F_static=50, damper_K_friction=1)
+        teste_hooke = Kinematics(spring_type= 'Hooke', spring_k=40, spring_x=0, spring_non_lin_coef=None)
+        teste_softening = Kinematics(spring_type= 'Softening', spring_k=4, spring_x=0, spring_non_lin_coef=3)
+        kinematics = Kinematics(L0=500, L1=500, L2=450, L3=500)
+
+
+        kinematics.plotar_cinematica()
+        teste_integrated.plot_damper(damper_Vx_values=np.linspace(-10, 10, 100), damper_Vy_values=np.linspace(-10, 10, 100))
+        teste_coulumb.plot_damper(damper_Vx_values=np.linspace(-10, 10, 100), damper_Vy_values=np.linspace(-10, 10, 100))
+        teste_hooke.plot_spring(spring_x_values=np.linspace(-10, 10, 100) , spring_y_values=np.linspace(-10, 10, 100))
+        teste_softening.plot_spring(spring_x_values=np.linspace(-10, 10, 100) , spring_y_values=np.linspace(-10, 10, 100))
