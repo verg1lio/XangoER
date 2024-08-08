@@ -422,7 +422,7 @@ if __name__ == "__main__":
 
     
 # gabriel nikolas
-class ControleFluxoRotoricoEscorregamento:
+class ControleFluxoRotoricoEscorregamentoCampo:
     def __init__(self, regu_l=0, fcor_r=0, time_end=10, num_points=100):
         # Initialize constants
         self.regu_l = regu_l
@@ -570,13 +570,13 @@ class ControleFluxoRotoricoEscorregamento:
         plt.legend()
         plt.show()
 
-def example_ControleFluxoRotoricoEscorregamento():
-    control = ControleFluxoRotoricoEscorregamento(regu_l=1, fcor_r=0)  # Set regu_l=0 for P control or 1 for PI control
+def example_ControleFluxoRotoricoEscorregamentoCampo():
+    control = ControleFluxoRotoricoEscorregamentoCampo(regu_l=1, fcor_r=0)  # Set regu_l=0 for P control or 1 for PI control
     control.compute()
     control.plot()
 
 if __name__ == "__main__":
-    example_ControleFluxoRotoricoEscorregamento()
+    example_ControleFluxoRotoricoEscorregamentoCampo()
 
 
 # samuel leo
