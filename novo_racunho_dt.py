@@ -203,13 +203,12 @@ class Drivetrain:
         variacao = []
         
         if self.new_rpm:
-            variacao = np.linspace(self.rpm, self.new_rpm, 100)
+            variacao = range(self.rpm, self.new_rpm, 10)
             self.rpm = self.new_rpm
             self.new_rpm = 0
             
         else:
             variacao = [self.rpm]
-            variacao = np.array(variacao)
         
         parametros = []
         
@@ -341,29 +340,40 @@ class Drivetrain:
         print("Fator de segurança obtido:", fator_seguranca_obtido)
         print("Fator de segurança para 1 polegada:", fs1p)
 
+    def drivetrainExample():
+        dt_model = Drivetrain(
+            cgx = 853,  # mm
+            cgy = 294,  # mm
+            massa = 347,  # kg
+            entre_eixos = 1567,  # mm
+            coeficiente_atrito = 0.9 , # coeficiente de atrito
+            raio_pneu = 259,  # mm
+            aceleracao_ideal = 1.2,  # g
+            reducao_primaria = 2.12,  # redução primária
+            reducao_unica = 2.76,
+            rpm = 0,
+            torque= 244.14,
+            cp = 2.22)
         
+        dt_model.show_results()
+        #Performance pontual do veículo
+        dt_model.print_car_performance()
+        
+        dt_model.HalfShaftsSizing()
+        
+        dt_model.new_rpm = 2635
+        
+        #Exemplo em lista
+        example.print_car_performance()    
+                
+        #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
+        performance_veiculo = dt_model.CarPerformance()
 
-dt_model = Drivetrain(
-        cgx = 853,  # mm
-        cgy = 294,  # mm
-        massa = 347,  # kg
-        entre_eixos = 1567,  # mm
-        coeficiente_atrito = 0.9 , # coeficiente de atrito
-        raio_pneu = 259,  # mm
-        aceleracao_ideal = 1.2,  # g
-        reducao_primaria = 2.12,  # redução primária
-        reducao_unica = 2.76,
-        rpm = 0,
-        torque= 244.14,
-        cp = 2.22)
+        #Filtrando a velocidade angular
+        velocidade_angular = [dado["va"] for dado in performance_veiculo]
+        
+        for dado in velocidade_angular:
+            print(f'velocidade: {dado}')
 
-
-dt_model.HalfShaftsSizing()
-
-print(dt_model.new_rpm)
-
-dt_model.print_car_performance()
-
-dt_model.new_rpm = 2625
-
-dt_model.print_car_performance()
+        
+Drivetrain.drivetrainExample()
