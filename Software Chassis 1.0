@@ -43,14 +43,19 @@ class Estrutura:
         print(node_loc_matrix)
 
     def connect_matrix(self):
-        num_connect = len(self.elements)                                     # Número de conexões
-        CM = np.zeros((num_connect, 3), dtype=int)
-        for i, (no1, no2) in enumerate(self.elements, start=0):
-            CM[i][0] = i + 1
-            CM[i][1] = no1
-            CM[i][2] = no2
-        print("\n Conexão   1º Nó   2º Nó")
-        print(CM)
+         # Inicializar uma lista para armazenar as conexões
+        connections = []
+
+        # Criando a lista a partir de Connections para monstar a matriz connect
+        for i, element in enumerate(self.elements):
+            node_start, node_end = element
+            connections.append([i + 1, node_start, node_end])
+            
+        # Converter a lista em um array numpy
+        connections_matrix = np.array(connections)
+
+        print("Matriz de conectividade:")
+        print(connections_matrix)
 
     def element(self, element):
         # Variáveis e constantes físicas do modelo
@@ -208,14 +213,14 @@ class Estrutura:
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
 #Coordenadas dos nós (x, y, z)
-nodes = [
+nodes = np.array([
     (0, 0, 0),
     (0, 0.375, 0),
     (0, 0.700, 0),
     (1.500, 0.375, 0),
     (1.500, 0, 0),
     (1.500, 0.700, 0)
-]
+])  
 
 #Conectividade dos elementos (índices dos nós)
 elements = [
@@ -295,25 +300,23 @@ axs[4].legend()
 plt.tight_layout()
 plt.show()
 
-
-# Convertendo a matriz de conectividade para um array numpy
-connectivity_array = np.array(elements)
-
 # Plotando o gráfico 3D da estrutura
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 
-# Adicionando os pontos
-for i, (x, y, z) in enumerate(nodes):
-    ax.scatter(x, y, z, color='b', s=100)
-    ax.text(x, y, z, f'  {i}', color='black', fontsize=12)
+# Plotar os nós
+ax.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], c='b')   
 
-# Adicionando as linhas de ligação entre os nós
-for node1, node2 in elements:
-    x = [nodes[node1][0], nodes[node2][0]]
-    y = [nodes[node1][1], nodes[node2][1]]
-    z = [nodes[node1][2], nodes[node2][2]]
-    ax.plot(x, y, z, marker='o')
+# Numerar os nós
+for i, node in enumerate(nodes):
+     ax.text(node[0], node[1], node[2], str(i), color='black')
+
+# Conectando os nós
+for element in elements:
+    node_start, node_end = element
+    ax.plot([nodes[node_start, 0], nodes[node_end, 0]],  # X
+            [nodes[node_start, 1], nodes[node_end, 1]],  # Y
+            [nodes[node_start, 2], nodes[node_end, 2]])  # Z
 
 # Configurações adicionais
 ax.set_xlabel('X')
