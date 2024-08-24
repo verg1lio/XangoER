@@ -92,29 +92,30 @@ class Estrutura:
 
         return self.K_global, self.M_global
 
-    def shape_fun(self, F1,F2,F3):
-        E = 210e9   # Pa                                                #Módulo de Elasticidade
-        I = 1.6667e-5 # m^4                                             #Momento de Inercia  
-        G = 81.2e9  # Pa                                                #Módulo de Elasticidade em Cisalhamento
-        A= 0.0125                                                       #Área da seção Transversal
-        J = 1e-6    # m^4 (momento polar de inércia)
-        torsao, deformacao, flexao = [], [], []
+    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
+        E = 210e9   	#Modulo de Young (Pa)
+        I = 1.6667e-5 	#Momento de inercia (m^4)
+        G = 81.2e9  	#Modulo de Cisalhamento(Pa)
+        A= 0.0125	    #Área da seção do elemento (m^2)	
+        J = I/2     	#Momento polar de inércia (m^4) 
+        torcao, deformacao, flexao1, flexao2, flexao3 = [], [], [], [], []
         for element in self.elements:
             L_e = self.calcular_comprimento(element)
-            # Equação de torção
-            torsao_val = (F1 * L_e) / (G * J)
-            torsao.append(torsao_val)
-            # Equação diferencial para deformação axial
-            deformacao_val = (F2 / (A * E)) * L_e
+            # Equação de torsão
+            torcao_val = (F_torcao * L_e) / (G * J)         #Fonte[1]
+            torcao.append(torcao_val)
+            # Equação  para deformação axial
+            deformacao_val = (F_axial* L_e / (A * E))       #Fonte[2]
             deformacao.append(deformacao_val)
-            # Equação de Euler-Bernoulli para flexão
-            x = np.linspace(0, L_e, len(F3))
-            v_val = np.zeros_like(F3)
-            for i in range(1, len(F3)):
-                v_val[i] = (F3[i] - F3[i-1]) / (E * I) * (L_e ** 3 / 12)
-            flexao.append(v_val)
-
-        return np.array(torsao), np.array(deformacao), np.array(flexao)
+            # Equação para flexão
+            flexao_val1 = (F_flexao1*L_e**3)/(48 * E * I)      #Fonte[3.1] (carga pontual no meio do elemento biapoiado)
+            flexao_val2 = (5*F_flexao2*L_e**4)/(384 * E * I)   #Fonte[3.2] (carga distribuída ao longo de todo o elemento biapoiado)
+            flexao_val3 = flexao_val1 + flexao_val2            #Fonte[3.3] (tentativa de carregamento misto)
+            flexao1.append(flexao_val1)
+            flexao2.append(flexao_val2)
+            flexao3.append(flexao_val3)
+            
+        return np.array(torcao), np.array(deformacao), np.array(flexao1), np.array(flexao2), np.array(flexao3)
     
     def modal_analysis(self):
         # Análise modal por resolução do problema de autovalor e autovetor
@@ -188,13 +189,18 @@ elements = [
 #       E = 210e9  # Módulo de elasticidade em Pa
 #       I = 8.33e-6  # Momento de inércia em m^4
 #       Ip = Id = 8.33e-6 kg.m^2
-F1 = np.array([1000, 2000, 3000, 4000, 5000])
-F2 = np.array([1000, 2000, 3000, 4000, 5000])
-T = np.array([1000, 2000, 3000, 4000, 5000])
+
+F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
+F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
+F_axial = np.array([1000, 2000, 3000, 4000, 5000])
+F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
+
 estrutura = Estrutura(elements, nodes, 1500, 8.33e-6, 8.33e-6)
+
 K_global, M_global = estrutura.matrizes_globais()
 
 #Gerar as matrizes de localização dos nós e de conectividade
+
 node_tags = list(range(len(nodes)))
 estrutura.node_loc_matrix(node_tags, nodes)
 estrutura.connect_matrix()
@@ -202,32 +208,44 @@ estrutura.connect_matrix()
 #Gerar autovalores, autovetores e frequências naturais
 autovalores, autovetores, frequencias = estrutura.modal_analysis()
 
-torsao, deformacao_axial, flexao  = estrutura.shape_fun(F1,F2,T)
+torcao, deformacao_axial, flexao1, flexao2, flexao3  = estrutura.shape_fun(F_flexao1,F_flexao2,F_axial,F_torcao)
 # Plotando os resultados das deformações
-fig, axs = plt.subplots(3, 1, figsize=(12, 18))
+fig, axs = plt.subplots(5, 1, figsize=(12, 18))
 
 
 # Plot da Torção
-axs[0].plot(torsao, 'o-', label=[f'Elemento {x}' for x in range(5)])
-axs[0].set_title('Deformação por Torção')
+axs[0].plot(torcao, 'o-', label=[f'Força {F}N' for F in F_torcao])
+axs[0].set_title('Deformação por Torção de cada Elemento')
 axs[0].set_xlabel('Elemento')
 axs[0].set_ylabel('Torção (rad)')
 axs[0].legend()
 
 # Plot da Deformação Axial
-axs[1].plot(deformacao_axial, 's-', label=[f'Elemento {x}' for x in range(5)])
-axs[1].set_title('Deformação Axial')
+axs[1].plot(deformacao_axial, 's-', label=[f'Força {F}N' for F in F_axial])
+axs[1].set_title('Deformação Axial de cada Elemento')
 axs[1].set_xlabel('Elemento')
 axs[1].set_ylabel('Deformação (m)')
 axs[1].legend()
 
 # Plot da Flexão
-for i, v_val in enumerate(flexao):
-    axs[2].plot(v_val, label=f'Elemento {i}')
-axs[2].set_title('Deformação por Flexão')
-axs[2].set_xlabel('Posição ao longo do elemento')
-axs[2].set_ylabel('Flexão(m)')
+axs[2].plot(flexao1,'o-', label=[f'Força {F}N' for F in F_flexao1])
+axs[2].set_title('Deformação por Carga pontual de cada Elemento')
+axs[2].set_xlabel('Elemento')
+axs[2].set_ylabel('Deflexão(m)')
 axs[2].legend()
+
+axs[3].plot(flexao2,'o-', label=[f'Força {F}N' for F in F_flexao2])
+axs[3].set_title('Deformação por Carga distribuída de cada Elemento')
+axs[3].set_xlabel('Elemento')
+axs[3].set_ylabel('Deflexão(m)')
+axs[3].legend()
+
+# Plot da Flexão
+axs[4].plot(flexao3, 'o-', label='Carregamento misto')
+axs[4].set_title('Deformação por Flexão Mista de cada Elemento')
+axs[4].set_xlabel('Elemento')
+axs[4].set_ylabel('Deflexão (m)')
+axs[4].legend()
 
 plt.tight_layout()
 plt.show()
