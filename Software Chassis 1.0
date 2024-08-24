@@ -4,7 +4,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
+import pandas as pd
+import sys
 import os
+np.set_printoptions(threshold=sys.maxsize)
+np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
     def __init__(self, elements, nodes, m, Id, Ip):
@@ -56,7 +60,7 @@ class Estrutura:
         A= 0.0125	    #Área da seção do elemento (m^2)	
         J = I/2     	#Momento polar de inércia (m^4) 
         kappa=0.9       #Fator de correção para cisalhamento 
-        L_e = self.calcular_comprimento(nodes, element)
+        L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
         rho = 7850  # kg/m^3
 
@@ -104,26 +108,34 @@ class Estrutura:
             ])
         return k_e,m_e
 
-    def matrizes_globais(self):
+    def aplicar_engastes(self, nodes, dofs):
+        for node in nodes:                                          #Laço para selecionar cada nó que será engastado
+            for dof in dofs:                                        #Laço para selecionar quais graus de liberdade serão fixados
+                index = node * self.num_dofs_per_node + dof         #Identificação da entrada da matriz que precisa ser restringida pelo engaste        
+                self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
+                   
+    def matrizes_global(self):
+        #Calculando as matrizes de rigidez e massa de cada elemento
         for element in self.elements:
-            node1, node2 = element
-            self.k_e, self.m_e = self.element(element)
+            node1,node2=element
+            k_e,m_e= self.element(element)
+            #Montando as matrizes globais
+            #           x1      y1          z1        rx1       ry1         rz1       x2        y2          z2        rx2        ry2        rz2        
+            dofs = [6*node1, 6*node1+1, 6*node1+2, 6*node1+3, 6*node1+4, 6*node1+5, 6*node2, 6*node2+1, 6*node2+2, 6*node2+3, 6*node2+4, 6*node2+5]
+            for i in range(len(dofs)):
+                for j in range(len(dofs)):
+                    self.K_global[dofs[i], dofs[j]] += k_e[i, j]
+                    self.M_global[dofs[i], dofs[j]] += m_e[i, j]              
 
-            dofs = [2 * node1, 2 * node1 + 1, 2 * node2, 2 * node2 + 1]
-            for i in range(4):
-                for j in range(4):
-                    self.K_global[dofs[i], dofs[j]] += self.k_e[i, j]
-                    self.M_global[dofs[i], dofs[j]] += self.m_e[i, j]
-
-        # Ancoragem
-        ancoragem_nos = [0, 2, 4, 5]
-        for no in ancoragem_nos:
-            for i in range(self.num_dofs_per_node):
-                idx = no * self.num_dofs_per_node + i
-                self.K_global[idx, idx] = 1e20                          #Matriz de Rigidez GLO
-                self.M_global[idx, idx] = 1e20                          #Matriz de Massa GLO
-
-        return self.K_global, self.M_global
+        self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2])
+        
+        # Converte a matriz para DataFrame
+        df_1 = pd.DataFrame(self.K_global)
+        df_2 = pd.DataFrame(self.M_global)
+        # Salva o arquivo como CSV
+        df_1.to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
+        df_2.to_csv('Matriz_Global_Massa.csv', index=True, header=True)
+        return self.K_global,self.M_global
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
         E = 210e9   	#Modulo de Young (Pa)
@@ -230,7 +242,7 @@ F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
 
 estrutura = Estrutura(elements, nodes, 1500, 8.33e-6, 8.33e-6)
 
-K_global, M_global = estrutura.matrizes_globais()
+K_global, M_global = estrutura.matrizes_global()
 
 #Gerar as matrizes de localização dos nós e de conectividade
 
@@ -283,12 +295,6 @@ axs[4].legend()
 plt.tight_layout()
 plt.show()
 
-
-print("\n Matriz de Rigidez Global")
-print(K_global)
-
-print("\n Matriz de Massa Global")
-print(M_global)
 
 # Convertendo a matriz de conectividade para um array numpy
 connectivity_array = np.array(elements)
