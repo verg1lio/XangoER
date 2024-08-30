@@ -1,5 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import signal
+import control as ctl
+
+
 
 __all__ = ["Motor", "ModulacaoEscalar", "Peso"]
 
@@ -268,105 +272,97 @@ class Motor:
         plt.tight_layout()
         plt.show()
 
+    def transfer_function(self):
+        num = [self.msr* self.p]
+        den = [self.jm, 2 * self.kf, self.rs + self.ls]
+        
+        return num, den
+
+    def plot_bode(self):
+        num, den = self.transfer_function()
+        system = signal.TransferFunction(num, den)
+        w, mag, phase = signal.bode(system)
+
+        plt.figure(figsize=(10, 6))
+        plt.subplot(2, 1, 1)
+        plt.semilogx(w, mag)
+        plt.title('Diagrama de Bode - Motor')
+        plt.ylabel('Magnitude (dB)')
+        plt.grid(which="both", axis="both")
+
+        plt.subplot(2, 1, 2)
+        plt.semilogx(w, phase)
+        plt.xlabel('Frequência (rad/s)')
+        plt.ylabel('Fase (graus)')
+        plt.grid(which="both", axis="both")
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_nyquist(self):
+        num, den = self.transfer_function()
+        # Criar o sistema no domínio de Laplace
+        motor_system = ctl.TransferFunction(num, den)
+
+        # Frequências para o Diagrama de Nyquist
+        w_start = 1e-2
+        w_stop = 1e3
+        num_points = 1000
+        frequencies = np.logspace(np.log10(w_start), np.log10(w_stop), num_points)
+
+        # Plotar o Diagrama de Nyquist
+        plt.figure()
+        ctl.nyquist_plot(motor_system, omega=frequencies)
+        plt.title("Diagrama de Nyquist - Motor Trifásico de FSAE")
+        plt.grid(True)
+        plt.show()
+
+    def state_space_representation(self):
+        # Coeficientes da função de transferência
+        num, den = self.transfer_function()
+
+        # Sistema de segunda ordem: Numerador e denominador
+        # Exemplo: num = [b0], den = [a2, a1, a0]
+        a2 = den[0]
+        a1 = den[1]
+        a0 = den[2]
+        b0 = num[0]
+
+        # Matrizes A, B, C, D no espaço de estados
+        A = np.array([[0, 1],
+                      [-a0/a2, -a1/a2]])
+
+        B = np.array([[0],
+                      [b0/a2]])
+
+        C = np.array([[1, 0]])
+
+        D = np.array([[0]])
+
+        return A, B, C, D
+
+    def print_state_space(self):
+        A, B, C, D = self.state_space_representation()
+        print("Matriz A:")
+        print(A)
+        print("\nMatriz B:")
+        print(B)
+        print("\nMatriz C:")
+        print(C)
+        print("\nMatriz D:")
+        print(D)
+
 def example_motor():
     motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
     motor.simulate()
     motor.plot_motor()
+    motor.plot_bode()
+    motor.plot_nyquist() 
+    motor.print_state_space()
 
 
-# NAO ESTA COMPLETO !!!!!!!!!!!!!!!!!
-class ModulacaoEscalar:
-    def __init__(self, e_star, mu_values, num_cycles=1):
-        self.e_star = e_star
-        self.mu_values = mu_values
-        self.num_cycles = num_cycles
-        self.t = None
-        self.vs10_star = None
-        self.vs20_star = None
-        self.vs30_star = None
-        self.i1 = None
-        self.i2 = None
-        self.i3 = None
-        self.thd_values = []
 
-    def t_entrada(self):
-        self.vs1_star = np.sin(2 * np.pi * self.t)
-        self.vs2_star = np.sin(2 * np.pi * self.t - 2 * np.pi / 3)
-        self.vs3_star = np.sin(2 * np.pi * self.t + 2 * np.pi / 3)
 
-    def calculate_vN0max_vN0mim(self):
-        self.vN0max_star = self.e_star / 2 - np.maximum.reduce([self.vs1_star, self.vs2_star, self.vs3_star])
-        self.vN0mim_star = -self.e_star / 2 - np.minimum.reduce([self.vs1_star, self.vs2_star, self.vs3_star])
-        
-    def calculates_vN0(self, mu):
-        self.vN0_star = mu * self.vN0max_star + (1 - mu) * self.vN0mim_star
-
-    def tm(self):
-        self.vs10_star = self.vs1_star + self.vN0_star
-        self.vs20_star = self.vs2_star + self.vN0_star
-        self.vs30_star = self.vs3_star + self.vN0_star
-
-    def c(self):
-        self.i1 = np.sin(2 * np.pi * self.t)
-        self.i2 = np.sin(2 * np.pi * self.t - 2 * np.pi / 3)
-        self.i3 = np.sin(2 * np.pi * self.t + 2 * np.pi / 3)
-
-    def calculate_thd(self):# Placeholder para cálculo real do THD. Aqui estou assumindo um valor fictício para exemplo.
-        thd = np.random.random() * 10  # Exemplo: THD fictício entre 0 e 10%
-        return thd
-
-    def simulate_mod(self, mu):
-        self.t = np.linspace(0, self.num_cycles, 1000)  # Vetor de tempo
-        self.t_entrada()  # Calcular tensões de entrada
-        self.calculate_vN0max_vN0mim()  # Calcular vN0max* e vN0mim*
-        self.calculates_vN0(mu)  # Calcular vN0*
-        self.tm()  # Calcular tensões moduladas
-        self.c()  # Calcular correntes
-
-    def plot_mod(self, mu):
-        plt.figure(figsize=(10, 6))
-        
-        plt.subplot(2, 1, 1)
-        plt.plot(self.t, self.vs10_star, label=r'$v_{s10}^*$', color='black')
-        plt.title(f'Tensão Modulada $v_{{s10}}^*$ (µ = {mu})')
-        plt.ylabel('Tensão')
-        plt.legend()
-        
-        plt.subplot(2, 1, 2)
-        plt.plot(self.t, self.i1, label=r'$i_1$', color='blue')
-        plt.plot(self.t, self.i2, label=r'$i_2$', color='red')
-        plt.plot(self.t, self.i3, label=r'$i_3$', color='green')
-        plt.title('Correntes')
-        plt.ylabel('Corrente')
-        plt.legend()
-        
-        plt.tight_layout()
-        plt.show()
-
-    def plot_thd_vs_mu(self):
-        plt.figure(figsize=(8, 6))
-        plt.plot(self.mu_values, self.thd_values, label='THD', color='black', marker='o')
-        plt.title('THD em função de µ')
-        plt.xlabel('µ')
-        plt.ylabel('THD (%)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-    def run(self):
-        for mu in self.mu_values:
-            self.simulate_mod(mu)
-            thd = self.calculate_thd()
-            self.thd_values.append(thd)
-            self.plot_mod(mu)
-        
-        self.plot_thd_vs_mu()
-
-def exemplo_modulacao_escalar():
-    e_star = 1.0  # Tensão DC do inversor
-    mu_values = [0.5, 1.0]  # Valores de µ
-    simulation = ModulacaoEscalar(e_star, mu_values)
-    simulation.run()
 
 
 class Peso:
@@ -401,7 +397,6 @@ def example_peso():
 
 
 
-#exemplo
+# exemplos
 example_motor()
-example_peso()
-exemplo_modulacao_escalar()
+# example_peso()
