@@ -301,7 +301,6 @@ class Motor:
 
     def plot_nyquist(self):
         num, den = self.transfer_function()
-        # Criar o sistema no domínio de Laplace
         motor_system = ctl.TransferFunction(num, den)
 
         # Frequências para o Diagrama de Nyquist
@@ -310,10 +309,9 @@ class Motor:
         num_points = 1000
         frequencies = np.logspace(np.log10(w_start), np.log10(w_stop), num_points)
 
-        # Plotar o Diagrama de Nyquist
         plt.figure()
         ctl.nyquist_plot(motor_system, omega=frequencies)
-        plt.title("Diagrama de Nyquist - Motor Trifásico de FSAE")
+        plt.title("Diagrama de Nyquist - Motor Trifásico")
         plt.grid(True)
         plt.show()
 
@@ -352,17 +350,28 @@ class Motor:
         print("\nMatriz D:")
         print(D)
 
-def example_motor():
-    motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-    motor.simulate()
-    motor.plot_motor()
-    motor.plot_bode()
-    motor.plot_nyquist() 
-    motor.print_state_space()
+    def step_response(self):
+        num, den = self.transfer_function()
+        system = signal.TransferFunction(num, den)
+        t, response = signal.step(system)
 
+        plt.figure(figsize=(10, 6))
+        plt.plot(t, response, label='Resposta ao Degrau Unitário')
+        plt.title('Resposta ao Degrau Unitário - Sistema de Segunda Ordem')
+        plt.xlabel('Tempo (s)')
+        plt.ylabel('Amplitude')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
 
-
-
+    def example():
+        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
+        motor.simulate()
+        motor.plot_motor()
+        motor.plot_bode()
+        motor.plot_nyquist() 
+        motor.print_state_space()
+        motor.step_response()
 
 
 class Peso:
@@ -390,13 +399,13 @@ class Peso:
         peso_total = self.peso_bateria + self.peso_inversor + self.peso_motor + self.peso_chicote
         return peso_total
 
-def example_peso():
-    peso_pwt = Peso(10, 10, 65, 5)
-    total = peso_pwt.peso_total()
-    print(f"O peso total é {total} Kg")
+    def example():
+        peso_pwt = Peso(10, 10, 65, 5)
+        total = peso_pwt.peso_total()
+        print(f"O peso total é {total} Kg")
 
 
 
 # exemplos
-example_motor()
-# example_peso()
+Motor.example()
+Peso.example()
