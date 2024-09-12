@@ -594,9 +594,9 @@ def uniteExample():
         torque= 244.14,
         cp = 2.22)
     
-    # dt_model.showResults()
+    dt_model.showResults()
     
-    # dt_model.HalfShaftsSizing()
+    dt_model.HalfShaftsSizing()
     
     dt_model.new_rpm = 2635
     
@@ -630,6 +630,9 @@ def uniteExample():
     
     #Criando instância da classe Tire
     Slip_model = Tire(tire_Fz=1500, tire_Sa=0, tire_Ls=slip_ratios, tire_friction_coef=1.45, tire_Ca=0)
+    
+    #Dados experimentais para instância em Tire
+    result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
     
     #Recebendo valores de força lateral, torque auto allinhante e força longitudinal
     tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces = Slip_model.Tire_forces(result)
