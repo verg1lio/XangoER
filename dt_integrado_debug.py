@@ -89,7 +89,7 @@ class Drivetrain:
         carga_traseira_ideal = reacao_traseira + transferencia_carga_ideal
         return peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal
 
-    def show_results(self):
+    def showResults(self):
         
         '''
         Método para exibir os resultados do cálculo de saídas da transmissão
@@ -203,7 +203,7 @@ class Drivetrain:
         variacao = []
         
         if self.new_rpm:
-            variacao = range(self.rpm, self.new_rpm, 25)
+            variacao = range(self.rpm, self.new_rpm, 30)
             self.rpm = self.new_rpm
             self.new_rpm = 0
             
@@ -240,39 +240,45 @@ class Drivetrain:
         # Retornar os parâmetros calculados
         return parametros, variacao
     
-    def print_car_performance(self):
-        
-        '''
-        Método para exibir o desempenho do veículo
+    def printCarPerformance(self):
+            
+            '''
+            Método para exibir o desempenho do veículo
 
-        Este método utiliza os valores calculados pelo método `CarPerformance` para apresentar o desempenho do veículo. Os resultados incluem informações sobre força trativa, velocidade angular e linear, forças de arrasto, resistência ao rolamento e a força final do veículo. 
+            Este método utiliza os valores calculados  pelo método `CarPerformance` para apresentar o desempenho do veículo. Os resultados incluem informações sobre força trativa, velocidade angular e linear, forças de arrasto, resistência ao rolamento e a força final do veículo. 
 
-        Retorna:
-        ------------
-        - Força Trativa:                    Força exercida pelo veículo na superfície de contato, em Newtons (N).
-        - Velocidade Angular:               Velocidade angular das rodas ou do sistema de transmissão, em radianos por segundo (rad/s).
-        - Velocidade Linear:                Velocidade do veículo em quilômetros por hora (Km/h).
-        - Força de Arrasto:                 Força que age contra o movimento do veículo devido à resistência do ar, em Newtons (N).
-        - Resistência ao Rolamento:         Força que age contra o movimento do veículo devido ao atrito dos pneus com a superfície, em Newtons (N).
-        - Força Final:                      Força resultante que o veículo exerce, considerando a força trativa, a força de arrasto e a resistência ao rolamento, em Newtons (N).
-       
-        Example:
-        ------
-        dt_model = Drivetrain(cgx = 853, cgy = 294,  massa = 347, entre_eixos = 1567, coeficiente_atrito = 0.9, raio_pneu = 259, aceleracao_ideal = 1.2, reducao_primaria = 2.12, reducao_unica = 2.76, rpm = 2625, torque= 244.14, cp = 2.22)
+            Retorna:
+            ------------
+            - Força Trativa:                    Força exercida pelo veículo na superfície de contato, em Newtons (N).
+            - Velocidade Angular:               Velocidade angular das rodas ou do sistema de transmissão, em radianos por segundo (rad/s).
+            - Velocidade Linear:                Velocidade do veículo em quilômetros por hora (Km/h).
+            - Força de Arrasto:                 Força que age contra o movimento do veículo devido à resistência do ar, em Newtons (N).
+            - Resistência ao Rolamento:         Força que age contra o movimento do veículo devido ao atrito dos pneus com a superfície, em Newtons (N).
+            - Força Final:                      Força resultante que o veículo exerce, considerando a força trativa, a força de arrasto e a resistência ao rolamento, em Newtons (N).
         
-        dt_model.print_car_performance()       
-        '''        
-        
-        performance, rpm = Drivetrain.CarPerformance(self)
-        
-        print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
-        
-        for param in performance:
-            print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}")
-        
-        print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
-        for param in performance:
-            print(f"{param['fa']}\t{param['rr']}\t{param['forca_final']}")
+            Example:
+            ------
+            dt_model = Drivetrain(cgx = 853, cgy = 294,  massa = 347, entre_eixos = 1567, coeficiente_atrito = 0.9, raio_pneu = 259, aceleracao_ideal = 1.2, reducao_primaria = 2.12, reducao_unica = 2.76, rpm = 2625, torque= 244.14, cp = 2.22)
+            
+            dt_model.printCarPerformance()       
+            '''        
+            
+            rpm = self.rpm
+            new_rpm = self.new_rpm
+            
+            performance, rpm_faixa = Drivetrain.CarPerformance(self)
+            
+            print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
+            
+            for param in performance:
+                print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}")
+            
+            print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
+            for param in performance:
+                print(f"{param['fa']}\t{param['rr']}\t{param['forca_final']}")
+
+            self.rpm = rpm
+            self.new_rpm = new_rpm
 
     def HalfShaftsSizing(self, fsi=1.25, tet=786, tec=471.6, dif=1):
         
@@ -588,41 +594,46 @@ def uniteExample():
         torque= 244.14,
         cp = 2.22)
     
-    # dt_model.show_results()
+    dt_model.showResults()
     
-    # dt_model.HalfShaftsSizing()
+    dt_model.HalfShaftsSizing()
     
     dt_model.new_rpm = 2635
-    
+
     #Exemplo em lista
-    # dt_model.print_car_performance()    
-            
+    dt_model.printCarPerformance() 
+
     #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
     performance_veiculo, rpm_faixa = dt_model.CarPerformance()
 
     #Filtrando a velocidade angular
     velocidade_angular = [dado['va'] for dado in performance_veiculo]
-    
-    for dado in velocidade_angular:
-        print(f'velocidade: {dado}')
-        
+       
+    #Transformando num array    
     velocidade_angular = np.array(velocidade_angular)
+
+    #Transformando num array  
     rpm_faixa = np.array(rpm_faixa)
 
+    #Calcular o slip ratio
     slip_ratio = Tire.slip_ratio_1(velocidade_angular, 0.259)
 
+    #Plotagem de gráfico do slip ratio e saídas de seus dados no terminal
     Tire.show_slip_ratio(rpm_faixa, slip_ratio, velocidade_angular)
-    result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
-    longitudinal_forces = []
-    for slip in slip_ratio:
-        Dt_model = Tire(tire_Fz=1500, tire_Sa=0, tire_Ls=slip, tire_friction_coef=1.45, tire_Ca=0)
 
-        a, b, longitudinal_force = Dt_model.Tire_forces(result)
-        longitudinal_forces.append(longitudinal_force)
-
+    #Salvando os dados como array para cálculo de força longitudinal
     slip_ratios = np.array(slip_ratio)
+    
+    #Criando instância da classe Tire
     Slip_model = Tire(tire_Fz=1500, tire_Sa=0, tire_Ls=slip_ratios, tire_friction_coef=1.45, tire_Ca=0)
+    
+    #Dados experimentais para instância em Tire
+    result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
+    
+    #Recebendo valores de força lateral, torque auto allinhante e força longitudinal
     tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces = Slip_model.Tire_forces(result)
+    
+    #Plotagem de gráficos
     Slip_model.plot_graph( tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces)
 
 initial_speed = 1
