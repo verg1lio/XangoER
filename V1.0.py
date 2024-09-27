@@ -1491,7 +1491,7 @@ class Drivetrain:
         carga_traseira_ideal = reacao_traseira + transferencia_carga_ideal
         return peso, reacao_traseira, reacao_dianteira, forca_trativa, transferencia_longitudinal, carga_traseira, pico_torque_traseiro, carga_pneu, torque_pneu, reducao_final, torque_necessario_motor, aceleracao_primaria_real, aceleracao_primaria_ideal, aceleraco_real_final, forca_trativa_ideal, torque_pneu_ideal, torque_motor_ideal, transferencia_carga_ideal, transferencia_carga_real, carga_traseira_ideal
 
-    def show_results(self):
+    def showResults(self):
         
         '''
         Método para exibir os resultados do cálculo de saídas da transmissão
@@ -1605,7 +1605,7 @@ class Drivetrain:
         variacao = []
         
         if self.new_rpm:
-            variacao = range(self.rpm, self.new_rpm, 10)
+            variacao = range(self.rpm, self.new_rpm, 30)
             self.rpm = self.new_rpm
             self.new_rpm = 0
             
@@ -1642,39 +1642,45 @@ class Drivetrain:
         # Retornar os parâmetros calculados
         return parametros, variacao
     
-    def print_car_performance(self):
-        
-        '''
-        Método para exibir o desempenho do veículo
+    def printCarPerformance(self):
+            
+            '''
+            Método para exibir o desempenho do veículo
 
-        Este método utiliza os valores calculados pelo método `CarPerformance` para apresentar o desempenho do veículo. Os resultados incluem informações sobre força trativa, velocidade angular e linear, forças de arrasto, resistência ao rolamento e a força final do veículo. 
+            Este método utiliza os valores calculados  pelo método `CarPerformance` para apresentar o desempenho do veículo. Os resultados incluem informações sobre força trativa, velocidade angular e linear, forças de arrasto, resistência ao rolamento e a força final do veículo. 
 
-        Retorna:
-        ------------
-        - Força Trativa:                    Força exercida pelo veículo na superfície de contato, em Newtons (N).
-        - Velocidade Angular:               Velocidade angular das rodas ou do sistema de transmissão, em radianos por segundo (rad/s).
-        - Velocidade Linear:                Velocidade do veículo em quilômetros por hora (Km/h).
-        - Força de Arrasto:                 Força que age contra o movimento do veículo devido à resistência do ar, em Newtons (N).
-        - Resistência ao Rolamento:         Força que age contra o movimento do veículo devido ao atrito dos pneus com a superfície, em Newtons (N).
-        - Força Final:                      Força resultante que o veículo exerce, considerando a força trativa, a força de arrasto e a resistência ao rolamento, em Newtons (N).
-    
-        Example:
-        ------
-        dt_model = Drivetrain(cgx = 853, cgy = 294,  massa = 347, entre_eixos = 1567, coeficiente_atrito = 0.9, raio_pneu = 259, aceleracao_ideal = 1.2, reducao_primaria = 2.12, reducao_unica = 2.76, rpm = 2625, torque= 244.14, cp = 2.22)
+            Retorna:
+            ------------
+            - Força Trativa:                    Força exercida pelo veículo na superfície de contato, em Newtons (N).
+            - Velocidade Angular:               Velocidade angular das rodas ou do sistema de transmissão, em radianos por segundo (rad/s).
+            - Velocidade Linear:                Velocidade do veículo em quilômetros por hora (Km/h).
+            - Força de Arrasto:                 Força que age contra o movimento do veículo devido à resistência do ar, em Newtons (N).
+            - Resistência ao Rolamento:         Força que age contra o movimento do veículo devido ao atrito dos pneus com a superfície, em Newtons (N).
+            - Força Final:                      Força resultante que o veículo exerce, considerando a força trativa, a força de arrasto e a resistência ao rolamento, em Newtons (N).
         
-        dt_model.print_car_performance()       
-        '''        
-        
-        performance, rpm = Drivetrain.CarPerformance(self)
-        
-        print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
-        
-        for param in performance:
-            print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}")
-        
-        print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
-        for param in performance:
-            print(f"{param['fa']}\t{param['rr']}\t{param['forca_final']}")
+            Example:
+            ------
+            dt_model = Drivetrain(cgx = 853, cgy = 294,  massa = 347, entre_eixos = 1567, coeficiente_atrito = 0.9, raio_pneu = 259, aceleracao_ideal = 1.2, reducao_primaria = 2.12, reducao_unica = 2.76, rpm = 2625, torque= 244.14, cp = 2.22)
+            
+            dt_model.printCarPerformance()       
+            '''        
+            
+            rpm = self.rpm
+            new_rpm = self.new_rpm
+            
+            performance, rpm_faixa = Drivetrain.CarPerformance(self)
+            
+            print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
+            
+            for param in performance:
+                print(f"{param['forca_trativa']}\t{param['va']}\t{param['velocidade_linear']}")
+            
+            print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
+            for param in performance:
+                print(f"{param['fa']}\t{param['rr']}\t{param['forca_final']}")
+
+            self.rpm = rpm
+            self.new_rpm = new_rpm
 
     def HalfShaftsSizing(self, fsi=1.25, tet=786, tec=471.6, dif=1):
         
@@ -1740,275 +1746,6 @@ class Drivetrain:
         print("Fator de segurança ideal:", fsi)
         print("Fator de segurança obtido:", fator_seguranca_obtido)
         print("Fator de segurança para 1 polegada:", fs1p)
-
-    def drivetrainExample():
-        dt_model = Drivetrain(
-            cgx = 853,  # mm
-            cgy = 294,  # mm
-            massa = 347,  # kg
-            entre_eixos = 1567,  # mm
-            coeficiente_atrito = 0.9 , # coeficiente de atrito
-            raio_pneu = 259,  # mm
-            aceleracao_ideal = 1.2,  # g
-            reducao_primaria = 2.12,  # redução primária
-            reducao_unica = 2.76,
-            rpm = 0,
-            torque= 244.14,
-            cp = 2.22)
-        
-        #dt_model.show_results()
-        #Performance pontual do veículo
-        #dt_model.print_car_performance()
-        
-        #dt_model.HalfShaftsSizing()
-        
-        dt_model.new_rpm = 2635
-        
-        #Exemplo em lista
-        #dt_model.print_car_performance()    
-                
-        #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
-        performance_veiculo, rpm = dt_model.CarPerformance()
-
-        #Filtrando a velocidade angular
-        velocidade_angular = [dado['va'] for dado in performance_veiculo]
-        
-        for dado in velocidade_angular:
-            print(f'velocidade: {dado}')
-
-
-
-class Tire:
-
-    """Modelo de Pneu.
-
-    Esta classe representa um modelo de pneu com vários parâmetros para calcular
-    forças de pneus, cinemática e plotar gráficos relevantes. O modelo se baseia
-    nas equações descritas em "Tire and Vehicle Dynamics" de Hans B. Pacejka, um 
-    dos principais recursos sobre a dinâmica de pneus.
-    """
-    
-    def __init__(self, tire_Fz=None, tire_Sa=None, tire_Ls=None, tire_friction_coef=None, tire_Ca=0, B0=0, B1=0, 
-                B2=1, B3=1, omega=315, slip_angle_start=-9, slip_angle_end=9, angle_step=0.5, WB=1500, rear_axle_length=1600, track_y=0, tire_k=0):
-        # Inicializando parâmetros para o modelo de pneu
-        self.tire_Fz = tire_Fz  # Carga vertical no pneu [N]
-        self.tire_Sa = tire_Sa  # Ângulo de deslizamento lateral do pneu [rad]
-        self.tire_Ls = tire_Ls  # Escorregamento longitudinal do pneu [Adimensional]
-        self.tire_type = 'Default'  # Tipo de pneu
-        self.tire_friction_coef = tire_friction_coef  # Coeficiente de fricção entre pneu e pista
-        self.tire_Ca = tire_Ca  # Ângulo de camber do pneu
-        
-
-        # Comprimentos das barras do mecanismo de quatro barras
-        self.L0 = B0  # Comprimento da barra de direção
-        self.L1 = B1  # Comprimento do braço de direção
-        self.L2 = B2  # Comprimento da bitola
-        self.L3 = B3  # Comprimento do braço de direção
-
-        # Ângulo de orientação da barra longitudinal em relação ao eixo horizontal
-        self.alpha = np.radians(omega)
-
-        # Array de ângulos de deslizamento lateral do pneu em graus
-        self.theta2 = np.arange(slip_angle_start + 90, slip_angle_end + 91, angle_step)
-
-        # Convertendo os ângulos de deslizamento lateral do pneu para radianos
-        self.theta2_rad = np.radians(self.theta2)
-        self.angle = self.theta2_rad[0]
-
-        # Inicialização das listas de resultados para armazenar dados ao longo do cálculo
-        self.AC = []  # Lista para armazenar AC
-        self.beta = []  # Lista para armazenar beta
-        self.psi = []  # Lista para armazenar psi
-        self.lamda = []  # Lista para armazenar lambda
-        self.theta3 = []  # Lista para armazenar theta3
-        self.theta4 = []  # Lista para armazenar theta4
-        self.Ox, self.Oy = 0, 0  # Lista para armazenar coordenadas de O
-        self.Ax, self.Ay = [], []  # Listas para armazenar coordenadas de A
-        self.Bx, self.By = [], []  # Listas para armazenar coordenadas de B
-        self.Cx, self.Cy = B0, 0 # Listas para armazenar coordenadas de C
-        self.w = []  # Lista para armazenar w
-        self.om2, self.om4 = [], []  # Listas para armazenar om2 e om4
-        self.alpha_dot = []  # Lista para armazenar alpha_dot
-        self.outer_slip = []  # Lista para armazenar ângulos de deslizamento lateral externo
-        self.inner_slip = []  # Lista para armazenar ângulos de deslizamento lateral interno
-        self.static_slip_angle = None  # Variável para armazenar o ângulo de deslizamento estático (inicialmente não definido)
-
-        # Coordenadas da barra longitudinal (entre-eixos)
-        self.WB = WB  # Entre-eixos (wheelbase) fixo
-        self.rear_axle_length = rear_axle_length  # Comprimento do eixo traseiro fixo
-        self.rear_axle_center = (B0 / 2, 0)
-
-        # Entradas de rigidez do pneu
-        self.track_y = track_y
-        self.tire_k = tire_k
-
-    def Tire_forces(self, params):
-        """Calcular Forças do Pneu.
-
-        Calcula as forças do pneu e o momento de auto-alinhamento usando os parâmetros do modelo Pacejka.
-
-        Parâmetros
-        ----------
-        params : tuple
-        >>> Os parâmetros para o modelo de Pacejka.
-
-        Returns:
-        -------
-        tuple : (float, float, float)
-        >>> Força lateral, momento de auto-alinhamento e força longitudinal do pneu.
-
-        Examples:
-        --------
-        >>> tire = Tire(tire_Fz=5000, tire_Sa=0.1, tire_Ls=0.05, tire_friction_coef=1.0, tire_Ca=0.02)
-        >>> tire.Tire_forces((1.5, 1.3, 1.1, 1.0, 2000, 3000))
-        (400.0, 10.3, 150.0)
-        
-        References
-        ----------
-        Pacejka, H. B. (2002). Tire and Vehicle Dynamics. Elsevier.
-        """
-
-        # Desembalando os parâmetros de Pacejka
-        E, Cy, Cx, Cz, c1, c2 = params
-
-        # Calculando parâmetros intermediários
-        Cs = c1 * np.sin(2 * np.arctan(self.tire_Fz / c2))
-        D = self.tire_friction_coef * self.tire_Fz
-        Bz = Cs / (Cz * D)
-        Bx = Cs / (Cx * D)
-        By = Cs / (Cy * D)
-
-        # Calculando a força lateral do pneu
-        tire_lateral_force = D * np.sin(Cy * np.arctan(By * self.tire_Sa - E * (By * self.tire_Sa - np.arctan(By * self.tire_Sa))))
-
-        # Calculando a força longitudinal do pneu
-        tire_longitudinal_force = D * np.sin(Cx * np.arctan(9 * Bx * self.tire_Ls - E * (Bx * self.tire_Ls - np.arctan(Bx * self.tire_Ls))))
-
-        # Calculando o momento de auto-alinhamento do pneu
-        tire_auto_align_moment = D * np.sin(Cz * np.arctan(Bz * self.tire_Sa - E * (Bz * self.tire_Sa - np.arctan(Bz * self.tire_Sa))))
-
-        # Calculando a força de camber
-        camber_thrust = D * np.sin(Cy * np.arctan(By * self.tire_Ca))
-
-        # Retornando as forças calculadas e o momento de auto-alinhamento
-        return tire_lateral_force + 0.5 * camber_thrust, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
-
-    @staticmethod
-    def slip_ratio_1(velocidade_angular, raio_pneu):
-        """Calcular Razão de Escorregamento.
-
-        Calcula a razão de escorregamento com base na velocidade angular e no raio do pneu.
-
-        Parâmetros
-        ----------
-        velocidade_angular : float
-        >>> A velocidade angular do pneu.
-        raio_pneu : float
-        >>> O raio do pneu.
-
-        Returns:
-        -------
-        slip_ratio : float
-        >>> A razão de escorregamento calculada.
-
-        Examples:
-        --------
-        >>> tire = Tire()
-        >>> tire.slip_ratio_1(100, 0.3)
-        0.33333333333333337
-        
-        References
-        ----------
-        Curso do Bob, Módulo 2, 2.6.
-        """
-
-        velocidade_linear = initial_speed
-        value = (velocidade_angular * raio_pneu / velocidade_linear) - 1
-
-        return value
-
-    @staticmethod
-    def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):
-        """Mostrar Força Longitudinal vs. RPM.
-
-        Plota a força longitudinal em relação ao RPM.
-
-        Parâmetros
-        ----------
-        rpm_values : array-like
-        >>> Os valores de RPM.
-        tire_longitudinal_force : array-like
-        >>> Os valores da força longitudinal.
-
-        Returns:
-        -------
-        None
-        >>> O método plota o gráfico e não retorna nada.
-
-        Examples:
-        --------
-        >>> tire = Tire()
-        >>> tire.show_longitudinal_rpm([1000, 2000], [1500, 1600])
-        """
-
-        print("Valores do Slip Ratio: ")
-        for dado in slip_ratio:
-            print(dado)
-            
-        plt.figure(figsize=(15, 5))
-        
-        plt.subplot(1, 2, 1)
-        plt.plot(rpm_values, slip_ratio, label = 'Slip Ratio', color = 'blue')
-        plt.xlabel('RPM')
-        plt.ylabel('Slip Ratio')
-        plt.title('Slip Ratio x RPM') 
-        plt.legend()
-        
-        plt.subplot(1, 2, 2)
-        plt.plot(rpm_values, velocidade_angular, label = 'Velocidade Angular', color = 'red')
-        plt.xlabel('RPM')
-        plt.ylabel('Velocidade Angular (rad/s)')
-        plt.title('Velocidade Angular x RPM')
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-        
-    def plot_graph(self, tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces, tire_lateral_experimental=None, tire_auto_align_experimental=None, angles=None, ratio=None):
-
-        # Definindo um tamanho para a figura
-        plt.figure(figsize=(20, 7))
-
-        # Plotagem força lateral
-        plt.subplot(1, 3, 1)
-        plt.plot(self.tire_Sa, tire_lateral_forces, label='Curva Otimizada')
-        plt.scatter(angles, tire_lateral_experimental, color='red', label='Dados Experimentais')
-        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
-        plt.ylabel('Força Lateral do Pneu (N)')
-        plt.title('Curva Otimizada com os Dados Experimentais')
-        plt.legend()
-        plt.grid(True)
-
-        # Plotagem torque auto-alinhante
-        plt.subplot(1, 3, 2)
-        plt.plot(self.tire_Sa, tire_auto_align_moment, label='Curva Otimizada')
-        plt.scatter(angles, tire_auto_align_experimental, color='blue', label='Dados Experimentais')
-        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
-        plt.ylabel('Torque auto-alinhante (N.m)')
-        plt.title('Curva Otimizada com os Dados Experimentais')
-        plt.legend()
-        plt.grid(True)
-
-        # Plotagem força longitudinal
-        plt.subplot(1, 3, 3)
-        plt.plot(self.tire_Ls, tire_longitudinal_forces, label='Curva Sem Otimizar')
-        plt.xlabel('Taxa de Escorregamento Longitudinal (Admensional)')
-        plt.ylabel('Força Longitudinal (N)')
-        plt.title('Força Longitudinal - Sem Dados Experimentais')
-        plt.legend()
-        plt.grid(True)
-
-        plt.tight_layout(pad=3.0)  # Aumentando a distância entre os subplots
-        plt.show()
 
 class BrakeSystem:
     '''
@@ -2474,8 +2211,6 @@ class BrakeSystem:
         brake = BrakeSystem(params)
         brake.print_resultados(pedal_forces)
         brake.show_graph(pedal_force=pedal_forces, time_intervals=time_intervals)
-
-
 
 def dynamics_example(pedal_forces, rpm, torque, slip_angle):
         
