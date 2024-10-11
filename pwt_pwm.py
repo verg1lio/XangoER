@@ -24,8 +24,9 @@ class Motor:
         self.lso = 0.1 * self.ls  # Stator leakage inductance (henries)
         self.f_onda_p = 50
         self.f_onda_m = 5
-        self.tempo_pwm = np.linspace(0, 1, 1000)  # Vetor de tempo    
-
+        self.q1 = 0
+        self.q2 = 1
+        self.q3 = 0
         self.jm = jm  # Moment of inertia (kg*m^2)
         self.kf = kf  # Friction coefficient (N*m*s)
         self.cte_tempo_mec = self.jm / self.kf  # Mechanical time constant (s)
@@ -366,42 +367,45 @@ class Motor:
         plt.grid(True)
         plt.legend()
         plt.show()
+        
+        
+        
+
     
     def controle_pwm(self):
+        t_pwm = np.linspace(0, 2, 1000)  
 
-        t_pwm = np.linspace(0, 1, 1000)  #
-        self.teta_pwm = 2 * np.pi * self.f_onda_m * t_pwm  
+        teta_pwm = 2 * np.pi * self.f_onda_m * t_pwm
+
+        vs2_pwm = self.Vs * np.cos(teta_pwm - self.pi23)  # Tensão na fase 2
+        vs3_pwm = self.Vs * np.cos(teta_pwm + self.pi23)  # Tensão na fase 3
+
         
-        vs2_pwm = self.Vs * np.cos(self.teta_pwm - self.pi23) 
-        vs3_pwm = self.Vs * np.cos(self.teta_pwm + self.pi23)
         vsq_pwm = self.rq23 * (vs2_pwm * self.rq3 / 2 - vs3_pwm * self.rq3 / 2)
 
-        v_referencia = np.sin(2 * np.pi * self.f_onda_p * t_pwm) #
-        sinal_pwm = (vsq_pwm >= v_referencia).astype(int)  
-        
-        # Gráfico do PWM
+        # Geração da onda portadora triangular:
+        carrier_period = 1 / self.f_onda_p  
+        carrier_wave = 1 - 2 * np.abs((t_pwm % carrier_period) * self.f_onda_p - 0.5)  # Onda triangular
+
+       
+        sinal_pwm = (vsq_pwm >= carrier_wave).astype(int)
+
+        # Gráficos dos resultados
         plt.figure(figsize=(10, 8))
+
+        # Gráfico do sinal PWM puro
         plt.subplot(4, 1, 1)
-        plt.step(t_pwm, sinal_pwm, label='PWM')
+        plt.step(t_pwm, sinal_pwm, label='PWM', where='post')
         plt.title('Sinal PWM para controle do torque')
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
 
-        # Gráfico do sinal de referência
+        # Gráfico do sinal de referência vsq (vsq_pwm)
         plt.subplot(4, 1, 2)
-        plt.plot(t_pwm, vsq_pwm, label='Onda de referência')
-        plt.title('Sinal de Referência')
+        plt.plot(t_pwm, carrier_wave, label='Onda portadora')
+        plt.title('Sinal da onda portadora')
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
-
-        # Gráfico do sinal PWM da Fase vsq junto com a modulante vsq
-        plt.subplot(4, 1, 3)
-        plt.step(t_pwm, sinal_pwm, label='PWM')
-        plt.plot(t_pwm, vsq_pwm, label='Onda de Referência')
-        plt.title('Sinal PWM e Referência')
-        plt.xlabel('Tempo [s]')
-        plt.ylabel('Tensão [V]')
-        plt.legend()
 
         plt.tight_layout()
         plt.show()
