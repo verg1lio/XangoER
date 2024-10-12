@@ -16,14 +16,14 @@ class Estrutura:
         self.num_elements = len(elements)                                    #Número de elementos
         self.nodes = nodes                                                   #Matriz de nós com suas posições
         self.num_nodes = len(nodes)                                          #Número total de nós
-        self.massa = m                                                       #Massa do carro (Kg)
+        self.massa = 30                                                      #Massa do carro (Kg)
         self.momento_inercia_direcao = Id                                    #Momento de inércia em relação à direção (kg.m^2)
         self.momento_inercia_plano = Ip                                      #Momento de inércia em relação ao plano (kg.m^2)
         self.num_dofs_per_node = 6                                           #6 graus de liberdade por nó
         self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
         self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
-        self.num_modes = 50                                                  #Número de modos de vibração a serem retornados
+        self.num_modes = 6                                                  #Número de modos de vibração a serem retornados
 
     def calcular_comprimento(self, element):                                 #Função auxiliar para cálculo de comprimento dos elementos
         node1, node2 = element
@@ -73,8 +73,8 @@ class Estrutura:
         c2 = G * J / L_e
         c3 = E * I / L_e**3             #Euler-Bernoulli
         c4 = (E*I)/(L_e**3*(1+Phi))     #Timoshenko
-        t1=(4+Phi)
-        t2=(2-Phi)
+        t1 = (4+Phi)
+        t2 = (2-Phi)
         d1 = rho*A*L_e
         d2 = (I*L_e)/6
         d3 = (rho*A*L_e)/420
@@ -224,23 +224,14 @@ class Estrutura:
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
 #Coordenadas dos nós (x, y, z)
-nodes = np.array([
-    (0, 0, 0),
-    (0, 0.375, 0),
-    (0, 0.700, 0),
-    (1.500, 0.375, 0),
-    (1.500, 0, 0),
-    (1.500, 0.700, 0)
-])  
+i = 1.7
+j = 1.5
+k = 1.8
+nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 
 #Conectividade dos elementos (índices dos nós)
-elements = [
-    (0, 1),  # Elemento entre os nós 0 e 1
-    (1, 2),  # Elemento entre os nós 1 e 2
-    (4, 3),  # Elemento entre os nós 4 e 3
-    (3, 5),  # Elemento entre os nós 3 e 5
-    (1, 3)  # Elemento entre os nós 1 e 3
-]
+elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
+
 
 #Criar a estrutura e montar as matrizes de rigidez e massa globais
 #Dados: n = len(nodes), 
@@ -381,7 +372,7 @@ for mode_idx in range(len(autovalores)):
             displacements[j, 1] = mode_shape[2 * j + 1]
             displacements[j, 2] = 0
 
-    deformed_nodes = np.array(nodes) + displacements
+    deformed_nodes = np.array(nodes) + displacements*5
 
     for node1, node2 in elements:
         x = [deformed_nodes[node1][0], deformed_nodes[node2][0]]
@@ -394,6 +385,8 @@ for mode_idx in range(len(autovalores)):
     ax.set_zlabel('Z')
 
     plt.tight_layout()
+    plt.xlim([-20,120])
+    plt.ylim([-45,60])
     plt.show()
 
 estrutura.Mesh()
