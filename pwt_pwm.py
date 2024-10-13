@@ -9,7 +9,7 @@ __all__ = ["Motor", "ModulacaoEscalar", "Peso"]
 
 
 class Motor:
-    def __init__(self, rs, rr, ls, lr, mrs, jm, kf):
+    def __init__(self, rs, rr, ls, lr, mrs, jm, kf, mu):
         # Constants
         self.pi23 = 2 * np.pi / 3
         self.rq23 = np.sqrt(2 / 3)
@@ -33,7 +33,10 @@ class Motor:
         self.idt = 1 / (self.ls * self.lr - self.msr * self.msr)  # Inverse of the determinant
         self.p = 2  # Number of pole pairs
         self.amsr = self.p * self.idt * self.msr  # Constant for torque calculation
-
+        self.mu = mu  # Modulation 1
+        self.t_amostragem = np.linspace(0, 1, 1000)
+        self.frequencia = 60 # Frequencia em Hz
+        self.f_chaveamento = 20
         # Simulation parameters
         self.h = 1.e-5  # Time step (s)
         self.tmax = 1  # Maximum simulation time (s)
@@ -93,6 +96,7 @@ class Motor:
         self.irq = 0  # Quadrature-axis rotor current (A)
         self.iso = 0  # Zero-sequence stator current (A)
         self.rg = 0  # Rotor angle (rad)
+        self.e_star = self.Vs
 
     def source_voltage(self,):
         self.tete += self.h * self.ws
@@ -368,51 +372,102 @@ class Motor:
         plt.legend()
         plt.show()
         
-        
-        
+     
+    def chaves(self):
+            
+        if self.q1 == 1: chave_1 = True # Retorno chave 1 fechada
+        else: chave_1 = False # Retorno chave 1 aberta
 
+        if self.q2 == 1: chave_2 = True # Retorno chave 2 fechada
+        else: chave_2 = False # Retorno chave 2 aberta
+
+        if self.q3 == 1: chave_3 = True # Retorno chave 3 fechada
+        else: chave_3 = False # Retorno chave 3 aberta
+
+        q1_bar = 1 - self.q1
+        q2_bar = 1 - self.q2
+        q3_bar = 1 - self.q3
+            
+        if q1_bar == 1: chave_4 = True # Retorno chave 1_bar fechada
+        else: chave_4 = False # Retorno chave 1_bar aberta
+
+        if q2_bar == 1: chave_5 = True # Retorno chave 2_bar fechada
+        else: chave_5 = False # Retorno chave 2_bar aberta
+
+        if q3_bar == 1: chave_6 = True # Retorno chave 3_bar fechada
+        else: chave_6 = False # Retorno chave 3_bar aberta    
+
+        return print(f'A configuração é C1={chave_1}, C2={chave_2}, C3={chave_3}, C4={chave_4}, C5={chave_5}, C6={chave_6}')
+    
     
     def controle_pwm(self):
-        t_pwm = np.linspace(0, 2, 1000)  
-
-        teta_pwm = 2 * np.pi * self.f_onda_m * t_pwm
-
-        vs2_pwm = self.Vs * np.cos(teta_pwm - self.pi23)  # Tensão na fase 2
-        vs3_pwm = self.Vs * np.cos(teta_pwm + self.pi23)  # Tensão na fase 3
-
         
-        vsq_pwm = self.rq23 * (vs2_pwm * self.rq3 / 2 - vs3_pwm * self.rq3 / 2)
+        # Define o passo de tempo do controlador
+        self.t_pwm = np.linspace(0, 2, 1000)  
 
-        # Geração da onda portadora triangular:
-        carrier_period = 1 / self.f_onda_p  
-        carrier_wave = 1 - 2 * np.abs((t_pwm % carrier_period) * self.f_onda_p - 0.5)  # Onda triangular
-
+        # Tensões de entrada
+        self.v1 = self.Vs * np.sin(2 * np.pi * self.t_pwm)
+        self.v2 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 2 * np.pi / 3)
+        self.v3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3)
        
-        sinal_pwm = (vsq_pwm >= carrier_wave).astype(int)
+        # Calculo max e min das tensoes        
+        self.vN0max_star = (self.Vs / 2) - np.maximum.reduce([self.v1, self.v2, self.v3])
+        self.vN0mim_star = -self.Vs / 2 - np.minimum.reduce([self.v1, self.v2, self.v3])
+        
+        # Tensão homopolar
+        self.vN0_star =  self.mu * self.vN0max_star + (1 - self.mu) * self.vN0mim_star  
+        
+        # Tensões moduladas
+        self.v10 = self.v1 + self.vN0_star
+        self.v20 = self.v2 + self.vN0_star
+        self.v30 = self.v3 + self.vN0_star
+        
+        # Geração da onda portadora triangular:
+        periodo_port = 1 / self.f_onda_p  
+        onda_port = 1 - 2 * np.abs((self.t_pwm % periodo_port) * self.f_onda_p - 0.5)   # Onda triangular
+
+        #Sinal pwm
+        PWM_signal = np.where(self.v10 >= onda_port, self.Vs, 0)
 
         # Gráficos dos resultados
         plt.figure(figsize=(10, 8))
 
-        # Gráfico do sinal PWM puro
+        # Tensão modulada
         plt.subplot(4, 1, 1)
-        plt.step(t_pwm, sinal_pwm, label='PWM', where='post')
-        plt.title('Sinal PWM para controle do torque')
+        plt.plot(self.t_pwm, self.v10, label='V10', color='black')
+        plt.title('Tensão modulada')
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
+        plt.legend()
 
-        # Gráfico do sinal de referência vsq (vsq_pwm)
+
+        # Onda triangular portadora
         plt.subplot(4, 1, 2)
-        plt.plot(t_pwm, carrier_wave, label='Onda portadora')
+        plt.plot(self.t_pwm, onda_port, label='Onda portadora')
         plt.title('Sinal da onda portadora')
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
 
-        plt.tight_layout()
-        plt.show()
+        
+        # Gráfico do sinal PWM puro
+        plt.subplot(4, 1, 3)
+        plt.step(self.t_pwm, PWM_signal, label='PWM', color='red')
+        plt.title('Sinal PWM para controle do torque')
+        plt.xlabel('Tempo [s]')
+        plt.ylabel('Tensão [V]')
 
-    
+        # Onda de referência
+        plt.subplot(4, 1, 4)
+        plt.step(self.t_pwm, self.v1, label='Tensão 1', color='green')
+        plt.title('Tensão de referência')
+        plt.xlabel('Tempo [s]')
+        plt.ylabel('Tensão [V]')
+
+        plt.tight_layout()
+        plt.show()   
+        
     def example():
-        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
+        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, 0.5)
         motor.simulate()
         # motor.plot_motor()
         # motor.plot_bode()
@@ -420,7 +475,7 @@ class Motor:
         # motor.print_state_space()
         # motor.step_response()
         motor.controle_pwm()
-
+        motor.chaves()
 
         
 
