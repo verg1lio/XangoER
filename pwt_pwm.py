@@ -37,6 +37,10 @@ class Motor:
         self.t_amostragem = np.linspace(0, 1, 1000)
         self.frequencia = 60 # Frequencia em Hz
         self.f_chaveamento = 20
+        self.magnitudes = np.array([10, 3, 2, 1, 0.5])  # Exemplo de magnitudes das harmônicas
+# Exemplo de magnitudes das harmônicas em percentual
+
+
         # Simulation parameters
         self.h = 1.e-5  # Time step (s)
         self.tmax = 1  # Maximum simulation time (s)
@@ -465,7 +469,41 @@ class Motor:
 
         plt.tight_layout()
         plt.show()   
+   
+
+   
+
+    def calcular_thd(self):
+        # A componente fundamental será a primeira magnitude (index 0)
+        fundamental = self.magnitudes[0]
         
+        # Soma das harmônicas a partir do índice 1 até o final
+        harmonics_sum = np.sqrt(np.sum(self.magnitudes[1:]**2))
+        
+        # Cálculo do THD
+        thd = harmonics_sum / fundamental
+        
+        # Exibição do THD
+        
+        
+        return print(f"THD: {thd*100:.2f}%") # Multiplica por 100 para exibir em % e retorna o thd
+
+
+    
+    def calcular_por_mu(self):
+        self.mu_values = np.linspace(0, 10e-1, 1)  # Variação de mu
+        
+
+        for mu in self.mu_values:
+            self.mu = mu  # Atualiza o valor de mu
+            self.controle_pwm()  # Atualiza o PWM com o novo mu
+            self.calcular_thd()
+
+         
+
+        
+    
+
     def example():
         motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, 0.5)
         motor.simulate()
@@ -476,6 +514,8 @@ class Motor:
         # motor.step_response()
         motor.controle_pwm()
         motor.chaves()
+        motor.calcular_por_mu()
+        motor.calcular_thd()
 
         
 
