@@ -9,7 +9,7 @@ __all__ = ["Motor", "ModulacaoEscalar", "Peso"]
 
 
 class Motor:
-    def __init__(self, rs, rr, ls, lr, mrs, jm, kf, mu):
+    def __init__(self, rs, rr, ls, lr, mrs, jm, kf, q1, q2, q3, valor_mu):
         # Constants
         self.pi23 = 2 * np.pi / 3
         self.rq23 = np.sqrt(2 / 3)
@@ -22,23 +22,18 @@ class Motor:
         self.lr = lr  # Rotor inductance (henries)
         self.msr = mrs  # Mutual inductance between stator and rotor (henries)
         self.lso = 0.1 * self.ls  # Stator leakage inductance (henries)
-        self.f_onda_p = 50
-        self.f_onda_m = 5
-        self.q1 = 0
-        self.q2 = 1
-        self.q3 = 0
+        self.f_onda_p = 50 # Frequência da onda portadora do sinal PWM
+        self.f_onda_m = 5 # Frequência da onda modulante do sinal PWM
+        self.q1 = q1 # Chave de comutação do inversor
+        self.q2 = q2 # Chave de comutação do inversor
+        self.q3 = q3 # Chave de comutação do inversor
         self.jm = jm  # Moment of inertia (kg*m^2)
         self.kf = kf  # Friction coefficient (N*m*s)
         self.cte_tempo_mec = self.jm / self.kf  # Mechanical time constant (s)
         self.idt = 1 / (self.ls * self.lr - self.msr * self.msr)  # Inverse of the determinant
         self.p = 2  # Number of pole pairs
         self.amsr = self.p * self.idt * self.msr  # Constant for torque calculation
-        self.mu = mu  # Modulation 1
-        self.t_amostragem = np.linspace(0, 1, 1000)
-        self.frequencia = 60 # Frequencia em Hz
-        self.f_chaveamento = 20
-        self.magnitudes = np.array([10, 3, 2, 1, 0.5])  # Exemplo de magnitudes das harmônicas
-# Exemplo de magnitudes das harmônicas em percentual
+        self.valor_mu = valor_mu  # Escalar
 
 
         # Simulation parameters
@@ -401,7 +396,7 @@ class Motor:
         if q3_bar == 1: chave_6 = True # Retorno chave 3_bar fechada
         else: chave_6 = False # Retorno chave 3_bar aberta    
 
-        return print(f'A configuração é C1={chave_1}, C2={chave_2}, C3={chave_3}, C4={chave_4}, C5={chave_5}, C6={chave_6}')
+        return print(f'A configuração de chaves do inversor é: C1={chave_1}, C2={chave_2}, C3={chave_3}, C4={chave_4}, C5={chave_5}, C6={chave_6}')
     
     
     def controle_pwm(self):
@@ -413,13 +408,18 @@ class Motor:
         self.v1 = self.Vs * np.sin(2 * np.pi * self.t_pwm)
         self.v2 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 2 * np.pi / 3)
         self.v3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3)
+
+        # Correntes
+        self.i1 = self.Vs * np.sin(2 * np.pi * self.t_pwm)
+        self.i2 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 2 * np.pi / 3)
+        self.i3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3)
        
         # Calculo max e min das tensoes        
         self.vN0max_star = (self.Vs / 2) - np.maximum.reduce([self.v1, self.v2, self.v3])
         self.vN0mim_star = -self.Vs / 2 - np.minimum.reduce([self.v1, self.v2, self.v3])
         
         # Tensão homopolar
-        self.vN0_star =  self.mu * self.vN0max_star + (1 - self.mu) * self.vN0mim_star  
+        self.vN0_star =  self.valor_mu * self.vN0max_star + (1 - self.valor_mu) * self.vN0mim_star  
         
         # Tensões moduladas
         self.v10 = self.v1 + self.vN0_star
@@ -428,11 +428,22 @@ class Motor:
         
         # Geração da onda portadora triangular:
         periodo_port = 1 / self.f_onda_p  
-        onda_port = 1 - 2 * np.abs((self.t_pwm % periodo_port) * self.f_onda_p - 0.5)   # Onda triangular
+        onda_port = 1 - 2 * np.abs((self.t_pwm % periodo_port) * self.f_onda_p - 0.5)  
 
         #Sinal pwm
         PWM_signal = np.where(self.v10 >= onda_port, self.Vs, 0)
 
+         #Correntes
+        plt.figure(figsize=(8, 4))
+        plt.plot(self.t_pwm, self.i1, label='Current PWM 1 (A)')
+        plt.plot(self.t_pwm, self.i2, label='Current PWM 2 (A)')
+        plt.plot(self.t_pwm, self.i3, label='Current PWM 3 (A)')
+        plt.title('Currents PWM (A)')
+        plt.legend()
+        plt.xlabel('Time (s)')
+        plt.ylabel('Current PWM (A)')
+        
+        
         # Gráficos dos resultados
         plt.figure(figsize=(10, 8))
 
@@ -460,44 +471,28 @@ class Motor:
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
 
+
         # Onda de referência
         plt.subplot(4, 1, 4)
         plt.step(self.t_pwm, self.v1, label='Tensão 1', color='green')
         plt.title('Tensão de referência')
         plt.xlabel('Tempo [s]')
         plt.ylabel('Tensão [V]')
-
+        
         plt.tight_layout()
         plt.show()   
-   
-
-   
-
-    def calcular_thd(self):
-        # A componente fundamental será a primeira magnitude (index 0)
-        fundamental = self.magnitudes[0]
-        
-        # Soma das harmônicas a partir do índice 1 até o final
-        harmonics_sum = np.sqrt(np.sum(self.magnitudes[1:]**2))
-        
-        # Cálculo do THD
-        thd = harmonics_sum / fundamental
-        
-        # Exibição do THD
-        
-        
-        return print(f"THD: {thd*100:.2f}%") # Multiplica por 100 para exibir em % e retorna o thd
-
 
     
-    def calcular_por_mu(self):
+    def exec_pwm(self):
         self.mu_values = np.linspace(0, 10e-1, 1)  # Variação de mu
         
-
-        for mu in self.mu_values:
-            self.mu = mu  # Atualiza o valor de mu
-            self.controle_pwm()  # Atualiza o PWM com o novo mu
-            self.calcular_thd()
+        if self.valor_mu != 1:
+            self.controle_pwm()  
+        else:
+            for mu in self.mu_values:
+                
+                self.valor_mu = mu  
+                self.controle_pwm()  
 
          
 
@@ -505,17 +500,16 @@ class Motor:
     
 
     def example():
-        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, 0.5)
+        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) # Varia o valor de mu entre 0 e 1
         motor.simulate()
         # motor.plot_motor()
         # motor.plot_bode()
         # motor.plot_nyquist() 
         # motor.print_state_space()
         # motor.step_response()
-        motor.controle_pwm()
         motor.chaves()
-        motor.calcular_por_mu()
-        motor.calcular_thd()
+        motor.exec_pwm()
+       
 
         
 
