@@ -3,12 +3,17 @@ import matplotlib.pyplot as plt
 from scipy import signal
 import control as ctl
 
+'''
+Esse eu fiz uma função para captar o periodo certinho do grafico oscilante para o metodo ZN
+coloquei os parametros tudo certinho, e ta um porre #odio
+Tem também, um "switch-case" para os graficos, altera só um dos char e escolhe o grafico
+e escolher se é controle PI ou PID (lembrando de comentar o termo derivativo)
+'''
 
-'''
-Rapaz, esse ta controlando bunitinho, erro ali entre 0 a 6, velocidade colando com a desejada, [
-mas os outros graficos de torque e conjugado estão com oscilações de grandes amplitudes 
-'''
 __all__ = ["Motor", "ModulacaoEscalar", "Peso"]
+
+escolha_grafico = ['m'] # c - currents, v - voltages, f -fluxes, z - zero current, m - multiples
+escolha_controle = 'PID' # 'PI' or 'PID'
 
 
 class Motor:
@@ -71,8 +76,7 @@ class Motor:
         self.torque_mecanico = []  # Mechanical torque (N*m)
 
         self.erros = []
-        self.wm_lista = []
-
+       
     def reset_initial_conditions(self):
         # Initialize conditions
         self.cl = 0  # Load torque (N*m)
@@ -97,12 +101,20 @@ class Motor:
         self.iso = 0  # Zero-sequence stator current (A)
         self.rg = 0  # Rotor angle (rad)
 
-        self.P_cr = 14.308099999627496
-        # self.K_p = 0.45*1.e-3 # Ganho proporcional PI
-        self.K_p = 0.6*1.e-3 # Ganho proporcional PID
-        # self.K_i = self.K_p*1.2/self.P_cr # Ganho integrativo PI
-        self.K_i = self.K_p/0.5*self.P_cr # Ganho integrativo
-        self.K_d = self.K_p*0.125*1.e-2*self.P_cr # Ganho derivativo
+        #valor oscilante no caso K_cr #self.K_p = 1.e-3 # Ganho proporcional PID
+        #Controller parameters
+        self.P_cr = 0.4125 #periodo critico
+        if escolha_controle == 'PID':
+            self.K_cr = 1.e-3/0.5 # ganho crítico
+            self.K_p = 0.6*self.K_cr # Ganho proporcional PID
+            self.K_i = 0.5*self.P_cr # Ganho integrativo
+            self.K_d = 0.125*self.P_cr # Ganho derivativo
+
+        elif escolha_controle == 'PI':
+            self.K_cr = 1.e-3/0.5 # ganho crítico
+            self.K_p = 0.45*self.K_cr # Ganho proporcional PID
+            self.K_i = self.P_cr/(1.2) # Ganho integrativo
+            self.K_d = 0 # Ganho derivativo
 
         self.erro_acumulado = 0
         self.erro_anterior = 0
@@ -126,7 +138,7 @@ class Motor:
     def load_torque(self,):
         t = self.t
         if t>=3:
-            self.cl = 0.1
+            self.cl = 0.1 #1
     
     def direct_voltage_and_quadrature(self, vs1, vs2, vs3):
         vsd = self.rq23 * (vs1 - vs2 / 2 - vs3 / 2)
@@ -183,21 +195,25 @@ class Motor:
         return cm
     
     def controlePID(self,):
-        erro = 250 - self.wm 
-
+        erro = 200 - self.wm 
+       
         P = self.K_p * erro # Termo proporcional
         self.erro_acumulado += erro * self.h  # Termo integrativo
         I = self.K_i * self.erro_acumulado
-        D = self.K_d*(erro-self.erro_anterior)/self.h
+        D = self.K_d*(erro-self.erro_anterior)/self.h # Termo derivativo
+
+         # Atualizar o erro anterior
+        self.erro_anterior = erro
 
         self.V += P + I + D
         self.V = max(24, min(72, self.V))
 
-        if self.t > 14.99:
-            print(f'V = {self.V} \n frequencia = {self.freq} \n erro = {erro} \n K_d = {self.K_d}')
+        
+        # if self.t > 14.99:
+        #     print(f'V = {self.V} \n frequencia = {self.freq} \n erro = {erro} \n K_d = {self.K_p}')
             
         return erro
-
+   
     def outputs(self, is1, is2, is3, fs1, fs2, fs3, fso, cm, vso, vsd, vsq, erro):
         self.tempo.append(self.t)
         self.corrented.append(self.isd)
@@ -240,96 +256,117 @@ class Motor:
             cm = self.mechanical_torque()
             
             erro = self.controlePID()
-            derv_wm = (self.wm - self.wm_anterior)/self.h
-            self.wm_anterior = self.wm
 
             if self.t >= self.tp:
                 self.tp += self.hp
                 self.outputs(is1, is2, is3, fs1, fs2, fs3, fso, cm, vso, vsd, vsq, erro)
-                self.wm_lista.append(derv_wm)
+
+    def calcular_periodo_osc(self):
+        # Detectar picos na velocidade
+        peaks, _ = signal.find_peaks(self.velocidade, height=0)  # Ajuste `height` conforme necessário
+        tempos_picos = np.array(self.tempo)[peaks]  # Pega os tempos correspondentes aos picos
+        periodos = np.diff(tempos_picos)  # Calcula o tempo entre picos sucessivos
+
+        if len(periodos) > 0:
+            periodo_medio = np.mean(periodos)  # Calcula o período médio
+            print(f"Período médio de oscilação na velocidade: {periodo_medio:.4f} segundos")
+        else:
+            print("Não foi possível calcular o período de oscilação, pois não foram detectados picos suficientes.")
 
     def plot_motor(self):
-        # Plotting currents
-        plt.figure(1)
-        plt.plot(self.tempo, self.corrente1, label='Current 1 (A)')
-        plt.plot(self.tempo, self.corrente2, label='Current 2 (A)')
-        plt.plot(self.tempo, self.corrente3, label='Current 3 (A)')
-        plt.title('Currents (A)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Current (A)')
 
-        # Plotting voltages
-        plt.figure(2)
-        plt.plot(self.tempo, self.tensao1, label='Voltage 1 (V)')
-        plt.plot(self.tempo, self.tensao2, label='Voltage 2 (V)')
-        plt.plot(self.tempo, self.tensao3, label='Voltage 3 (V)')
-        plt.title('Voltages (V)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Voltage (V)')
+        def graph_current():
+            # Plotting currents
+            plt.figure(1)
+            plt.plot(self.tempo, self.corrente1, label='Current 1 (A)')
+            plt.plot(self.tempo, self.corrente2, label='Current 2 (A)')
+            plt.plot(self.tempo, self.corrente3, label='Current 3 (A)')
+            plt.title('Currents (A)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Current (A)')
 
-        # Plotting fluxes
-        # plt.figure(3)
-        # plt.plot(self.tempo, self.fluxos1, label='Flux 1 (Wb)')
-        # plt.plot(self.tempo, self.fluxos2, label='Flux 2 (Wb)')
-        # plt.plot(self.tempo, self.fluxos3, label='Flux 3 (Wb)')
-        # plt.title('Fluxes (Wb)')
-        # plt.legend()
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Flux (Wb)')
+        def graph_voltages():
+            # Plotting voltages
+            plt.figure(2)
+            plt.plot(self.tempo, self.tensao1, label='Voltage 1 (V)')
+            plt.plot(self.tempo, self.tensao2, label='Voltage 2 (V)')
+            plt.plot(self.tempo, self.tensao3, label='Voltage 3 (V)')
+            plt.title('Voltages (V)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Voltage (V)')
 
-        # Plotting zero-sequence current
-        # plt.figure(5)
-        # plt.plot(self.tempo, self.correnteo, label='Current o (A)')
-        # plt.title('Current o (A)')
-        # plt.legend()
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Current (A)')
+        def graph_fluxes():
+            # Plotting fluxes
+            plt.figure(3)
+            plt.plot(self.tempo, self.fluxos1, label='Flux 1 (Wb)')
+            plt.plot(self.tempo, self.fluxos2, label='Flux 2 (Wb)')
+            plt.plot(self.tempo, self.fluxos3, label='Flux 3 (Wb)')
+            plt.title('Fluxes (Wb)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Flux (Wb)')
 
-        plt.figure(6)
-        plt.plot(self.tempo, self.erros, label='Erros')
-        plt.title('Erros')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Erros')
+        def graph_zero_current():
+            # Plotting zero-sequence current
+            plt.figure(5)
+            plt.plot(self.tempo, self.correnteo, label='Current o (A)')
+            plt.title('Current o (A)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Current (A)')
 
-        # plt.figure(7)
-        # plt.plot(self.tempo, self.wm_lista, label='Derv Wm')
-        # plt.title('Variação da velocidade')
-        # plt.legend()
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Variação da velocidade')
+        def graph_multiples():
+            
+            plt.figure(6)
+            plt.plot(self.tempo, self.erros, label='Erros')
+            plt.title('Erros')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Erros')
 
-        # Plotting multiple graphs
-        plt.figure(figsize=(12, 8))
-        plt.subplot(2, 2, 1)
-        plt.plot(self.tempo, self.conjcarga, label='Load Torque (N*m)')
-        plt.title('Load Torque (N*m)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Torque (N*m)')
+            # Plotting multiple graphs
+            plt.figure(figsize=(12, 8))
+            plt.subplot(2, 2, 1)
+            plt.plot(self.tempo, self.conjcarga, label='Load Torque (N*m)')
+            plt.title('Load Torque (N*m)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Torque (N*m)')
 
-        plt.subplot(2, 2, 2)
-        plt.plot(self.tempo, self.velocidade, label='Speed (rad/s)')
-        plt.title('Speed (rad/s)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Speed (rad/s)')
+            plt.subplot(2, 2, 2)
+            plt.plot(self.tempo, self.velocidade, label='Speed (rad/s)')
+            plt.title('Speed (rad/s)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Speed (rad/s)')
 
-        plt.subplot(2, 2, 3)
-        plt.plot(self.tempo, self.conjugado, label='Electromagnetic Torque (N*m)')
-        plt.title('Electromagnetic Torque (N*m)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Torque (N*m)')
+            plt.subplot(2, 2, 3)
+            plt.plot(self.tempo, self.conjugado, label='Electromagnetic Torque (N*m)')
+            plt.title('Electromagnetic Torque (N*m)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Torque (N*m)')
 
-        plt.subplot(2, 2, 4)
-        plt.plot(self.tempo, self.torque_mecanico, label='Mechanical Torque (N*m)')
-        plt.title('Mechanical Torque (N*m)')
-        plt.legend()
-        plt.xlabel('Time (s)')
-        plt.ylabel('Torque (N*m)')
+            plt.subplot(2, 2, 4)
+            plt.plot(self.tempo, self.torque_mecanico, label='Mechanical Torque (N*m)')
+            plt.title('Mechanical Torque (N*m)')
+            plt.legend()
+            plt.xlabel('Time (s)')
+            plt.ylabel('Torque (N*m)')
+
+
+        switch = {
+            'c': graph_current,
+            'v': graph_voltages,
+            'f': graph_fluxes,
+            'z': graph_zero_current,
+            'm': graph_multiples,
+            
+        }
+
+        [switch.get(opcao, lambda: "Caso inválido")() for opcao in escolha_grafico]
 
         plt.tight_layout()
         plt.show()
@@ -337,7 +374,8 @@ class Motor:
     def example():
         motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
         motor.simulate()
+        #motor.calcular_periodo_osc()
         motor.plot_motor()
-
+        
 # exemplos
 Motor.example()
