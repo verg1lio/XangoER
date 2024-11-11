@@ -2,7 +2,6 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 class Torque:
     def __init__(self, rs, rr, ls, lr, mrs, jm, kf):
         # Constants
@@ -191,9 +190,6 @@ class Torque:
                 self.tp += self.hp
                 self.outputs (is1, is2, is3, fs1, fs2, fs3, fso, cm, vso, vsd, vsq)
 
-
-
-
     def example():
         motor = Torque(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
         motor.simulate()
@@ -201,7 +197,6 @@ class Torque:
         return (val_torque [:167] )
         
 Torque.example()
-
 
 class Drivetrain:
 
@@ -220,7 +215,6 @@ class Drivetrain:
         self.new_rpm = 0
         self.tempo_i = tempo_i
         self.tempo_f = 0
-
 
     def CalculateOutputs(self):
        
@@ -275,7 +269,6 @@ class Drivetrain:
             Carga total no eixo traseiro ideal: {carga_traseira_ideal}N\n
             ''')
         
-        
     def CarPerformance(self):
         # Definindo parâmetros do veículo
         peso = self.massa * 9.81  # Força peso
@@ -294,7 +287,6 @@ class Drivetrain:
         variacao_tempo = []
         variacao_torque = []
 
-        
         if self.new_rpm:
             variacao_rpm = range(self.rpm, self.new_rpm, 30)
             variacao_tempo = np.linspace(self.tempo_i, self.tempo_f, len(variacao_rpm))
@@ -307,7 +299,6 @@ class Drivetrain:
         else:
             variacao_rpm = [self.rpm]
             variacao_tempo = [self.tempo_i]
-            
 
         parametros = []
 
@@ -374,7 +365,6 @@ class Drivetrain:
         self.rpm = rpm
         self.new_rpm = new_rpm
 
-
     def HalfShaftsSizing(self, fsi=1.25, tet=786, tec=471.6, dif=1):
         
         # Obtendo o maior torque do motor a partir dos dados experimentais 
@@ -404,7 +394,6 @@ class Drivetrain:
         print("Fator de segurança ideal:", fsi)
         print("Fator de segurança obtido:", fator_seguranca_obtido)
         print("Fator de segurança para 1 polegada:", fs1p)
-
 
 class Tire:
     
@@ -499,12 +488,18 @@ class Tire:
 
     @staticmethod
     def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):
+
+         # Ajuste para garantir tamanhos compatíveis
+        min_length = min(len(rpm_values), len(slip_ratio))
+        rpm_values = rpm_values[:min_length]
+        slip_ratio = slip_ratio[:min_length]
+        velocidade_angular = velocidade_angular[:min_length]
         
         print("Valores do Slip Ratio: ")
         for dado in slip_ratio:
             print(dado)
             
-        plt.figure(figsize=(15, 5))
+        plt.figure(figsize=(10, 8))
         
         plt.subplot(1, 2, 1)
         plt.plot(rpm_values, slip_ratio, label = 'Slip Ratio', color = 'blue')
@@ -522,33 +517,13 @@ class Tire:
         plt.tight_layout()
         plt.show()
         
-    def plot_graph(self, tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces, tire_lateral_experimental=None, tire_auto_align_experimental=None, angles=None, ratio=None):
+    def plot_graph(self, tire_longitudinal_forces):
 
         # Definindo um tamanho para a figura
-        plt.figure(figsize=(20, 7))
-
-        # Plotagem força lateral
-        plt.subplot(1, 3, 1)
-        plt.plot(self.tire_Sa, tire_lateral_forces, label='Curva Otimizada')
-        plt.scatter(angles, tire_lateral_experimental, color='red', label='Dados Experimentais')
-        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
-        plt.ylabel('Força Lateral do Pneu (N)')
-        plt.title('Curva Otimizada com os Dados Experimentais')
-        plt.legend()
-        plt.grid(True)
-
-        # Plotagem torque auto-alinhante
-        plt.subplot(1, 3, 2)
-        plt.plot(self.tire_Sa, tire_auto_align_moment, label='Curva Otimizada')
-        plt.scatter(angles, tire_auto_align_experimental, color='blue', label='Dados Experimentais')
-        plt.xlabel('Ângulo de Deslizamento Lateral (graus)')
-        plt.ylabel('Torque auto-alinhante (N.m)')
-        plt.title('Curva Otimizada com os Dados Experimentais')
-        plt.legend()
-        plt.grid(True)
+        plt.figure(figsize=(10, 8))
 
         # Plotagem força longitudinal
-        plt.subplot(1, 3, 3)
+        plt.subplot(1, 1, 1)
         plt.plot(self.tire_Ls, tire_longitudinal_forces, label='Curva Sem Otimizar')
         plt.xlabel('Taxa de Escorregamento Longitudinal (Admensional)')
         plt.ylabel('Força Longitudinal (N)')
@@ -562,61 +537,55 @@ class Tire:
 
 def uniteExample():
     dt_model = Drivetrain(
-        cgx = 853,  # mm
-        cgy = 294,  # mm
-        massa = 347,  # kg
-        entre_eixos = 1567,  # mm
-        coeficiente_atrito = 0.9 , # coeficiente de atrito
-        raio_pneu = 259,  # mm
-        aceleracao_ideal = 1.2,  # g
-        reducao_primaria = 2.12,  # redução primária
-        reducao_unica = 2.76,
-        rpm = 0,
-        cp = 2.22,
+        cgx=853,  # mm
+        cgy=294,  # mm
+        massa=347,  # kg
+        entre_eixos=1567,  # mm
+        coeficiente_atrito=0.9,  # coeficiente de atrito
+        raio_pneu=259,  # mm
+        aceleracao_ideal=1.2,  # g
+        reducao_primaria=2.12,  # redução primária
+        reducao_unica=2.76,
+        rpm=0,
+        cp=2.22,
         tempo_i=0)
     
     dt_model.showResults()
-    
     dt_model.HalfShaftsSizing()
-    
-    dt_model.new_rpm = 5000
-    dt_model.tempo_f = 5
+    dt_model.new_rpm = 10000
+    dt_model.tempo_f = 10
 
-    #Exemplo em lista
+    # Exemplo em lista
     dt_model.printCarPerformance() 
 
-    #Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
+    # Recebendo os dados da performance do carro. Aqui que se encontra dados da velocidade angular
     performance_veiculo, variacao_rpm, variacao_tempo = dt_model.CarPerformance()
 
-    #Filtrando a velocidade angular
+    # Filtrando a velocidade angular
     velocidade_angular = [dado['va'] for dado in performance_veiculo]
-       
-    #Transformando num array    
     velocidade_angular = np.array(velocidade_angular)
-
-    #Transformando num array  
     variacao_rpm = np.array(variacao_rpm)
 
-    #Calcular o slip ratio
+    # Calcular o slip ratio
     slip_ratio = Tire.slip_ratio_1(velocidade_angular, 0.259)
 
-    #Plotagem de gráfico do slip ratio e saídas de seus dados no terminal
+    # Plotagem de gráfico do slip ratio e saídas de seus dados no terminal
     Tire.show_slip_ratio(variacao_rpm, slip_ratio, velocidade_angular)
 
-    #Salvando os dados como array para cálculo de força longitudinal
+    # Salvar os dados como array para cálculo de força longitudinal
     slip_ratios = np.array(slip_ratio)
-    
-    #Criando instância da classe Tire
+
+    # Criando instância da classe Tire
     Slip_model = Tire(tire_Fz=1500, tire_Sa=0, tire_Ls=slip_ratios, tire_friction_coef=1.45, tire_Ca=0)
-    
-    #Dados experimentais para instância em Tire
+
+    # Dados experimentais para instância em Tire
     result = [(0.3336564873588197), (1.6271741344929977), (1), (4.3961693695846655), (931.4055775279057), (366.4936818126405)]
     
-    #Recebendo valores de força lateral, torque auto allinhante e força longitudinal
+    # Recebendo valores de força lateral, torque auto allinhante e força longitudinal
     tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces = Slip_model.Tire_forces(result)
     
-    #Plotagem de gráficos
-    Slip_model.plot_graph( tire_lateral_forces, tire_auto_align_moment, tire_longitudinal_forces)
+    # Plotagem de gráficos
+    Slip_model.plot_graph(tire_longitudinal_forces)
 
 initial_speed = 1
 
