@@ -1,0 +1,212 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import math
+import time
+
+# --- Parâmetros da Bateria ---
+rho_bateria = 2500  # Densidade (kg/m^3)
+cp_bateria = 780    # Calor específico (J/kg.K)
+k_bateria = 1.5     # Condutividade térmica (W/m.K)
+alpha = k_bateria / (rho_bateria * cp_bateria)
+
+# --- Dimensões da Bateria (m) ---
+L, H, D = 0.254, 0.1524, 0.1016
+
+# --- Pontos da Malha (Ajustados para 3D com menor resolução) ---
+nx, ny, nz = 30, 15, 10
+x = np.linspace(0, L, nx)
+y = np.linspace(0, H, ny)
+z = np.linspace(0, D, nz)
+dx, dy, dz = np.diff(x), np.diff(y), np.diff(z)
+X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+
+# --- Condições Iniciais e de Contorno (K) ---
+T_initial = 298.15
+T_inlet, T_outlet, T_amb = 293.15, 303.15, 298.15
+h_coolant = 2000  # Coeficiente de convecção para a face resfriada
+h_air_top = 15     # Coeficiente de convecção para a face superior
+h_air_sides = 25   # Coeficiente de convecção para as faces laterais
+
+# --- Perfil de Geração de Calor (W/m^3) ---
+def q_dot(t):
+    # Ciclo de carga e repouso mais realista
+    if (t % 1800) < 900:  # 15 minutos de carga
+        return 4000 + 2000 * np.random.rand()  # Pico de calor moderado
+    else:
+        return 0  # Sem geração de calor
+
+# --- Seleção do Material para a Placa de Resfriamento ---
+print("Selecione o material para a placa de resfriamento:")
+print("1. Alumínio")
+print("2. Plástico")
+print("3. Cobre")
+print("4. Latão")
+
+# Solicita ao usuário selecionar um material
+try:
+    Select_mat = int(input("Digite o número correspondente ao material: "))
+except:
+    print("Entrada inválida! Selecionando Alumínio por padrão.")
+    Select_mat = 1
+
+# Inicializa variáveis para as propriedades do material
+rho_mat = 0  # Densidade do material (kg/m^3)
+c_mat = 0    # Calor específico do material (J/kg·K)
+
+# Define as propriedades do material selecionado
+if Select_mat == 1:
+    rho_mat = 2700  # kg/m³
+    c_mat = 900     # J/kg·K
+    material = "Alumínio"
+elif Select_mat == 2:
+    rho_mat = 950   # kg/m³
+    c_mat = 1800    # J/kg·K
+    material = "Plástico"
+elif Select_mat == 3:
+    rho_mat = 8960  # kg/m³
+    c_mat = 385     # J/kg·K
+    material = "Cobre"
+elif Select_mat == 4:
+    rho_mat = 8530  # kg/m³
+    c_mat = 380     # J/kg·K
+    material = "Latão"
+else:
+    print("Opção inválida! Selecionando Alumínio por padrão.")
+    rho_mat = 2700
+    c_mat = 900
+    material = "Alumínio"
+
+print(f"Material selecionado: {material}")
+
+# --- Cálculos da Placa de Resfriamento ---
+# Dimensões da placa retangular
+L_placa = 0.60  # Comprimento (m)
+W_placa = 0.22  # Largura (m)
+espessura = 0.002  # Espessura (m)
+
+# Dimensionamento das aletas
+N_aletas = 15
+Area_aletas = 0.005  # m²
+N_aletas_efetivas = N_aletas * Area_aletas * 5
+
+# Cálculo do volume e massa da placa
+volume_mat = L_placa * W_placa * espessura * 6  # Considerando 6 faces
+m_mat = rho_mat * volume_mat  # Massa da placa (kg)
+
+# Propriedades do ar
+v_ar = 60 / 3.6  # Velocidade do ar (m/s)
+rho_ar = 1.225    # Densidade do ar (kg/m^3)
+cp_ar = 1005      # Capacidade calorífica do ar a pressão constante (J/kg·K)
+mu_ar = 1.81e-5   # Viscosidade dinâmica do ar (Pa·s)
+k_ar = 0.0262     # Condutividade térmica do ar (W/m·K)
+pr_ar = 0.71      # Número de Prandtl para o ar
+
+# Cálculo do número de Reynolds
+L_c = L_placa  # Comprimento característico
+re = (rho_ar * v_ar * L_c) / mu_ar
+
+# Cálculo do número de Nusselt
+nu = 0.332 * (re**0.5) * (pr_ar**(1/3))
+
+# Cálculo do coeficiente de transferência de calor convectiva (h)
+h_conv = (nu * k_ar) / L_c
+
+print(f"Número de Reynolds: {re:.2f}")
+print(f"Número de Nusselt: {nu:.2f}")
+print(f"Coeficiente de transferência de calor convectiva (h): {h_conv:.2f} W/m²·K")
+
+# --- Tempo e Convergência ---
+dt = 0.005  # Passo de tempo (s)
+max_iter = 1000  # Número de iterações
+convergence_limit = 1e-4
+
+# --- Armazenamento ---
+T = np.full((nx, ny, nz), T_initial, dtype=float)
+temp_max_time = []
+temp_avg_time = []
+central_temp_over_time = []
+time_steps_to_plot = [0, 200, 400, 600, 800, 1000]  # Iterações para capturar a evolução térmica
+temp_profiles = []
+
+# --- Solução com Diferença Finita ---
+start_time = time.time()
+for iter in range(max_iter):
+    T_old = T.copy()
+
+    # Aplicação das Condições de Contorno
+    # Entrada de ar frio na face z=0
+    T[:, :, 0] = T_inlet + (T_outlet - T_inlet) * Y[:, :, 0] / H
+
+    # Resfriamento por convecção na face z=-1
+    T[:, :, -1] = (h_coolant * dt * T_amb + rho_bateria * cp_bateria * dz[-1] * T_old[:, :, -1]) / (rho_bateria * cp_bateria * dz[-1] + h_coolant * dt)
+
+    # Resfriamento por convecção na face y=0 (superior)
+    T[0, :, :] = (h_air_top * dt * T_amb + rho_bateria * cp_bateria * dy[0] * T_old[0, :, :]) / (rho_bateria * cp_bateria * dy[0] + h_air_top * dt)
+
+    # Resfriamento por convecção nas faces x=0 e x=-1 (laterais)
+    T[:, 0, :] = (h_air_sides * dt * T_amb + rho_bateria * cp_bateria * dx[0] * T_old[:, 0, :]) / (rho_bateria * cp_bateria * dx[0] + h_air_sides * dt)
+    T[:, -1, :] = (h_air_sides * dt * T_amb + rho_bateria * cp_bateria * dx[-1] * T_old[:, -1, :]) / (rho_bateria * cp_bateria * dx[-1] + h_air_sides * dt)
+
+    # Cálculo das Temperaturas (Nodos Internos)
+    for i in range(1, nx - 1):
+        for j in range(1, ny - 1):
+            for k in range(1, nz - 1):
+                T[i, j, k] += alpha * dt * (
+                    (T_old[i+1, j, k] - 2*T_old[i, j, k] + T_old[i-1, j, k]) / dx[i]**2 +
+                    (T_old[i, j+1, k] - 2*T_old[i, j, k] + T_old[i, j-1, k]) / dy[j]**2 +
+                    (T_old[i, j, k+1] - 2*T_old[i, j, k] + T_old[i, j, k-1]) / dz[k]**2
+                ) + q_dot(iter * dt) * dt / (rho_bateria * cp_bateria)
+
+    # Registro das Temperaturas Máxima e Média
+    temp_max_time.append(np.max(T))
+    temp_avg_time.append(np.mean(T))
+
+    # Registro da Temperatura Central
+    central_i, central_j, central_k = nx//2, ny//2, nz//2
+    central_temp_over_time.append(T[central_i, central_j, central_k])
+
+    # Salvar perfis de temperatura em intervalos específicos
+    if iter in time_steps_to_plot:
+        temp_profiles.append(T.copy())
+
+    # Checagem de Convergência
+    if np.max(np.abs(T - T_old)) < convergence_limit:
+        print(f"Convergência atingida em {iter} iterações.")
+        break
+
+    # Impressão de Progresso
+    if iter % 100 == 0:
+        elapsed = time.time() - start_time
+        print(f"Iteração: {iter}, Temp máxima: {np.max(T):.2f} K, Elapsed Time: {elapsed:.2f} s")
+
+end_time = time.time()
+print(f"Simulação finalizada em {end_time - start_time:.2f} segundos.")
+
+# --- Plotagem da Evolução Térmica ---
+
+# Plot 1: Temperatura Máxima e Média ao Longo do Tempo
+plt.figure(figsize=(10, 6))
+plt.plot(np.arange(len(temp_max_time)) * dt, temp_max_time, label="Temperatura Máxima (K)", color='r')
+plt.plot(np.arange(len(temp_avg_time)) * dt, temp_avg_time, label="Temperatura Média (K)", color='b')
+plt.plot(np.arange(len(central_temp_over_time)) * dt, central_temp_over_time, label="Temperatura Central (K)", color='g')
+plt.xlabel("Tempo (s)")
+plt.ylabel("Temperatura (K)")
+plt.title("Evolução da Temperatura da Bateria ao Longo do Tempo")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Plot 2: Distribuição 3D da Temperatura em Diferentes Momentos
+for idx, T_profile in enumerate(temp_profiles):
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    mid_depth_idx = nz // 2
+    surf = ax.plot_surface(X[:, :, mid_depth_idx], Y[:, :, mid_depth_idx],
+                           T_profile[:, :, mid_depth_idx] - 273.15, cmap='hot')
+    ax.set_xlabel('Comprimento (m)')
+    ax.set_ylabel('Altura (m)')
+    ax.set_zlabel('Temperatura (°C)')
+    plt.title(f'Distribuição de Temperatura na Bateria (Iteração {time_steps_to_plot[idx]})')
+    fig.colorbar(surf, ax=ax, label="Temperatura (°C)")
+    plt.show()
