@@ -13,27 +13,19 @@ materiais = {
 }
 
 # Função para calcular a geometria das aletas
-def geometria_aleta(tipo, espessura, comprimento_aleta):
+def geometria_aleta(tipo, altura_aleta, comprimento_aleta, espessura_aleta,rho):
 
     if tipo == 'retangular':
-        area = espessura * comprimento_aleta  # Área da seção transversal
+        area = 2 * altura_aleta * comprimento_aleta # Área da seção transversal
+        volume = altura_aleta * comprimento_aleta * espessura_aleta
         
 
     elif tipo == 'triangular':
-        area = 0.5 * espessura * comprimento_aleta  # Área da seção transversal para triângulo
-        
-        
-    elif tipo == 'hexagonal':
-        area = (3 * math.sqrt(3) * espessura**2) / 2  # Área do hexágono regular
-        
-        
-    elif tipo == 'cilindrico':
-        area = math.pi * espessura**2  # Área da seção transversal de um cilindro
-        
-        
+        area = 2 * math.sqrt(altura_aleta**2 + (espessura_aleta/2)**2) * comprimento_aleta  # Área da seção transversal para triângulo
+        volume = (espessura_aleta*altura_aleta/2)* comprimento_aleta
     else:
-        raise ValueError("Tipo de geometria não suportado. Use 'retangular', 'triangular', 'hexagonal' ou 'cilindrico'.")
-    return area
+        raise ValueError("Tipo de geometria não suportado. Use 'retangular' ou 'triangular'.")
+    return area, volume*rho
 
 class Arrefecimento:
     def __init__(self, velocidade, area, comprimento, calor_gerado, tipo_geometria='placa'):
@@ -127,24 +119,27 @@ volume_motor = volume_camada_cilindro(raio_externo_motor, espessura_motor, compr
 massa_motor = volume_motor * rho  # Massa do motor considerando 3 mm externos
 
 # Parâmetros das aletas
-tipos_aletas = ['retangular', 'triangular', 'hexagonal', 'cilindrico']
-espessuras_aletas = [0.005, 0.01]  # Espessuras de aletas variadas (menores que 0.01m)
+tipos_aletas = ['retangular', 'triangular']
+alturas_aletas = [0.005, 0.01]  # Altura de aletas variadas (menores que 0.01m)
 espacos_entre_aletas = [0.01, 0.03]  # Distâncias entre as aletas
+espessura_aleta = 0.003
 
 # Simulações para a placa
 plt.figure(figsize=(12, 8))  # Nova figura para a placa
 for tipo in tipos_aletas:
-    for espessura in espessuras_aletas:
+    for altura in alturas_aletas:
         for espaco in espacos_entre_aletas:
             # Calcula a área da seção transversal e o perímetro para as aletas
-            area_aleta = geometria_aleta(tipo, espessura, comprimento_aleta)
+            area_aleta, massa_aleta = geometria_aleta(tipo, altura, comprimento_aleta, espessura_aleta, rho)
             
             # Atualiza a área de resfriamento da placa considerando as aletas
             num_aletas = int(area_placa / (comprimento_aleta * espaco))  # Calcula número de aletas com o espaçamento
             area_placa_aletada = area_placa + num_aletas * area_aleta  # Aletas adicionam área
+            massa_aletas = num_aletas * massa_aleta
+            print(f"O peso das aletas com {alturas_aletas} de altura e {espacos_entre_aletas} de espaçamento é de {massa_aletas}")
             placa = Arrefecimento(velocidade, area_placa_aletada, L, calor_gerado, tipo_geometria='placa')
             placa.plotar_grafico(temp_objeto, calor_especifico, massa_placa, tempo_simulacao,
-                                 f"Placa ({tipo} - altura {espessura}m - espaçamento {espaco}m)")
+                                 f"Placa ({tipo} - altura {altura}m - espaçamento {espaco}m)")
 
 plt.title('Variação de Temperatura ao Longo do Tempo - Placa')
 plt.xlabel('Tempo (s)')
@@ -157,17 +152,19 @@ plt.show()
 # Simulações para o motor
 plt.figure(figsize=(12, 8))  # Nova figura para o motor
 for tipo in tipos_aletas:
-    for espessura in espessuras_aletas:
+    for altura in alturas_aletas:
         for espaco in espacos_entre_aletas:
             # Calcula a área da seção transversal e o perímetro para as aletas
-            area_aleta = geometria_aleta(tipo, espessura, comprimento_aleta)
+            area_aleta, massa_aleta = geometria_aleta(tipo, altura, comprimento_aleta, espessura_aleta, rho)
             
             # Atualiza a área de resfriamento do motor considerando as aletas
             num_aletas = int(area_motor / (comprimento_aleta * espaco))  # Calcula número de aletas com o espaçamento
             area_motor_aletada = area_motor + num_aletas * area_aleta  # Aletas adicionam área
+            massa_aletas = num_aletas * massa_aleta
+            print(f"O peso das aletas com {alturas_aletas} de altura e {espacos_entre_aletas} de espaçamento é de {massa_aletas}")
             motor = Arrefecimento(velocidade, area_motor_aletada, comprimento_motor, calor_gerado, tipo_geometria='cilindro')
             motor.plotar_grafico(temp_objeto, calor_especifico, massa_motor, tempo_simulacao,
-                                 f"Motor ({tipo} - altura {espessura}m - espaçamento {espaco}m)")
+                                 f"Motor ({tipo} - altura {altura}m - espaçamento {espaco}m)")
 
 plt.title('Variação de Temperatura ao Longo do Tempo - Motor')
 plt.xlabel('Tempo (s)')
