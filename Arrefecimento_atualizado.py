@@ -8,24 +8,24 @@ materiais = {
     'cobre': {'densidade': 8960, 'calor_especifico': 385},
     'aço': {'densidade': 7850, 'calor_especifico': 500},
     'titânio': {'densidade': 4500, 'calor_especifico': 522},
-    'latão': {'densidade': 8530, 'calor_especifico': 380},     # Latão adicionado
-    'polietileno': {'densidade': 950, 'calor_especifico': 1900}  # Polietileno adicionado
+    'latão': {'densidade': 8530, 'calor_especifico': 380},     
+    'polietileno': {'densidade': 950, 'calor_especifico': 1900}  
 }
 
 class Arrefecimento:
     def __init__(self, velocidade, area, comprimento, calor_gerado,tipo_geometria='placa'):
-        self.rho = 1.184  # Massa específica do ar (kg/m^3)
-        self.c = 1007  # Calor específico do ar (J/(kg*K))
-        self.v = velocidade
-        self.mi = 1.849e-5  # Viscosidade dinâmica do ar (kg/m*s)
-        self.ni = self.mi / self.rho  # Viscosidade cinemática do ar (m²/s)
-        self.k_ar = 0.02551  # Condutividade térmica do ar (W/m*K)
-        self.tf = 25  # Temperatura do ar (°C)
-        self.Pr = self.mi * self.c / self.k_ar  # Número de Prandtl
-        self.a_res = area  # Área de resfriamento (m²)
-        self.L_c = comprimento  # Comprimento característico (m)
-        self.calor_gerado = calor_gerado  # Calor gerado pelo objeto (W)
-        self.tipo_geometria = tipo_geometria  # Geometria do objeto ('placa' ou 'cilindro')
+        self.rho = 1.184                                        # Massa específica do ar (kg/m^3)
+        self.c = 1007                                           # Calor específico do ar (J/(kg*K))
+        self.v = velocidade                                     # Velocidade do ar (m/s)
+        self.mi = 1.849e-5                                      # Viscosidade dinâmica do ar (kg/m*s)
+        self.ni = self.mi / self.rho                            # Viscosidade cinemática do ar (m²/s)
+        self.k_ar = 0.02551                                     # Condutividade térmica do ar (W/m*K)
+        self.tf = 25                                            # Temperatura do ar (°C)
+        self.Pr = self.mi * self.c / self.k_ar                  # Número de Prandtl
+        self.a_res = area                                       # Área de resfriamento (m²)
+        self.L_c = comprimento                                  # Comprimento característico (m)
+        self.calor_gerado = calor_gerado                        # Calor gerado pelo objeto (W)
+        self.tipo_geometria = tipo_geometria                    # Geometria do objeto ('placa' ou 'cilindro')
 
     def reynolds(self):
         return self.rho * self.v * self.L_c / self.mi
@@ -80,9 +80,9 @@ def volume_camada_cilindro(raio_externo, espessura, comprimento):
     return math.pi * comprimento * (raio_externo**2 - raio_interno**2)
 
 # Parâmetros de simulação
-velocidade = 10
-calor_gerado = 100000 / 3600  # Potência convertida para J/s
-temp_objeto = 100  # Temperatura inicial do objeto (°C)
+velocidade = 5
+calor_gerado = 10000 / 3600  # Potência convertida para J/s
+temp_objeto = 25  # Temperatura inicial do objeto (°C)
 tempo_simulacao = 6000  # Tempo total da simulação (s)
 material = 'aluminio'  # Escolha o material ('aluminio', 'cobre', 'aço', 'titânio', 'latão', 'polietileno')
 rho = materiais[material]['densidade']
@@ -91,20 +91,20 @@ calor_especifico = materiais[material]['calor_especifico']
 # Dimensões da placa
 L = 0.60  # Comprimento (m)
 W = 0.22  # Largura (m)
-espessura_placa = 0.003  # Espessura (m)
-area_placa = 5 * (L * W) + 0.3  # Área total de troca térmica (m²)
-volume_placa = 6 * L * W * espessura_placa  # Volume da placa (m³)
-massa_placa = rho * volume_placa  # Massa da placa (kg)
+espessura_caixa = 0.003  # Espessura (m)
+area_caixa = 5 * (L * W) + 0.3  # Área total de troca térmica (m²)
+volume_caixa = 6 * L * W * espessura_caixa  # Volume da placa (m³)
+massa_caixa = rho * volume_caixa  # Massa da placa (kg)
 
 # Simulação para a placa
-placa = Arrefecimento(velocidade, area_placa, L, calor_gerado, tipo_geometria='placa')
-placa.plotar_grafico(temp_objeto, calor_especifico, massa_placa, tempo_simulacao,"bateria")
+placa = Arrefecimento(velocidade, area_caixa, L, calor_gerado, tipo_geometria='placa')
+placa.plotar_grafico(temp_objeto, calor_especifico, massa_caixa, tempo_simulacao,"bateria")
 
 # Dimensões do motor
 comprimento_motor = 0.355  # Comprimento do motor (m)
 diametro_motor = 0.20  # Diâmetro do motor (m)
 raio_externo_motor = diametro_motor / 2  # Raio externo do motor (m)
-espessura_motor = 0.003  # Considerando apenas os 3 mm mais externos
+espessura_motor = 0.003  # Considerando apenas os 5 mm mais externos
 
 # Área e volume da camada externa do motor
 area_motor = math.pi * diametro_motor * comprimento_motor  # Área externa do cilindro (m²)
