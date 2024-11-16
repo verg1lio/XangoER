@@ -22,8 +22,8 @@ dx, dy, dz = np.diff(x), np.diff(y), np.diff(z)
 X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
 
 # --- Condições Iniciais e de Contorno (K) ---
-T_initial = 298.15
-T_inlet, T_outlet, T_amb = 293.15, 303.15, 298.15
+T_initial = 350.15
+T_inlet, T_outlet, T_amb = 293.15, 303.15, 280.15
 h_coolant = 2000  # Coeficiente de convecção para a face resfriada
 h_air_top = 15     # Coeficiente de convecção para a face superior
 h_air_sides = 25   # Coeficiente de convecção para as faces laterais
@@ -117,16 +117,16 @@ print(f"Número de Nusselt: {nu:.2f}")
 print(f"Coeficiente de transferência de calor convectiva (h): {h_conv:.2f} W/m²·K")
 
 # --- Tempo e Convergência ---
-dt = 0.005  # Passo de tempo (s)
+dt = 3  # Passo de tempo (s)
 max_iter = 1000  # Número de iterações
-convergence_limit = 1e-4
+convergence_limit = 1e-2
 
 # --- Armazenamento ---
 T = np.full((nx, ny, nz), T_initial, dtype=float)
 temp_max_time = []
 temp_avg_time = []
 central_temp_over_time = []
-time_steps_to_plot = [0, 200, 400, 600, 800, 1000]  # Iterações para capturar a evolução térmica
+time_steps_to_plot = [0, 10, 20, 30, 40, 900]  # Iterações para capturar a evolução térmica
 temp_profiles = []
 
 # --- Solução com Diferença Finita ---
@@ -176,7 +176,7 @@ for iter in range(max_iter):
         break
 
     # Impressão de Progresso
-    if iter % 100 == 0:
+    if iter % 5 == 0:
         elapsed = time.time() - start_time
         print(f"Iteração: {iter}, Temp máxima: {np.max(T):.2f} K, Elapsed Time: {elapsed:.2f} s")
 
