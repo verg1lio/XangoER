@@ -102,7 +102,6 @@ calor_especifico = materiais[material]['calor_especifico']
 L = 0.60  # Comprimento (m)
 W = 0.22  # Largura (m)
 espessura_placa = 0.003  # Espessura (m)
-comprimento_aleta = 0.05  # Comprimento das aletas (m)
 area_placa = L * W  # Área da superfície base da placa (m²)
 volume_placa = L * W * espessura_placa  # Volume da placa (m³)
 massa_placa = rho * volume_placa  # Massa da placa (kg)
@@ -130,13 +129,13 @@ for tipo in tipos_aletas:
     for altura in alturas_aletas:
         for espaco in espacos_entre_aletas:
             # Calcula a área da seção transversal e o perímetro para as aletas
-            area_aleta, massa_aleta = geometria_aleta(tipo, altura, comprimento_aleta, espessura_aleta, rho)
+            area_aleta, massa_aleta = geometria_aleta(tipo, altura, L, espessura_aleta, rho)
             
             # Atualiza a área de resfriamento da placa considerando as aletas
-            num_aletas = int(area_placa / (comprimento_aleta * espaco))  # Calcula número de aletas com o espaçamento
+            num_aletas = math.floor(L / (espaco + espessura_aleta))  # Calcula número de aletas com o espaçamento
             area_placa_aletada = area_placa + num_aletas * area_aleta  # Aletas adicionam área
             massa_aletas = num_aletas * massa_aleta
-            print(f"O peso das aletas com {alturas_aletas} de altura e {espacos_entre_aletas} de espaçamento é de {massa_aletas}")
+            print(f"O peso das aletas {tipo} com {altura} de altura e {espaco} de espaçamento é de {massa_aletas} numero de aletas é {num_aletas}")
             placa = Arrefecimento(velocidade, area_placa_aletada, L, calor_gerado, tipo_geometria='placa')
             placa.plotar_grafico(temp_objeto, calor_especifico, massa_placa, tempo_simulacao,
                                  f"Placa ({tipo} - altura {altura}m - espaçamento {espaco}m)")
@@ -155,13 +154,13 @@ for tipo in tipos_aletas:
     for altura in alturas_aletas:
         for espaco in espacos_entre_aletas:
             # Calcula a área da seção transversal e o perímetro para as aletas
-            area_aleta, massa_aleta = geometria_aleta(tipo, altura, comprimento_aleta, espessura_aleta, rho)
+            area_aleta, massa_aleta = geometria_aleta(tipo, altura, comprimento_motor, espessura_aleta, rho)
             
             # Atualiza a área de resfriamento do motor considerando as aletas
-            num_aletas = int(area_motor / (comprimento_aleta * espaco))  # Calcula número de aletas com o espaçamento
+            num_aletas = math.floor(comprimento_motor /(espaco + espessura_aleta))  # Calcula número de aletas com o espaçamento
             area_motor_aletada = area_motor + num_aletas * area_aleta  # Aletas adicionam área
             massa_aletas = num_aletas * massa_aleta
-            print(f"O peso das aletas com {alturas_aletas} de altura e {espacos_entre_aletas} de espaçamento é de {massa_aletas}")
+            print(f"O peso das aletas {tipo} com {altura} de altura e {espaco} de espaçamento é de {massa_aletas}, o numero de aletas é {num_aletas}")
             motor = Arrefecimento(velocidade, area_motor_aletada, comprimento_motor, calor_gerado, tipo_geometria='cilindro')
             motor.plotar_grafico(temp_objeto, calor_especifico, massa_motor, tempo_simulacao,
                                  f"Motor ({tipo} - altura {altura}m - espaçamento {espaco}m)")
