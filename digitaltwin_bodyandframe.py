@@ -325,7 +325,31 @@ class Estrutura:
             stresses.append(stress)
         return stresses
 
-    
+    def compute_von_mises(stresses):
+        """
+        Compute von Mises stress for all elements.
+
+        Parameters:
+            stresses (list of ndarray): Stress tensors for all elements.
+
+        Returns:
+            von_mises_stresses (list of float): Von Mises stress for each element.
+        """
+        von_mises_stresses = []
+        for stress in stresses:
+            sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
+            von_mises = np.sqrt(
+                0.5 * (
+                    (sigma_xx - sigma_yy)**2 +
+                    (sigma_yy - sigma_zz)**2 +
+                    (sigma_zz - sigma_xx)**2 +
+                    6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
+                )
+            )
+            von_mises_stresses.append(von_mises)
+        return von_mises_stresses
+
+
     def plot_colored_wireframe(nodes, elements, scalar_values, colormap='jet'):
         """
         Plots a 3D wireframe of the structure with color mapping based on scalar values.
