@@ -2,6 +2,7 @@ import numpy as np
 from scipy.linalg import eigh
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.collections import LineCollection
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 import pandas as pd
@@ -242,10 +243,65 @@ class Estrutura:
 
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
+    
+    def plot_colored_wireframe(nodes, elements, scalar_values, colormap='jet'):
+        """
+        Plots a 3D wireframe of the structure with color mapping based on scalar values.
+        
+        Parameters:
+            nodes (array): Array of node coordinates (N x 3).
+            elements (list): List of tuples defining connections between nodes.
+            scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            colormap (str): Colormap name for visualization.
+        """
+        # Normalize scalar values to [0, 1] for colormap
+        norm = plt.Normalize(vmin=np.min(scalar_values), vmax=np.max(scalar_values))
+        cmap = plt.get_cmap(colormap)
+        
+        # Create the plot
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot each element with color based on scalar values
+        for node1, node2 in elements:
+            # Get coordinates for the two nodes
+            x = [nodes[node1][0], nodes[node2][0]]
+            y = [nodes[node1][1], nodes[node2][1]]
+            z = [nodes[node1][2], nodes[node2][2]]
+            
+            # Get the scalar value for the midpoint of the element
+            scalar_midpoint = (scalar_values[node1] + scalar_values[node2]) / 2
+            
+            # Map scalar value to color
+            color = cmap(norm(scalar_midpoint))
+            
+            # Plot the line segment with the corresponding color
+            ax.plot(x, y, z, color=color, linewidth=2)
+
+        # Add a colorbar
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        mappable.set_array(scalar_values)
+        cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
+        cbar.set_label("Strain (or other variable)", fontsize=12)
+
+        # Set axis labels and title
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('Wireframe with Scalar Color Mapping')
+        plt.xlim([-20,120])
+        plt.ylim([-45,60])
+        plt.tight_layout()
+        plt.show()
+
+
+
+
+
 #Coordenadas dos nós (x, y, z)
-i = 1.7
-j = 1.5
-k = 1.8
+i = 0.03
+j = 0.04
+k = 0.03
 
 nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
@@ -346,7 +402,7 @@ ax.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], c='b')
 
 # Numerar os nós
 for i, node in enumerate(nodes):
-     ax.text(node[0], node[1], node[2], str(i), color='black')
+    ax.text(node[0], node[1], node[2], str(i), color='black')
 
 # Conectando os nós
 for element in elements:
@@ -360,7 +416,10 @@ ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
 ax.set_title('Estrutura 3D')
-
+ax.legend()
+plt.xlim([-20,120])
+plt.ylim([-45,60])
+plt.tight_layout()
 plt.show()
 
 
@@ -370,46 +429,6 @@ print(frequencias)
 
 #Plotagem dos modos de vibração para a estrutura de vigas
 for mode_idx in range(len(autovalores)):
-    fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_title(f'Modo {mode_idx + 1} Viga')
-
-    for i, (x, y, z) in enumerate(nodes):
-        ax.scatter(x, y, z, color='b', s=100)
-        ax.text(x, y, z, f'  {i}', color='black', fontsize=8)
-
-    for node1, node2 in elements:
-        x = [nodes[node1][0], nodes[node2][0]]
-        y = [nodes[node1][1], nodes[node2][1]]
-        z = [nodes[node1][2], nodes[node2][2]]
-        ax.plot(x, y, z, 'b--')
-
-    """mode_shape = autovetores[:, mode_idx]
-    displacements = np.zeros((len(nodes), 3))
-
-    for j, (x, y, z) in enumerate(nodes):
-        if j > 0 and j < len(nodes) - 1:
-            displacements[j-1, 0] = mode_shape[2 * j-1]
-            displacements[j-1, 1] = mode_shape[2 * j]
-            displacements[j-1, 2] = 0
-
-    deformed_nodes = np.array(nodes) + displacements*5
-
-    for node1, node2 in elements:
-        x = [deformed_nodes[node1][0], deformed_nodes[node2][0]]
-        y = [deformed_nodes[node1][1], deformed_nodes[node2][1]]
-        z = [deformed_nodes[node1][2], deformed_nodes[node2][2]]
-        ax.plot(x, y, z, 'r-')
-
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-
-    plt.tight_layout()
-    plt.xlim([-20,120])
-    plt.ylim([-45,60])
-    plt.show() """
-
     mode_shape = autovetores[:, mode_idx]
     displacements = np.zeros((len(nodes), 3))  # Assuming we want to visualize x, y, z displacements only
 
@@ -445,10 +464,34 @@ for mode_idx in range(len(autovalores)):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
+    ax.set_title(f'Forma modal nº: {mode_idx}')
     ax.legend()
     plt.xlim([-20,120])
     plt.ylim([-45,60])
     plt.tight_layout()
     plt.show()
 
-estrutura.Mesh()
+# estrutura.Mesh()
+
+
+# Simulated scalar values for demonstration
+scalar_values = np.random.rand(len(nodes))
+
+Estrutura.plot_colored_wireframe(nodes, elements, scalar_values)
+
+print(nodes.size)
+print(scalar_values.size)
+print(torcao.size)
+print(flexao1.size)
+
+"""
+
+Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
+Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao2)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
+"""
+
+
+
