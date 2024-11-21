@@ -295,6 +295,36 @@ class Estrutura:
         return strains
     
 
+    def compute_stress(strains, E, nu):
+        """
+        Compute stresses for all elements using Hooke's law.
+
+        Parameters:
+            strains (list of ndarray): Strain tensors for all elements.
+            E (float): Young's modulus.
+            nu (float): Poisson's ratio.
+
+        Returns:
+            stresses (list of ndarray): Stress tensors for all elements.
+        """
+        # Construct constitutive matrix (isotropic 3D elasticity)
+        lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+        G = E / (2 * (1 + nu))
+        C = np.array([
+            [lambda_ + 2*G, lambda_, lambda_, 0, 0, 0],
+            [lambda_, lambda_ + 2*G, lambda_, 0, 0, 0],
+            [lambda_, lambda_, lambda_ + 2*G, 0, 0, 0],
+            [0, 0, 0, G, 0, 0],
+            [0, 0, 0, 0, G, 0],
+            [0, 0, 0, 0, 0, G]
+        ])
+        
+        stresses = []
+        for strain in strains:
+            stress = np.dot(C, strain)  # Hooke's law: C times strain
+            stresses.append(stress)
+        return stresses
+
     
     def plot_colored_wireframe(nodes, elements, scalar_values, colormap='jet'):
         """
