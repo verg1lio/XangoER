@@ -23,7 +23,7 @@ class Estrutura:
         self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
         self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
-        self.num_modes = 6                                                  #Número de modos de vibração a serem retornados
+        self.num_modes = 12                                                  #Número de modos de vibração a serem retornados
 
     def calcular_comprimento(self, element):                                 #Função auxiliar para cálculo de comprimento dos elementos
         node1, node2 = element
@@ -114,11 +114,11 @@ class Estrutura:
         return k_e,m_e
 
     def aplicar_engastes(self, nodes, dofs):
-        for node in nodes:                                          #Laço para selecionar cada nó que será engastado
-            for dof in dofs:                                        #Laço para selecionar quais graus de liberdade serão fixados
-                index = node * self.num_dofs_per_node + dof         #Identificação da entrada da matriz que precisa ser restringida pelo engaste        
+        for node in nodes:                                          # Laço para selecionar cada nó que será engastado
+            for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
+                index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
-                   
+
     def matrizes_global(self):
         for element in self.elements:
             node1, node2 = element
@@ -131,16 +131,35 @@ class Estrutura:
             self.K_global[np.ix_(dofs, dofs)] += k_e
             self.M_global[np.ix_(dofs, dofs)] += m_e
 
-        #self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
+        # self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
         pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
         pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
+
+        # print (self.K_global)
+        # print (self.M_global)
+
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.K_global, markersize=10)  # Adjust markersize for visibility
+        plt.title("Spy Plot of the Kg")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.M_global, markersize=10)  # Adjust markersize for visibility
+        plt.title("Spy Plot of the Mg")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
 
         return self.K_global,self.M_global
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
-        E = 210e9   	#Modulo de Young (Pa)
+        E = 2.1e11  	#Modulo de Young (Pa)
         I = 1.6667e-5 	#Momento de inercia (m^4)
-        G = 81.2e9  	#Modulo de Cisalhamento(Pa)
+        G = 81.2e9  	#Modulo de Cisalhamento (Pa)
         A= 0.0125	    #Área da seção do elemento (m^2)	
         J = I/2     	#Momento polar de inércia (m^4)
         KF_total = 0
@@ -177,7 +196,7 @@ class Estrutura:
             
         return (np.array(torcao), np.array(deformacao), np.array(flexao1), 
             np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
-    
+
     def modal_analysis(self):
         # Análise modal por resolução do problema de autovalor e autovetor
         unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
@@ -227,10 +246,13 @@ class Estrutura:
 i = 1.7
 j = 1.5
 k = 1.8
-nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 
-#Conectividade dos elementos (índices dos nós)
+nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
+
+#nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
+#elements = [    (0,     1),    (1,     2),    (4,     3),    (3,     5),    (1,     3) ]
+
 
 
 #Criar a estrutura e montar as matrizes de rigidez e massa globais
@@ -247,12 +269,11 @@ F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
 F_axial = np.array([1000, 2000, 3000, 4000, 5000])
 F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
 
-estrutura = Estrutura(elements, nodes, 1500, 8.33e-6, 8.33e-6)
+estrutura = Estrutura(elements, nodes, 180, 4.18e-6, 8.33e-6)
 
 K_global, M_global = estrutura.matrizes_global()
 
-#Gerar as matrizes de localização dos nós e de conectividade
-
+#Gera as matrizes de localização dos nós e de conectividade
 node_tags = list(range(len(nodes)))
 estrutura.node_loc_matrix(node_tags, nodes)
 estrutura.connect_matrix()
@@ -363,14 +384,14 @@ for mode_idx in range(len(autovalores)):
         z = [nodes[node1][2], nodes[node2][2]]
         ax.plot(x, y, z, 'b--')
 
-    mode_shape = autovetores[:, mode_idx]
+    """mode_shape = autovetores[:, mode_idx]
     displacements = np.zeros((len(nodes), 3))
 
     for j, (x, y, z) in enumerate(nodes):
         if j > 0 and j < len(nodes) - 1:
-            displacements[j, 0] = mode_shape[2 * j]
-            displacements[j, 1] = mode_shape[2 * j + 1]
-            displacements[j, 2] = 0
+            displacements[j-1, 0] = mode_shape[2 * j-1]
+            displacements[j-1, 1] = mode_shape[2 * j]
+            displacements[j-1, 2] = 0
 
     deformed_nodes = np.array(nodes) + displacements*5
 
@@ -387,6 +408,47 @@ for mode_idx in range(len(autovalores)):
     plt.tight_layout()
     plt.xlim([-20,120])
     plt.ylim([-45,60])
+    plt.show() """
+
+    mode_shape = autovetores[:, mode_idx]
+    displacements = np.zeros((len(nodes), 3))  # Assuming we want to visualize x, y, z displacements only
+
+    # Loop through nodes to extract the translations
+    for j, (x, y, z) in enumerate(nodes):
+        # 6 DOFs per node: [u_x, u_y, u_z, theta_x, theta_y, theta_z]
+        dof_start = 6 * j  # Start index of DOFs for node j
+        displacements[j, 0] = mode_shape[dof_start]     # u_x
+        displacements[j, 1] = mode_shape[dof_start + 1] # u_y
+        displacements[j, 2] = mode_shape[dof_start + 2] # u_z
+
+    # Scale displacements for plots
+    scale_factor = 1000  # Adjust as needed
+    deformed_nodes = np.array(nodes) + displacements * scale_factor
+
+    # Plot deformed
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    for node1, node2 in elements:
+        x = [deformed_nodes[node1][0], deformed_nodes[node2][0]]
+        y = [deformed_nodes[node1][1], deformed_nodes[node2][1]]
+        z = [deformed_nodes[node1][2], deformed_nodes[node2][2]]
+        ax.plot(x, y, z, 'r-', label="Deformed" if node1 == 0 else "")  # Add label for the first line
+
+    # Add original for comparison
+    for node1, node2 in elements:
+        x = [nodes[node1][0], nodes[node2][0]]
+        y = [nodes[node1][1], nodes[node2][1]]
+        z = [nodes[node1][2], nodes[node2][2]]
+        ax.plot(x, y, z, 'k--', label="Original" if node1 == 0 else "")  # Add label for the first line
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.xlim([-20,120])
+    plt.ylim([-45,60])
+    plt.tight_layout()
     plt.show()
 
 estrutura.Mesh()
