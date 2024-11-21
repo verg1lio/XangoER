@@ -288,6 +288,9 @@ class Estrutura:
         Returns:
             strains (list of ndarray): Strain tensors for all elements.
         """
+        #### AQUI A MATRIZ B PRECISA SER CALCULADA DIRETO DAS FUNÇÕES DE FORMA
+        #### NÃO É TRIVIAL E VAI LEVAR TEMPO, MAS O RESTO DAS CONTAS ESTÃO OK
+
         strains = []
         for B in B_matrices:
             strain = np.dot(B, displacements)  # B-matrix times displacement vector
@@ -311,12 +314,12 @@ class Estrutura:
         lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
         G = E / (2 * (1 + nu))
         C = np.array([
-            [lambda_ + 2*G, lambda_, lambda_, 0, 0, 0],
-            [lambda_, lambda_ + 2*G, lambda_, 0, 0, 0],
-            [lambda_, lambda_, lambda_ + 2*G, 0, 0, 0],
-            [0, 0, 0, G, 0, 0],
-            [0, 0, 0, 0, G, 0],
-            [0, 0, 0, 0, 0, G]
+            [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
+            [              0,              0,              0,   G,  0,  0],
+            [              0,              0,              0,   0,  G,  0],
+            [              0,              0,              0,   0,  0,  G]
         ])
         
         stresses = []
