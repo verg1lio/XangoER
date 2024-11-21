@@ -214,6 +214,39 @@ class Estrutura:
         frequencies = np.array(unsorted_frequencies)[top_indices]  # Filtra as primeiras n frequências
 
         return eigenvalues, eigenvectors, frequencies
+    
+
+    def static_analysis(K_global, F_global, fixed_dofs):
+        """
+        Perform static analysis by solving Ku = F with boundary conditions.
+
+        Parameters:
+            K_global (ndarray): Global stiffness matrix (N x N).
+            F_global (ndarray): Global force vector (N).
+            fixed_dofs (list): List of DOF indices to be fixed.
+
+        Returns:
+            displacements (ndarray): Displacement vector (N).
+        """
+        # Total number of DOFs
+        n_dofs = K_global.shape[0]
+
+        # Create a mask for free DOFs (DOFs not constrained)
+        free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
+
+        # Reduce the stiffness matrix and force vector
+        K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
+        F_reduced = F_global[free_dofs]
+
+        # Solve for displacements at free DOFs
+        u_reduced = np.linalg.solve(K_reduced, F_reduced)
+
+        # Construct full displacement vector
+        displacements = np.zeros(n_dofs)
+        displacements[free_dofs] = u_reduced
+
+        return displacements
+
 
     def Mesh(self):
 
@@ -472,6 +505,19 @@ for mode_idx in range(len(autovalores)):
     plt.show()
 
 # estrutura.Mesh()
+
+
+
+F_global = np.zeros(K_global.size)  # Force vector
+F_global[2+5*6] = 100
+F_global[2+5*9] = -50
+fixed_dofs = [0, 1, 2, 3, 4, 5]
+
+# Perform analysis
+displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
+print("Displacement Vector:", displacements)
+
+
 
 
 # Simulated scalar values for demonstration
