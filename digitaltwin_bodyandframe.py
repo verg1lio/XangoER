@@ -276,6 +276,25 @@ class Estrutura:
 
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
+
+    def compute_strain(displacements, B_matrices):
+        """
+        Compute strains for all elements.
+
+        Parameters:
+            displacements (ndarray): Displacement vector for all nodes.
+            B_matrices (list of ndarray): Strain-displacement matrices for each element.
+
+        Returns:
+            strains (list of ndarray): Strain tensors for all elements.
+        """
+        strains = []
+        for B in B_matrices:
+            strain = np.dot(B, displacements)  # B-matrix times displacement vector
+            strains.append(strain)
+        return strains
+    
+
     
     def plot_colored_wireframe(nodes, elements, scalar_values, colormap='jet'):
         """
