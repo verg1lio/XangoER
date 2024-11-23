@@ -40,7 +40,7 @@ class Motor:
 
         # Simulation parameters
         self.h = 1.e-5  # Time step (s)
-        self.tmax = 15  # Maximum simulation time (s)
+        self.tmax = 22  # Maximum simulation time (s)
         self.hp = self.tmax / 2000  # Plotting time step (s)
         if self.hp < self.h:
             self.hp = self.h
@@ -106,7 +106,7 @@ class Motor:
         self.P_cr = 0.4125 #periodo critico
         if escolha_controle == 'PID':
             self.K_cr = 1.e-3/0.5 # ganho crítico
-            self.K_p = 0.6*self.K_cr # Ganho proporcional PID
+            self.K_p = 10*self.K_cr # Ganho proporcional PID
             self.K_i = 0.5*self.P_cr # Ganho integrativo
             self.K_d = 0.125*self.P_cr # Ganho derivativo
 
