@@ -374,6 +374,17 @@ class Motor:
      
     def chaves(self):
             
+        """
+        Determina a configuração das seis chaves que 
+        compõem o do inversor de frequência (q1, q2, q3, q4, q5, q6). 
+        Sendo q4, q5 e q6 os complementares de q1, q2 e q3, respectivamente.
+        
+        Returns
+        -------
+        str
+            A configuração de chaves do inversor.
+        """
+        
         if self.q1 == 1: chave_1 = True # Retorno chave 1 fechada
         else: chave_1 = False # Retorno chave 1 aberta
 
@@ -401,6 +412,27 @@ class Motor:
     
     def controle_pwm(self):
         
+        """
+        Essa função gera o sinal PWM para controle do inversor com modulação escalar conforme o capítulo 7.4 do livro 
+        "Sistemas de Acionamento Estático de Máquina Elétrica" de Cursino Brandão Jacobina.
+        
+        Parameters
+        Self.Vs e Self.t_pwm (Passo de tempo)
+        None
+        
+        Returns
+        Plots do gráfico do sinal PWM, onda triangular portadora, correntes, 
+        tensão de entrada e tensão modulada
+    
+        
+        Notes
+        -----
+        A tensão modulada é calculada com base na equação (7.4) do livro "Sistemas de Acionamento Estático de Máquina Elétrica" 
+        de Cursino Brandão Jacobina.
+        A onda triangular portadora é gerada com base na equação (7.5) do mesmo livro.
+        O sinal PWM puro é gerado com base na equação (7.6) do mesmo livro.
+        
+        """
         # Define o passo de tempo do controlador
         self.t_pwm = np.linspace(0, 2, 1000)  
 
@@ -410,9 +442,9 @@ class Motor:
         self.v3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3)
 
         # Correntes
-        self.i1 = self.Vs * np.sin(2 * np.pi * self.t_pwm)
-        self.i2 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 2 * np.pi / 3)
-        self.i3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3)
+        self.i1 = self.Vs * np.sin(2 * np.pi * self.t_pwm - np.pi / 2)
+        self.i2 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 2 * np.pi / 3 - np.pi / 2)
+        self.i3 = self.Vs * np.sin(2 * np.pi * self.t_pwm + 4 * np.pi / 3 - np.pi / 2)
        
         # Calculo max e min das tensoes        
         self.vN0max_star = (self.Vs / 2) - np.maximum.reduce([self.v1, self.v2, self.v3])
@@ -493,11 +525,6 @@ class Motor:
                 
                 self.valor_mu = mu  
                 self.controle_pwm()  
-
-         
-
-        
-    
 
     def example():
         motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) # Varia o valor de mu entre 0 e 1
