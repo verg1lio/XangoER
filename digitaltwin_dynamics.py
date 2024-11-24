@@ -2284,3 +2284,5 @@ dynamics_example(pedal_forces = 1000, rpm = 1000, torque = 100, slip_angle = 9)
 BrakeSystem.brake_system_example()
 Kinematics.kinematics_example()
 Tire.tire_example()
+
+#Autores do código: João Victor Dias França;
