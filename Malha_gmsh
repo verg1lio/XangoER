@@ -1,0 +1,50 @@
+import os
+
+def Mesh(Coordenadas_nos, conexões_nos):
+    
+    filename=input("Insira o nome do arquivo: ") +".geo"                          # Nome do arquivo
+    diretorio=input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")    # Diretorio onde o arquivo sera colocado
+
+    if not os.path.exists(diretorio):                                             # Vê se o diretorio existe, caso contrario, cria um
+        os.makedirs(diretorio)
+    
+    filepath = os.path.join(diretorio, filename)                                  # Cria o caminho completo para o arquivo
+    
+    with open(filepath, 'w') as geo_file:
+        
+        for i, (x, y, z) in enumerate(Coordenadas_nos):                           # Descreve os nós
+            geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
+        
+        for i, (start, end) in enumerate(conexões_nos):                           # Cria as linhas(elementos)
+            geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
+        
+                        
+        if len(conexões_nos) > 2:                                                 # Cria um loop de linha e uma superfície plana se tivermos mais de 2 conexões
+            line_loop_indices = ', '.join(str(i + 1) for i in range(len(conexões_nos)))
+            geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
+            geo_file.write('Plane Surface(1) = {1};\n')
+        
+        geo_file.write('Mesh.Algorithm = 6;\n')                                   # Configurações da malha
+        geo_file.write('Mesh.ElementOrder = 1;\n')
+        geo_file.write('Mesh.Format = 1;\n')
+
+    print(f'O arquivo foi salvo em : {filepath}, basta abrir o GMSH, e abrir o arquivo')
+
+# Example usage:
+node_coords = [
+    (0, 0, 0),
+    (0, 375, 0),
+    (0, 700, 0),
+    (1500, 375, 0),
+    (1500, 0, 0),
+    (1500, 700, 0)
+]
+
+connections = [
+    (0, 1),  # Elemento entre os nós 0 e 1
+    (1, 2),  # Elemento entre os nós 1 e 2
+    (4, 3),  # Elemento entre os nós 4 e 3
+    (3, 5),  # Elemento entre os nós 3 e 5
+    (1, 3) ]
+
+Mesh(node_coords, connections)
