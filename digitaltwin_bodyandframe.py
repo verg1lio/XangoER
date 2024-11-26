@@ -615,5 +615,5 @@ Estrutura.plot_colored_wireframe(nodes, elements, flexao2)
 Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
 """
 
-#Autores do Código: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes;
+#Autores do Código: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes; Cayque Lemos Souza; 
 
