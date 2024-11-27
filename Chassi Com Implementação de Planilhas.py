@@ -122,6 +122,23 @@ class Estrutura:
         pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
         pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
 
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.K_global, markersize=10)  # Adjust markersize for visibility
+        plt.title("Spy Plot of the Kg")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.M_global, markersize=10)  # Adjust markersize for visibility
+        plt.title("Spy Plot of the Mg")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
+
         return self.K_global,self.M_global
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
@@ -182,6 +199,113 @@ class Estrutura:
 
         return eigenvalues, eigenvectors, frequencies
 
+    def static_analysis(self,K_global, F_global, fixed_dofs):
+        """
+        Perform static analysis by solving Ku = F with boundary conditions.
+
+        Parameters:
+            K_global (ndarray): Global stiffness matrix (N x N).
+            F_global (ndarray): Global force vector (N).
+            fixed_dofs (list): List of DOF indices to be fixed.
+
+        Returns:
+            displacements (ndarray): Displacement vector (N).
+        """
+        # Total number of DOFs
+        n_dofs = K_global.shape[0]
+
+        # Create a mask for free DOFs (DOFs not constrained)
+        free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
+
+        # Reduce the stiffness matrix and force vector
+        K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
+        F_reduced = F_global[free_dofs]
+
+        # Solve for displacements at free DOFs
+        u_reduced = np.linalg.solve(K_reduced, F_reduced)
+
+        # Construct full displacement vector
+        displacements = np.zeros(n_dofs)
+        displacements[free_dofs] = u_reduced
+
+        return displacements
+
+    def compute_strain(self, B_matrices,F_global, fixed_dofs):
+        """
+        Compute strains for all elements.
+
+        Parameters:
+            displacements (ndarray): Displacement vector for all nodes.
+            B_matrices (list of ndarray): Strain-displacement matrices for each element.
+
+        Returns:
+            strains (list of ndarray): Strain tensors for all elements.
+        """
+        #### AQUI A MATRIZ B PRECISA SER CALCULADA DIRETO DAS FUNÇÕES DE FORMA
+        #### NÃO É TRIVIAL E VAI LEVAR TEMPO, MAS O RESTO DAS CONTAS ESTÃO OK
+        displacements = self.static_analysis(F_global, fixed_dofs)
+        strains = []
+        for B in B_matrices:
+            strain = np.dot(B, displacements)  # B-matrix times displacement vector
+            strains.append(strain)
+        return strains
+    
+    def compute_stress(self,B_matrices,F_global, fixed_dofs, E, nu):
+        """
+        Compute stresses for all elements using Hooke's law.
+
+        Parameters:
+            strains (list of ndarray): Strain tensors for all elements.
+            E (float): Young's modulus.
+            nu (float): Poisson's ratio.
+
+        Returns:
+            stresses (list of ndarray): Stress tensors for all elements.
+        """
+        strains = self.compute_strain(B_matrices,F_global, fixed_dofs)
+        # Construct constitutive matrix (isotropic 3D elasticity)
+        lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+        G = E / (2 * (1 + nu))
+        C = np.array([
+            [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
+            [              0,              0,              0,   G,  0,  0],
+            [              0,              0,              0,   0,  G,  0],
+            [              0,              0,              0,   0,  0,  G]
+        ])
+        
+        stresses = []
+        for strain in strains:
+            stress = np.dot(C, strain)  # Hooke's law: C times strain
+            stresses.append(stress)
+        return stresses
+
+    def compute_von_mises(self,B_matrices,F_global, fixed_dofs, E, nu):
+        """
+        Compute von Mises stress for all elements.
+
+        Parameters:
+            stresses (list of ndarray): Stress tensors for all elements.
+
+        Returns:
+            von_mises_stresses (list of float): Von Mises stress for each element.
+        """
+        stresses = self.compute_stress(B_matrices,F_global, fixed_dofs, E, nu)
+        von_mises_stresses = []
+        for stress in stresses:
+            sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
+            von_mises = np.sqrt(
+                0.5 * (
+                    (sigma_xx - sigma_yy)**2 +
+                    (sigma_yy - sigma_zz)**2 +
+                    (sigma_zz - sigma_xx)**2 +
+                    6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
+                )
+            )
+            von_mises_stresses.append(von_mises)
+        return von_mises_stresses
+
     def Mesh(self):
 
         filename = input("Insira o nome do arquivo: ") + ".geo"
@@ -233,58 +357,106 @@ class Estrutura:
         ax.set_zlabel('Z')
         ax.set_title('Estrutura 3D do Chassi')
 
-        plt.show()       
-    
+        plt.show()
+
+    def plot_colored_wireframe(self,scalar_values, colormap='jet'):
+        """
+        Plots a 3D wireframe of the structure with color mapping based on scalar values.
+        
+        Parameters:
+            nodes (array): Array of node coordinates (N x 3).
+            elements (list): List of tuples defining connections between nodes.
+            scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            colormap (str): Colormap name for visualization.
+        """
+        # Normalize scalar values to [0, 1] for colormap
+        norm = plt.Normalize(vmin=np.min(scalar_values), vmax=np.max(scalar_values))
+        cmap = plt.get_cmap(colormap)
+        
+        # Create the plot
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Adicionando os pontos (nós)
+        for i, (x, y, z) in enumerate(self.coordinates):
+            ax.scatter(x, y, z, color='b', s=50)
+            ax.text(x, y, z, f' {i+1}', color='black', fontsize=8)
+
+        # Adicionando as linhas de ligação entre os nós
+        for node1, node2 in self.connections:
+            x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
+            y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
+            z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
+            ax.plot(x_coords, y_coords, z_coords, 'r-', marker='o')
+            # Get the scalar value for the midpoint of the element
+            scalar_midpoint = (scalar_values[node1-1] + scalar_values[node2-1]) / 2
+            
+            # Map scalar value to color
+            color = cmap(norm(scalar_midpoint))
+            
+            # Plot the line segment with the corresponding color
+            ax.plot(x_coords, y_coords, z_coords, color=color, linewidth=2)
+
+        # Add a colorbar
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        mappable.set_array(scalar_values)
+        cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
+        cbar.set_label("Strain (or other variable)", fontsize=12)
+
+        # Set axis labels and title
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('Wireframe with Scalar Color Mapping')
+        plt.tight_layout()
+        plt.show()
+           
     def modal_analysis_plot(self):
         autovalores, autovetores, _ = self.modal_analysis()
-        #Criando plot para os modos de vibração separadamente
+
         for mode_idx in range(len(autovalores)):
-            fig = plt.figure(figsize=(8, 6))
-            ax = fig.add_subplot(111, projection='3d')
-            ax.set_title(f'Modo {mode_idx + 1} Viga')
-
-            #Colocando a legenda dos nós no gráfico
-            for i, (x, y, z) in enumerate(self.coordinates):
-                ax.scatter(x, y, z, color='b', s=100)
-                ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
-
-            #Colocando os nós no gráfico
-            for node1, node2 in self.connections:
-                x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
-                y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
-                z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
-                ax.plot(x_coords, y_coords, z_coords, 'b--')
-
-            #Inicializando os modos de vibração e vetor de deslocamentos
             mode_shape = autovetores[:, mode_idx]
-            displacements = np.zeros((len(self.coordinates), 3))
+            displacements = np.zeros((len(self.coordinates), 3))  # Assuming we want to visualize x, y, z displacements only
 
-            #Aplicando os deslocamentos na estrutura
+            # Loop through nodes to extract the translations
             for j, (x, y, z) in enumerate(self.coordinates):
-                if j > 0 and j < len(self.coordinates) - 1:
-                    displacements[j, 0] = mode_shape[2 * j]
-                    displacements[j, 1] = mode_shape[2 * j + 1]
-                    displacements[j, 2] = 0
+                # 6 DOFs per node: [u_x, u_y, u_z, theta_x, theta_y, theta_z]
+                dof_start = 6 * j  # Start index of DOFs for node j
+                displacements[j, 0] = mode_shape[dof_start]     # u_x
+                displacements[j, 1] = mode_shape[dof_start + 1] # u_y
+                displacements[j, 2] = mode_shape[dof_start + 2] # u_z
 
-            deformed_nodes = np.array(self.coordinates) + displacements
+            # Scale displacements for plots
+            scale_factor = 1  # Adjust as needed
+            deformed_nodes = np.array(self.coordinates) + displacements * scale_factor
 
-            #Plotando a estrutura deformada
-            for node1, node2 in self.connections:
+            # Plot deformed
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+
+            # Plot deformed structure
+            for i, (node1, node2) in enumerate(self.connections):
                 x = [deformed_nodes[node1-1][0], deformed_nodes[node2-1][0]]
                 y = [deformed_nodes[node1-1][1], deformed_nodes[node2-1][1]]
                 z = [deformed_nodes[node1-1][2], deformed_nodes[node2-1][2]]
-                ax.plot(x, y, z, 'r-')
+                ax.plot(x, y, z, 'r-', label="Deformed" if i == 0 else "")  # Add label only once
 
-            #Configurações adicionais
+            # Plot original structure
+            for i, (node1, node2) in enumerate(self.connections):
+                x = [self.coordinates[node1-1][0], self.coordinates[node2-1][0]]
+                y = [self.coordinates[node1-1][1], self.coordinates[node2-1][1]]
+                z = [self.coordinates[node1-1][2], self.coordinates[node2-1][2]]
+                ax.plot(x, y, z, 'k--', label="Original" if i == 0 else "")  # Add label only once
+
+            # Add labels and title
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
-            plt.xlim([-0.5,2])
-            plt.ylim([-0.5,1])
-            ax.set_zlim({0,1})
+            ax.set_title(f'Forma modal nº: {mode_idx + 1}')
+            ax.legend()  # Ensure the legend is displayed
+            ax.set_zlim([-0.5,2])
             plt.tight_layout()
             plt.show()
-    
 
     def shape_fun_plot(self, F_flexao1, F_flexao2, F_axial, F_torcao):
         torcao,deformacao_axial,flexao1,flexao2,flexao3,KF_total,KT_total,KF_elements,KT_elements= self.shape_fun(F_flexao1, F_flexao2, F_axial, F_torcao)
@@ -376,19 +548,13 @@ estrutura = Estrutura(elements, element_properties, nodes, 1500, 8.33e-6, 8.33e-
 estrutura.node_loc_matrix()
 estrutura.connect_matrix()
 
+# Plotando o gráfico 3D da estrutura
+estrutura.structure_plot()
+
 K_global, M_global = estrutura.matrizes_global()
-
-#print("\\n Matriz de Rigidez Global")
-#print(K_global)
-
-#print("\\n Matriz de Massa Global")
-#print(M_global)
 
 #Plotando os resultados das deformações
 estrutura.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
-
-# Plotando o gráfico 3D da estrutura
-estrutura.structure_plot()
 
 #Gerar autovalores, autovetores e frequências naturais
 autovalores, autovetores, frequencias = estrutura.modal_analysis()
@@ -399,3 +565,27 @@ print(frequencias)
 
 #Plotagem dos modos de vibração para a estrutura de vigas
 estrutura.modal_analysis_plot()
+
+F_global = np.zeros(K_global.size)  # Force vector
+F_global[2+5*6] = 100
+F_global[2+5*9] = -50
+fixed_dofs = [0, 1, 2, 3, 4, 5]
+
+# Perform analysis
+displacements = estrutura.static_analysis(K_global,F_global, fixed_dofs)
+print("Displacement Vector:", displacements)
+
+estrutura.plot_colored_wireframe(displacements)
+print(nodes.size)
+print(displacements.size)
+print(F_torcao.size)
+print(F_flexao1.size)
+
+"""
+Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
+Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao2)
+Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
+
+"""
