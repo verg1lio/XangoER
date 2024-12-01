@@ -7,7 +7,7 @@ import control as ctl
 
 
 __all__ = ["Motor", "ModulacaoEscalar", "Peso"]
-# Escolha de quais listas de gráficos exibir
+# Escolha de quais listas de gráficos exibir listas em (def setup_plots(self, i))
 escolha = [1]  # Altere para [0], [1], ou [0, 1], conforme desejado
 velocidade_desejada = 150
 
