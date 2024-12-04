@@ -1,0 +1,597 @@
+import numpy as np
+from scipy.linalg import eigh
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.sparse import lil_matrix
+from scipy.sparse.linalg import spsolve
+import pandas as pd
+import sys
+import os
+np.set_printoptions(threshold=sys.maxsize)
+np.set_printoptions(linewidth=200, suppress=True)
+
+class Structure:
+    def __init__(self, elements, element_properties, nodes, m, Id, Ip):
+        self.elements = elements                                              # Matrix of connected elements
+        self.num_elements = len(elements)                                     # Number of elements
+        self.element_properties = element_properties                          # Matrix of element properties
+        self.nodes = nodes                                                    # Matrix of nodes with their positions
+        self.coordinates = np.array(nodes[['x', 'y', 'z']])                  # Coordinates of the nodes
+        self.connections = np.array(elements[['Node a', 'Node b']])           # Connections between nodes (elements)
+        self.num_nodes = len(nodes)                                           # Total number of nodes
+        self.mass = m                                                         # Mass of the vehicle (kg)
+        self.moment_of_inertia_direction = Id                                  # Moment of inertia in a specific direction (kg.m^2)
+        self.moment_of_inertia_plane = Ip                                      # Moment of inertia in the plane (kg.m^2)
+        self.num_dofs_per_node = 6                                             # Degrees of freedom per node
+        self.num_dofs = self.num_nodes * self.num_dofs_per_node               # Total number of degrees of freedom
+        self.K_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global stiffness matrix
+        self.M_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global mass matrix
+        self.num_modes = 12                                                   # Number of vibration modes to return
+
+    def node_loc_matrix(self):
+        print(self.nodes)
+
+    def connect_matrix(self):
+        print(self.elements)
+
+    def calculate_length(self, index):                                      # Helper function to calculate the element length
+        node1, node2 = int(self.elements["Node a"][index] - 1), int(self.elements["Node b"][index] - 1)
+        x1, y1, z1 = self.nodes['x'][node1], self.nodes['y'][node1], self.nodes['z'][node1]
+        x2, y2, z2 = self.nodes['x'][node2], self.nodes['y'][node2], self.nodes['z'][node2]
+        return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
+    
+    def element(self, index):
+        # Taking the properties of each element
+        E = self.element_properties['E'][index]  # Young's Modulus
+        A = self.element_properties['A'][index]  # Cross-sectional Area
+        I = self.element_properties['I'][index]  # Moment of Inertia
+        J = self.element_properties['J'][index]  # Torsional Constant
+        G = self.element_properties['G'][index]  # Shear Modulus
+
+        kappa = 0.9  # Shear correction factor (used for Timoshenko beam theory)
+
+        L_e = self.calculate_length(index)  # Calculate element length
+        Phi = (12 * E * I) / (kappa * G * A * L_e**2)  # Shear correction factor for Timoshenko theory
+        rho = 7850  # Density in kg/m^3 (assuming steel or similar material)
+        
+        # Constants used in the stiffness and mass matrix formulas
+        c1 = E * A / L_e
+        c2 = G * J / L_e
+        c3 = E * I / L_e**3  # Euler-Bernoulli stiffness constant
+        c4 = (E * I) / (L_e**3 * (1 + Phi))  # Timoshenko stiffness constant (modified)
+        t1 = 4 + Phi  # Modification factor for Timoshenko
+        t2 = 2 - Phi  # Modification factor for Timoshenko
+        d1 = rho * A * L_e  # Mass coefficient (inertia)
+        d2 = (I * L_e) / 6  # Mass coefficient related to bending
+        d3 = (rho * A * L_e) / 420  # Mass coefficient (general)
+
+        # **Stiffness Matrix (Euler-Bernoulli Beam Theory)**
+        # Modify the matrix for Timoshenko theory by replacing constants accordingly (c3 with c4)
+        k_e = np.array([
+            [12 * c4, 0, 0, 6 * L_e * c4, 0, 0, -12 * c4, 0, 0, 6 * L_e * c4, 0, 0],
+            [0, c1, 0, 0, 0, 0, 0, -c1, 0, 0, 0, 0],
+            [0, 0, 12 * c4, 0, 0, 6 * L_e * c4, 0, 0, -12 * c4, 0, 0, 6 * L_e * c4],
+            [6 * L_e * c4, 0, 0, t1 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0],
+            [0, 0, 0, 0, c2, 0, 0, 0, 0, 0, -c2, 0],
+            [0, 0, 6 * L_e * c4, 0, 0, t1 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t2 * L_e**2 * c4],
+            [-12 * c4, 0, 0, -6 * L_e * c4, 0, 0, 12 * c4, 0, 0, -6 * L_e * c4, 0, 0],
+            [0, -c1, 0, 0, 0, 0, 0, c1, 0, 0, 0, 0],
+            [0, 0, -12 * c4, 0, 0, -6 * L_e * c4, 0, 0, 12 * c4, 0, 0, -6 * L_e * c4],
+            [6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t1 * L_e**2 * c4, 0, 0],
+            [0, 0, 0, 0, -c2, 0, 0, 0, 0, 0, c2, 0],
+            [0, 0, 6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t1 * L_e**2 * c4]
+        ])
+
+        # **Mass Matrix (Lumped Mass Matrix for Euler-Bernoulli Beam)**
+        m_e = np.array([
+            [156 * d3, 0, 0, 22 * L_e * d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3, 0, 0],
+            [0, 2 * d1, 0, 0, 0, 0, 0, d1, 0, 0, 0, 0],
+            [0, 0, 156 * d3, 0, 0, 22 * L_e * d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3],
+            [22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0],
+            [0, 0, 0, 0, 2 * d2, 0, 0, 0, 0, 0, d2, 0],
+            [0, 0, 22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3],
+            [54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156 * d3, 0, 0, -22 * L_e * d3, 0, 0],
+            [0, d1, 0, 0, 0, 0, 0, 2 * d1, 0, 0, 0, 0],
+            [0, 0, 54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156 * d3, 0, 0, -22 * L_e * d3],
+            [-13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0],
+            [0, 0, 0, 0, d2, 0, 0, 0, 0, 0, 2 * d2, 0],
+            [0, 0, -13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3]
+        ])
+
+        return k_e, m_e
+
+
+    def apply_crimps(self, nodes, dofs):
+        # Loop to select each node that will be fixed (boundary condition)
+        for node in nodes:
+            # Loop to select which degrees of freedom will be fixed
+            for dof in dofs:
+                # Identifying the matrix entry that needs to be restricted by the boundary condition
+                index = node * self.num_dofs_per_node + dof
+                # Assigning a large value to simulate a fixed boundary (large stiffness)
+                self.K_global[index, index] = 10**10
+
+
+    def global_matrices(self):
+        # Calculating the stiffness and mass matrices for each element
+        for index in range(self.num_elements):
+
+            k_e, m_e = self.element(index)  # Get element stiffness and mass matrices
+            node1, node2 = int(self.elements["Node a"][index] - 1), int(self.elements["Node b"][index] - 1)
+
+            # DOFs associated with the element (Degrees of Freedom)
+            dofs = [6 * node1, 6 * node1 + 1, 6 * node1 + 2, 6 * node1 + 3, 6 * node1 + 4, 6 * node1 + 5,
+                    6 * node2, 6 * node2 + 1, 6 * node2 + 2, 6 * node2 + 3, 6 * node2 + 4, 6 * node2 + 5]
+
+            # Updating the global matrices
+            self.K_global[np.ix_(dofs, dofs)] += k_e
+            self.M_global[np.ix_(dofs, dofs)] += m_e
+
+        # Optionally apply boundary conditions (not considered here for now)
+        # self.apply_boundaries([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])
+
+        # Saving the global stiffness and mass matrices to CSV files
+        pd.DataFrame(self.K_global).to_csv('Global_Stiffness_Matrix.csv', index=True, header=True)
+        pd.DataFrame(self.M_global).to_csv('Global_Mass_Matrix.csv', index=True, header=True)
+
+        # Plotting the global stiffness matrix
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.K_global, markersize=10)  # Adjust markersize for better visibility
+        plt.title("Spy Plot of the Global Stiffness Matrix")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
+        # Plotting the global mass matrix
+        plt.figure(figsize=(6, 6))
+        plt.spy(self.M_global, markersize=10)  # Adjust markersize for better visibility
+        plt.title("Spy Plot of the Global Mass Matrix")
+        plt.xlabel("Columns")
+        plt.ylabel("Rows")
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        plt.show()
+
+        return self.K_global,self.M_global
+
+    def shape_fun(self, F_flexion1, F_flexion2, F_axial, F_torsion):
+        KF_total = 0
+        KT_total = 0
+        KF_elements = []
+        KT_elements = [] 
+        torsion, deformation, flexion1, flexion2, flexion3 = [], [], [], [], []
+
+        for index in range(len(self.elements)):
+            E = self.element_properties['E'][index]
+            A = self.element_properties['A'][index]
+            I = self.element_properties['I'][index]
+            J = self.element_properties['J'][index]
+            G = self.element_properties['G'][index]
+            L_e = self.calculate_length(index)
+
+            # Torsion equation
+            torsion_val = (F_torsion * L_e) / (G * J)  # Source[1]
+            torsion.append(torsion_val)
+
+            # Axial deformation equation
+            deformation_val = (F_axial * L_e) / (A * E)  # Source[2]
+            deformation.append(deformation_val)
+
+            # Bending equation
+            flexion_val1 = (F_flexion1 * L_e**3) / (48 * E * I)  # Source[3.1] (point load at the middle of a simply supported element)
+            flexion_val2 = (5 * F_flexion2 * L_e**4) / (384 * E * I)  # Source[3.2] (uniform load along the entire length of a simply supported element)
+            flexion_val3 = flexion_val1 + flexion_val2  # Source[3.3] (attempt at combined loading)
+            flexion1.append(flexion_val1)
+            flexion2.append(flexion_val2)
+            flexion3.append(flexion_val3)
+
+            # Flexural stiffness
+            KF = E * I / L_e
+
+            # Torsional stiffness
+            KT = G * J / L_e
+
+            KF_total += KF
+            KT_total += KT
+
+            KF_elements.append(KF)
+            KT_elements.append(KT)
+
+        return (np.array(torsion), np.array(deformation), np.array(flexion1), 
+                np.array(flexion2), np.array(flexion3), KF_total, KT_total, KF_elements, KT_elements)
+    
+    def modal_analysis(self):
+        # Análise modal por resolução do problema de autovalor e autovetor
+        unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
+
+        # Frequências naturais (raiz quadrada dos autovalores)
+        unsorted_frequencies = np.sqrt(unsorted_eigenvalues) / (2 * np.pi)  # Divisão por 2*pi para converter para hertz
+
+        # Tratando os dados (tomando apenas as 20 primeiras frequências naturais)
+        sorted_indices = np.argsort(unsorted_frequencies)  # Ordena as frequências em ordem crescente
+        top_indices = sorted_indices[:self.num_modes]  # Seleciona os índices dos primeiros n modos
+
+        eigenvalues = np.array(unsorted_eigenvalues)[top_indices]  # Filtra os primeiros n autovalores
+        eigenvectors = np.array(unsorted_eigenvectors)[:, top_indices]  # Filtra os primeiros n autovetores
+        frequencies = np.array(unsorted_frequencies)[top_indices]  # Filtra as primeiras n frequências
+
+        return eigenvalues, eigenvectors, frequencies
+
+    def static_analysis(self,K_global, F_global, fixed_dofs):
+        """
+        Perform static analysis by solving Ku = F with boundary conditions.
+
+        Parameters:
+            K_global (ndarray): Global stiffness matrix (N x N).
+            F_global (ndarray): Global force vector (N).
+            fixed_dofs (list): List of DOF indices to be fixed.
+
+        Returns:
+            displacements (ndarray): Displacement vector (N).
+        """
+        # Total number of DOFs
+        n_dofs = K_global.shape[0]
+
+        # Create a mask for free DOFs (DOFs not constrained)
+        free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
+
+        # Reduce the stiffness matrix and force vector
+        K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
+        F_reduced = F_global[free_dofs]
+
+        # Solve for displacements at free DOFs
+        u_reduced = np.linalg.solve(K_reduced, F_reduced)
+
+        # Construct full displacement vector
+        displacements = np.zeros(n_dofs)
+        displacements[free_dofs] = u_reduced
+
+        return displacements
+
+    def compute_strain(self, B_matrices,F_global, fixed_dofs):
+        """
+        Compute strains for all elements.
+
+        Parameters:
+            displacements (ndarray): Displacement vector for all nodes.
+            B_matrices (list of ndarray): Strain-displacement matrices for each element.
+
+        Returns:
+            strains (list of ndarray): Strain tensors for all elements.
+        """
+        #### AQUI A MATRIZ B PRECISA SER CALCULADA DIRETO DAS FUNÇÕES DE FORMA
+        #### NÃO É TRIVIAL E VAI LEVAR TEMPO, MAS O RESTO DAS CONTAS ESTÃO OK
+        displacements = self.static_analysis(F_global, fixed_dofs)
+        strains = []
+        for B in B_matrices:
+            strain = np.dot(B, displacements)  # B-matrix times displacement vector
+            strains.append(strain)
+        return strains
+    
+    def compute_stress(self,B_matrices,F_global, fixed_dofs, E, nu):
+        """
+        Compute stresses for all elements using Hooke's law.
+
+        Parameters:
+            strains (list of ndarray): Strain tensors for all elements.
+            E (float): Young's modulus.
+            nu (float): Poisson's ratio.
+
+        Returns:
+            stresses (list of ndarray): Stress tensors for all elements.
+        """
+        strains = self.compute_strain(B_matrices,F_global, fixed_dofs)
+        # Construct constitutive matrix (isotropic 3D elasticity)
+        lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+        G = E / (2 * (1 + nu))
+        C = np.array([
+            [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
+            [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
+            [              0,              0,              0,   G,  0,  0],
+            [              0,              0,              0,   0,  G,  0],
+            [              0,              0,              0,   0,  0,  G]
+        ])
+        
+        stresses = []
+        for strain in strains:
+            stress = np.dot(C, strain)  # Hooke's law: C times strain
+            stresses.append(stress)
+        return stresses
+
+    def compute_von_mises(self,B_matrices,F_global, fixed_dofs, E, nu):
+        """
+        Compute von Mises stress for all elements.
+
+        Parameters:
+            stresses (list of ndarray): Stress tensors for all elements.
+
+        Returns:
+            von_mises_stresses (list of float): Von Mises stress for each element.
+        """
+        stresses = self.compute_stress(B_matrices,F_global, fixed_dofs, E, nu)
+        von_mises_stresses = []
+        for stress in stresses:
+            sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
+            von_mises = np.sqrt(
+                0.5 * (
+                    (sigma_xx - sigma_yy)**2 +
+                    (sigma_yy - sigma_zz)**2 +
+                    (sigma_zz - sigma_xx)**2 +
+                    6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
+                )
+            )
+            von_mises_stresses.append(von_mises)
+        return von_mises_stresses
+
+    def Mesh(self):
+
+        filename = input("Enter the filename: ") + ".geo"
+        directory = input("Enter the directory where the .geo file should be saved: ")
+
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        filepath = os.path.join(directory, filename)
+
+        with open(filepath, 'w') as geo_file:
+            for i, (x, y, z) in enumerate(self.nodes):
+                geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
+
+            for i, (start, end) in enumerate(self.elements):
+                geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
+
+            if len(self.elements) > 2:
+                line_loop_indices = ', '.join(str(i + 1) for i in range(len(self.elements)))
+                geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
+                geo_file.write('Plane Surface(1) = {1};\n')
+
+            geo_file.write('Mesh.Algorithm = 6;\n')
+            geo_file.write('Mesh.ElementOrder = 1;\n')
+            geo_file.write('Mesh.Format = 1;\n')
+
+        print(f'The file has been saved at: {filepath}. Just open GMSH and load the file.')
+
+
+    def structure_plot(self):
+        # Plotando o gráfico 3D da estrutura
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Adicionando os pontos (nós)
+        for i, (x, y, z) in enumerate(self.coordinates):
+            ax.scatter(x, y, z, color='b', s=50)
+            ax.text(x, y, z, f' {i+1}', color='black', fontsize=8)
+
+        # Adicionando as linhas de ligação entre os nós
+        for node1, node2 in self.connections:
+            x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
+            y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
+            z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
+            ax.plot(x_coords, y_coords, z_coords, 'r-', marker='o')
+
+        # Configurações adicionais do gráfico
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title("Chassi's 3D structure")
+
+        plt.show()
+
+    def plot_colored_wireframe(self,scalar_values, colormap='jet'):
+        """
+        Plots a 3D wireframe of the structure with color mapping based on scalar values.
+        
+        Parameters:
+            nodes (array): Array of node coordinates (N x 3).
+            elements (list): List of tuples defining connections between nodes.
+            scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            colormap (str): Colormap name for visualization.
+        """
+        # Normalize scalar values to [0, 1] for colormap
+        norm = plt.Normalize(vmin=np.min(scalar_values), vmax=np.max(scalar_values))
+        cmap = plt.get_cmap(colormap)
+        
+        # Create the plot
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Adicionando os pontos (nós)
+        for i, (x, y, z) in enumerate(self.coordinates):
+            ax.scatter(x, y, z, color='b', s=50)
+            ax.text(x, y, z, f' {i+1}', color='black', fontsize=8)
+
+        # Adicionando as linhas de ligação entre os nós
+        for node1, node2 in self.connections:
+            x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
+            y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
+            z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
+            ax.plot(x_coords, y_coords, z_coords, 'r-', marker='o')
+            # Get the scalar value for the midpoint of the element
+            scalar_midpoint = (scalar_values[node1-1] + scalar_values[node2-1]) / 2
+            
+            # Map scalar value to color
+            color = cmap(norm(scalar_midpoint))
+            
+            # Plot the line segment with the corresponding color
+            ax.plot(x_coords, y_coords, z_coords, color=color, linewidth=2)
+
+        # Add a colorbar
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        mappable.set_array(scalar_values)
+        cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
+        cbar.set_label("Strain (or other variable)", fontsize=12)
+
+        # Set axis labels and title
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('Wireframe with Scalar Color Mapping')
+        plt.tight_layout()
+        plt.show()
+           
+    def modal_analysis_plot(self, scale_factor=1):
+        autovalores, autovetores, _ = self.modal_analysis()
+
+        for mode_idx in range(len(autovalores)):
+            mode_shape = autovetores[:, mode_idx]
+            displacements = np.zeros((len(self.coordinates), 3))  # Assuming we want to visualize x, y, z displacements only
+
+            # Loop through nodes to extract the translations
+            for j, (x, y, z) in enumerate(self.coordinates):
+                # 6 DOFs per node: [u_x, u_y, u_z, theta_x, theta_y, theta_z]
+                dof_start = 6 * j  # Start index of DOFs for node j
+                displacements[j, 0] = mode_shape[dof_start]     # u_x
+                displacements[j, 1] = mode_shape[dof_start + 1] # u_y
+                displacements[j, 2] = mode_shape[dof_start + 2] # u_z
+
+            # Scale displacements for plots
+            deformed_nodes = np.array(self.coordinates) + displacements * scale_factor
+
+            # Plot deformed
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+
+            # Plot deformed structure
+            for i, (node1, node2) in enumerate(self.connections):
+                x = [deformed_nodes[node1-1][0], deformed_nodes[node2-1][0]]
+                y = [deformed_nodes[node1-1][1], deformed_nodes[node2-1][1]]
+                z = [deformed_nodes[node1-1][2], deformed_nodes[node2-1][2]]
+                ax.plot(x, y, z, 'r-', label="Deformed" if i == 0 else "")  # Add label only once
+
+            # Plot original structure
+            for i, (node1, node2) in enumerate(self.connections):
+                x = [self.coordinates[node1-1][0], self.coordinates[node2-1][0]]
+                y = [self.coordinates[node1-1][1], self.coordinates[node2-1][1]]
+                z = [self.coordinates[node1-1][2], self.coordinates[node2-1][2]]
+                ax.plot(x, y, z, 'k--', label="Original" if i == 0 else "")  # Add label only once
+
+            # Add labels and title
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_title(f'Forma modal nº: {mode_idx + 1}')
+            ax.legend()  # Ensure the legend is displayed
+            plt.tight_layout()
+            plt.show()
+
+    def shape_fun_plot(self, F_bending1, F_bending2, F_axial, F_torsion):
+        torsion, axial_deformation, bending1, bending2, bending3, KF_total, KT_total, KF_elements, KT_elements = self.shape_fun(F_bending1, F_bending2, F_axial, F_torsion)
+        
+        # Subplot configuration
+        fig, axs = plt.subplots(6, 1, figsize=(12, 22))
+
+        # Plot for Torque
+        axs[0].plot(torsion, 'o-', label=[f'Force {F}N' for F in F_torsion])
+        axs[0].set_title('torsional Deformation of Each Element')
+        axs[0].set_xlabel('Element')
+        axs[0].set_ylabel('Torsion (rad)')
+        axs[0].legend()
+
+        # Plot for Axial Deformation
+        axs[1].plot(axial_deformation, 's-', label=[f'Force {F}N' for F in F_axial])
+        axs[1].set_title('Axial Deformation of Each Element')
+        axs[1].set_xlabel('Element')
+        axs[1].set_ylabel('Deformation (m)')
+        axs[1].legend()
+
+        # Plot for Bending with Point Load
+        axs[2].plot(bending1, 'o-', label=[f'Force {F}N' for F in F_bending1])
+        axs[2].set_title('Deformation Due to Point Load of Each Element')
+        axs[2].set_xlabel('Element')
+        axs[2].set_ylabel('Deflection (m)')
+        axs[2].legend()
+
+        # Plot for Bending with Distributed Load
+        axs[3].plot(bending2, 'o-', label=[f'Force {F}N' for F in F_bending2])
+        axs[3].set_title('Deformation Due to Distributed Load of Each Element')
+        axs[3].set_xlabel('Element')
+        axs[3].set_ylabel('Deflection (m)')
+        axs[3].legend()
+
+        # Plot for Mixed Bending
+        axs[4].plot(bending3, 'o-', label='Mixed Loading')
+        axs[4].set_title('Deformation Due to Mixed Bending of Each Element')
+        axs[4].set_xlabel('Element')
+        axs[4].set_ylabel('Deflection (m)')
+        axs[4].legend()
+
+        # Plot for Flexural and Torsional Stiffness per Element
+        axs[5].plot(KF_elements, 'o-', label='Flexural Stiffness (KF)')
+        axs[5].plot(KT_elements, 's-', label='Torsional Stiffness (KT)')
+        axs[5].set_title('Flexural and Torsional Stiffness of Each Element')
+        axs[5].set_xlabel('Element')
+        axs[5].set_ylabel('Stiffness (N/m)')
+        axs[5].legend()
+
+        # Displaying totals in the main title
+        plt.suptitle(f'KF Total: {KF_total:.2e} N/m, KT Total: {KT_total:.2e} N/m', fontsize=16)
+
+        # Layout adjustments
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.show()
+
+
+nodes_file_path = "C:\\Users\\Cayque\\Downloads\\Planilha sem título - Página1 (4).csv"
+elements_file_path = "C:\\Users\\Cayque\\Downloads\\Chassi simplificado - Página1 (8).csv"
+
+# Carregar o arquivo para inspecionar seu conteúdo
+nodes = pd.read_csv(nodes_file_path)
+element_data = pd.read_csv(elements_file_path)
+
+
+# Selecionando as colunas de conectividades e propriedades dos elementos
+
+elements = element_data[['Element ID','Node a', 'Node b']]
+element_properties = element_data[['Element ID','A', 'I', 'J', 'E', 'G']]
+
+#Criar a estrutura e montar as matrizes de rigidez e massa globais, atribuir forças
+
+F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
+F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
+F_axial   = np.array([1000, 2000, 3000, 4000, 5000])
+F_torcao  = np.array([1000, 2000, 3000, 4000, 5000])
+
+#Inicializando a Estrutura
+
+Structure_ = Structure(elements, element_properties, nodes, 1500, 8.33e-6, 8.33e-6)
+
+#Gerar as matrizes de localização dos nós e de conectividade
+Structure_.node_loc_matrix()
+Structure_.connect_matrix()
+
+# Plotando o gráfico 3D da estrutura
+Structure_.structure_plot()
+
+K_global, M_global = Structure_.global_matrices()
+
+#Plotando os resultados das deformações
+Structure_.shape_fun_plot(F_flexao1, F_flexao2, F_axial, F_torcao)
+
+#Gerar autovalores, autovetores e frequências naturais
+autovalores, autovetores, frequencias = Structure_.modal_analysis()
+
+#Exibindo as frequências naturais e modos de vibração da estrutura
+print("\\n Frequências Naturais (ω) da estrutura:")
+print(frequencias)
+
+#Plotagem dos modos de vibração para a estrutura de vigas
+Structure_.modal_analysis_plot()
+
+F_global = np.zeros(K_global.size)  # Force vector
+F_global[2+5*6] = 100
+F_global[2+5*9] = -50
+fixed_dofs = [0, 1, 2, 3, 4, 5]
+
+# Perform analysis
+displacements = Structure_.static_analysis(K_global,F_global, fixed_dofs)
+print("Displacement Vector:", displacements)
+
+Structure_.plot_colored_wireframe(displacements)
+print(nodes.size)
+print(displacements.size)
+print(F_torcao.size)
+print(F_flexao1.size)
+
+#Made by: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes; Cayque Lemos Souza; Antônio Marcos Lopes Brito Junior; Larissa Pereira Leanor; Alexandre Duque Gondim Pires
