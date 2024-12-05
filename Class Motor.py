@@ -4,6 +4,12 @@ from scipy import signal
 import control as clt
 
 class Motor:
+    """
+    Classe que modela o comportamento de um motor de indução trifasico. Inclui modelagem de tensão da fonte, 
+    tensão direta e em quadratura, corrente, derivadas dos fluxos e correntes, fases de corrente e fluxos, 
+    torque de carga,, torque eletromagnético, velocidade mecânica, torque mecânico.
+    """
+    
     def __init__(self, rs, rr, ls, lr, mrs, jm, kf, q1, q2, q3, valor_mu):
         # Constants
         self.pi23 = 2 * np.pi / 3
