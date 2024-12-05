@@ -34,7 +34,20 @@ class Estrutura:
     def connect_matrix(self):
         print(self.elements)
 
-    def calcular_comprimento(self, index):                                 #Função auxiliar para cálculo de comprimento dos elementos
+    def calcular_comprimento(self, index): 
+        """
+        Calculate the length of a finite element.
+        Args:
+            index (int): The index of the element whose length is to be calculated.
+        Returns:
+            float: The length of the element.
+        Process:
+            1. Extracts the indices of the nodes (`Node a` and `Node b`) that define the element.
+            - Node indices in the `elements` dictionary are converted to zero-based indexing.
+            2. Retrieves the 3D coordinates (`x`, `y`, `z`) of the nodes from the `nodes` dictionary.
+            3. Computes the Euclidean distance between the two nodes:
+            \( L = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2 + (z_2 - z_1)^2} \)
+        """                              
         
         node1 , node2 = int(self.elements["Node a"][index]-1) , int(self.elements["Node b"][index]-1)
         x1, y1, z1 = self.nodes['x'][node1], self.nodes['y'][node1], self.nodes['z'][node1]
@@ -42,6 +55,22 @@ class Estrutura:
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
     
     def element(self, index):
+        """
+        Calculate the elemental stiffness and mass matrices for a given finite element.
+
+        Args:
+            index (int): Index of the element for which the stiffness and mass matrices are to be computed.
+
+        Returns:
+            tuple: A tuple containing:
+                - `k_e` (numpy.ndarray): The 12x12 stiffness matrix for the element, considering either 
+                Euler-Bernoulli or Timoshenko beam theory.
+                - `m_e` (numpy.ndarray): The 12x12 mass matrix for the element.
+        Notes:
+            - Euler-Bernoulli and Timoshenko beam theories differ in how they handle shear deformation:
+            - Replace `c4` with `c3` in the stiffness matrix to use Euler-Bernoulli theory.
+            - Mass matrix assumes consistent mass distribution along the element.
+        """
         #Tomando as propriedades de cada elemento
         E = self.element_properties['E'][index]
         A = self.element_properties['A'][index]
@@ -99,12 +128,52 @@ class Estrutura:
         return k_e,m_e
 
     def aplicar_engastes(self, nodes, dofs):
+        """
+        Apply constraints (fixed supports) to specific degrees of freedom (DOFs) in the global stiffness matrix.
+
+        This method modifies the global stiffness matrix (`K_global`) to simulate fixed supports (encastrés)
+        by applying large stiffness values to the specified DOFs of the given nodes. This effectively 
+        constrains the structure's motion in those directions.
+
+        Args:
+            nodes (list of int): Indices of the nodes where constraints are to be applied. 
+                                Each node index corresponds to its position in the global node list.
+            dofs (list of int): Degrees of freedom to be constrained for each node. 
+        """
         for node in nodes:                                          #Laço para selecionar cada nó que será engastado
             for dof in dofs:                                        #Laço para selecionar quais graus de liberdade serão fixados
                 index = node * self.num_dofs_per_node + dof         #Identificação da entrada da matriz que precisa ser restringida pelo engaste        
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
                    
     def matrizes_global(self):
+        """
+        Compute and assemble the global stiffness and mass matrices for the entire structure.
+
+        This function calculates the stiffness (`K_global`) and mass (`M_global`) matrices of each element
+        and assembles them into the global matrices by appropriately mapping the degrees of freedom (DOFs).
+
+        Steps:
+            1. Iterates over all elements in the structure.
+            2. For each element, retrieves the stiffness and mass matrices using the `element` method.
+            3. Maps the local element matrices to the corresponding global DOFs.
+            4. Updates the global matrices with contributions from each element.
+            5. Saves the assembled matrices as CSV files for further use.
+            6. Visualizes the sparsity patterns of the global matrices using `spy` plots.
+
+        Returns:
+            tuple: `(K_global, M_global)`
+                - `K_global` (numpy.ndarray): Global stiffness matrix of the structure.
+                - `M_global` (numpy.ndarray): Global mass matrix of the structure.
+
+        Files exported:
+            - `Matriz_Global_Rigidez.csv`: Global stiffness matrix.
+            - `Matriz_Global_Massa.csv`: Global mass matrix.
+
+        Visualization:
+            - Two spy plots are generated:
+                1. Sparsity pattern of the global stiffness matrix.
+                2. Sparsity pattern of the global mass matrix.
+        """
         #Calculando as matrizes de rigidez e massa de cada elemento
         for index in range(self.num_elements):
 
@@ -142,6 +211,27 @@ class Estrutura:
         return self.K_global,self.M_global
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
+        """
+    Calculates deformation and stiffness values for axial, torsional, and flexural forces for all elements in the structure.
+
+    Parameters:
+        F_flexao1 (float): Force applied for flexural deformation (point load at mid-span).
+        F_flexao2 (float): Force applied for distributed flexural deformation.
+        F_axial (float): Axial force applied to the elements.
+        F_torcao (float): Torsional force applied to the elements.
+
+    Returns:
+        tuple:
+            - torcao (array): Torsional deformation for each element.
+            - deformacao (array): Axial deformation for each element.
+            - flexao1 (array): Flexural deformation due to point load for each element.
+            - flexao2 (array): Flexural deformation due to distributed load for each element.
+            - flexao3 (array): Combined flexural deformation for each element.
+            - KF_total (float): Total flexural stiffness of the structure.
+            - KT_total (float): Total torsional stiffness of the structure.
+            - KF_elements (list): Flexural stiffness for each element.
+            - KT_elements (list): Torsional stiffness for each element.
+    """
         KF_total = 0
         KT_total = 0
         KF_elements = []
@@ -183,6 +273,24 @@ class Estrutura:
             np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
     
     def modal_analysis(self):
+        """
+    Performs modal analysis of the structure by solving the eigenvalue problem.
+
+    This function computes the natural frequencies and mode shapes of the structure 
+    using the global stiffness (`K_global`) and mass (`M_global`) matrices.
+
+    Returns:
+        tuple:
+            - eigenvalues (array): Array of the selected eigenvalues corresponding to the natural frequencies.
+            - eigenvectors (array): Array of the selected eigenvectors representing mode shapes.
+            - frequencies (array): Array of the selected natural frequencies in Hertz.
+
+    Parameters:
+        None (uses class attributes):
+            - K_global (array): Global stiffness matrix of the structure.
+            - M_global (array): Global mass matrix of the structure.
+            - num_modes (int): Number of modes to retain in the analysis.
+    """
         # Análise modal por resolução do problema de autovalor e autovetor
         unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
 
@@ -335,6 +443,14 @@ class Estrutura:
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
     def structure_plot(self):
+        """
+        Plots a 3D wireframe of the structure.
+        
+        Parameters:
+            coordinates (array): Array of node coordinates (N x 3).
+            connections (list): List of tuples defining connections between nodes.
+        """
+
         # Plotando o gráfico 3D da estrutura
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
@@ -412,6 +528,21 @@ class Estrutura:
         plt.show()
            
     def modal_analysis_plot(self):
+        """
+        Plots the modal shapes of the structure in 3D, showing the deformed and original configurations.
+
+        This function performs the following:
+        - Computes eigenvalues and eigenvectors using the modal analysis method.
+        - Extracts the translational displacements (x, y, z) for each node from the modal shapes.
+        - Scales and visualizes the deformed structure for each mode, overlaying it on the original structure.
+        - Annotates the nodes of both the original and deformed structures.
+
+        Parameters:
+            None (uses class attributes):
+                - coordinates (array): Array of node coordinates (N x 3).
+                - connections (list): List of tuples defining element connections between nodes.
+                - modal_analysis (method): Computes eigenvalues and eigenvectors.
+        """     
         autovalores, autovetores, _ = self.modal_analysis()
 
         for mode_idx in range(len(autovalores)):
@@ -441,6 +572,16 @@ class Estrutura:
                 z = [deformed_nodes[node1-1][2], deformed_nodes[node2-1][2]]
                 ax.plot(x, y, z, 'r-', label="Deformed" if i == 0 else "")  # Add label only once
 
+            #Colocando a legenda dos nós no gráfico
+            for i, (x, y, z) in enumerate(self.coordinates):
+                ax.scatter(x, y, z, color='b', s=50)
+                ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
+
+            #Colocando a legenda dos nós após a deformação no gráfico
+            for i, (x, y, z) in enumerate(deformed_nodes):
+                ax.scatter(x, y, z, color='r', s=25)
+                ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
+
             # Plot original structure
             for i, (node1, node2) in enumerate(self.connections):
                 x = [self.coordinates[node1-1][0], self.coordinates[node2-1][0]]
@@ -459,7 +600,32 @@ class Estrutura:
             plt.show()
 
     def shape_fun_plot(self, F_flexao1, F_flexao2, F_axial, F_torcao):
+        """
+            Generates plots of deformations and stiffness values for each element based on the given forces.
+
+            This function calls `shape_fun` to calculate torsional, axial, and flexural deformations, as well as stiffness values.
+            It then plots these results across subplots to visualize the behavior of each element under the applied forces.
+
+            Parameters:
+                F_flexao1 (float): Force applied for flexural deformation (point load at mid-span).
+                F_flexao2 (float): Force applied for distributed flexural deformation.
+                F_axial (float): Axial force applied to the elements.
+                F_torcao (float): Torsional force applied to the elements.
+
+            Plots:
+                1. Torsional deformation for each element.
+                2. Axial deformation for each element.
+                3. Flexural deformation due to point load for each element.
+                4. Flexural deformation due to distributed load for each element.
+                5. Combined flexural deformation for each element.
+                6. Flexural and torsional stiffness for each element.
+
+            Notes:
+                - Total flexural stiffness (KF_total) and torsional stiffness (KT_total) are displayed in the overall plot title.
+                - The function uses subplots to organize the visuals, and the layout is adjusted for clarity.
+            """
         torcao,deformacao_axial,flexao1,flexao2,flexao3,KF_total,KT_total,KF_elements,KT_elements= self.shape_fun(F_flexao1, F_flexao2, F_axial, F_torcao)
+        
         # Configuração dos subplots
         fig, axs = plt.subplots(6, 1, figsize=(12, 22))
 
@@ -512,6 +678,8 @@ class Estrutura:
         # Ajustes de layout
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
+        print(f'KF Total: {KF_total:.2e} N/m \nKT Total: {KT_total:.2e} N/m')
+
 
 
 nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Nodes.csv"
