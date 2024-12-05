@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 
 class Bateria:
     """
-    Classe avançada que modela o comportamento de um pack de baterias.
+    Classe que modela o comportamento de um pack de baterias.
     Inclui modelagem de tensão, corrente, temperatura, SoC e análise temporal.
     """
+    
     def __init__(self, tipo_celula, num_celulas_serie, num_celulas_paralelo, soh_inicial=1, soc_inicial=1, resistencia_inicial=0.02, temperatura_ambiente=25):
         self.parametros = self.definir_tipo_celula(tipo_celula)
         if not self.parametros:
