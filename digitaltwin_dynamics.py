@@ -715,28 +715,46 @@ class Tire:
             print("Não foi possível determinar um ângulo estático para as rodas dentro do intervalo fornecido.")
 
     def tire_example():
-        """Executa a simulação do mecanismo e exibe os resultados.
-
-        Esta função calcula a cinemática do mecanismo e chama a função
-        `plot_mechanism` para animar o movimento. Além disso, exibe o ângulo
-        de slip externo e o ângulo de toe estático, se disponível.
-
+        """Executa uma simulação abrangente dos métodos relacionados ao pneu e exibe os resultados.
+        
+        Esta função integra vários métodos relacionados à dinâmica do pneu, incluindo cálculo de forças 
+        com e sem camber, análise de rigidez, e animação do mecanismo de quatro barras. Os resultados são 
+        exibidos em gráficos comparativos com dados experimentais.
+        
         Methods Utilizados
         ------------------
         self.calculate_kinematics() : method
         >>> Calcula e retorna as coordenadas dos pontos do mecanismo para o ângulo
         atual de entrada `self.angle`.
-
+        
         self.plot_mechanism() : method
         >>> Anima o mecanismo de quatro barras.
-
+        
+        self.Tire_forces(result) : method
+        >>> Calcula as forças laterais, longitudinais e momento de auto-alinhamento do pneu
+        com base nos parâmetros de entrada.
+        
+        self.plot_camber(...) : method
+        >>> Plota as curvas de forças laterais com diferentes valores de camber e compara com os
+        dados experimentais.
+        
+        self.plot_graph(...) : method
+        >>> Plota os resultados previstos das forças do pneu (lateral, longitudinal, momento de auto-alinhamento)
+        e os compara com os dados experimentais.
+        
+        self.calcular_forca() : method
+        >>> Calcula a força de rigidez do pneu com base na deformação.
+        
+        self.plotar_deformacao(...) : method
+        >>> Plota a curva de rigidez do pneu em função da deformação.
+        
         Returns
         -------
         None
-        >>> Esta função não retorna valores, mas imprime os ângulos de slip e toe.
-
+        >>> Esta função não retorna valores, mas exibe gráficos e animações relacionados à dinâmica do pneu e ao mecanismo.
+        
         Examples
-        --------
+        --------------
         >>> suspension_system.run()
         """
 
@@ -1359,7 +1377,7 @@ class Kinematics:
         kinematics : Kinematics
         >>> Instância para a análise cinemática de um mecanismo de quatro barras.
 
-        Métodos Chamados
+        Methods Utilizados
         ----------------
         kinematics.plotar_cinematica() : method
         >>> Plota a cinemática do mecanismo de quatro barras.
