@@ -1834,17 +1834,7 @@ class BrakeSystem:
             Distância do eixo ao centro de gravidade em relação à distribuição de carga traseira.
 
         Examples
-        --------
-        >>> resultados = {
-                'BF': BF, 'χ': χ, 'W': W, 'FzF_dyn': FzF_dyn, 'FzR_dyn': FzR_dyn,
-                'τF': τF, 'τR': τR, 'FnF': FnF, 'FnR': FnR, 'Awc': Awc, 'Acm': Acm,
-                'PF': PF, 'PR': PR, 'FaCM': FaCM, 'lF': lF, 'lR': lR
-            }
-        >>> print("Resultados Calculados:")
-            for i, result in resultados.items():
-                print(f"{i}: {result}")
-                
-        Instanciando:        
+        ----------                
         >>> BrakeSystem = BrakeSystem(params)
         >>> BrakeSystem.calculate_params()
         >>> Resultados Calculados:
@@ -1877,23 +1867,23 @@ class BrakeSystem:
         FaCM = PF * Acm  # Força necessária para acionar o cilindro mestre
         lF = self.psi * self.L  # Distância do eixo ao centro de gravidade em relação à distribuição de carga dianteira
         lR = (1 - self.psi) * self.L  # Distância do eixo ao centro de gravidade em relação à distribuição de carga traseira
-        
-        """# Exemplo:
-        resultados = {
-                'BF': BF, 'χ': χ, 'W': W, 'FzF_dyn': FzF_dyn, 'FzR_dyn': FzR_dyn,
-                'τF': τF, 'τR': τR, 'FnF': FnF, 'FnR': FnR, 'Awc': Awc, 'Acm': Acm,
-                'PF': PF, 'PR': PR, 'FaCM': FaCM, 'lF': lF, 'lR': lR
-            }
-
-        print("Resultados Calculados de calculate_params:")
-        for i, result in resultados.items():
-            print(f"{i}: {result}")"""
 
         return BF, χ, W, FzF_dyn, FzR_dyn, τF, τR, FnF, FnR, Awc, Acm, PF, PR, FaCM, lF, lR
 
     def apply_brake(self, pedal_force=300):
         """
         Aplica o freio e calcula os resultados com base na força aplicada ao pedal.
+
+        Methods Utilizados
+        ------------------
+        self.calculate_params(pedal_force) : method
+        >>> Realiza os cálculos detalhados relacionados à frenagem, incluindo forças dinâmicas, torques 
+        e resistências. Retorna os parâmetros necessários para determinar os resultados finais.
+        
+        Parâmetros
+        ----------
+        pedal_force : float
+        >>> Força aplicada ao pedal do freio, em Newtons.
 
         Returns
         -------
@@ -1983,17 +1973,6 @@ class BrakeSystem:
         forca_frenagem /= self.Rdp
         forca_frenagem -= resistencia_rolamento
 
-        """# Exemplo
-        resultados = { 
-                'Forca de Frenagem': forca_frenagem, 'Torque Ajustado': torque_ajustado, 
-                'Forca Gerada Pelo Disco': forca_f, 'Torque do Disco de Freio': torque_disco_freio, 
-                'Resistencia ao Rolamento': resistencia_rolamento, 'Torque de Resistencia ao Rolamento': torque_resistencia_rolamento
-            }
-
-        print("Resultados Calculados de apply_brake:")
-        for i, result in resultados.items():
-            print(f"{i}: {result}")"""
-
         return forca_frenagem, torque_ajustado, forca_f, torque_disco_freio, resistencia_rolamento, torque_resistencia_rolamento
 
     # Calcula a velocidade angular das rodas durante a frenagem
@@ -2077,18 +2056,6 @@ class BrakeSystem:
             if angular_velocities[i] <= 0:
                 angular_desaceleration = 0
 
-        """
-        # Exemplo
-        resultados = { 
-                'Desaceleração angular': angular_desaceleration,'Velocidade angular': angular_velocity,
-                'Primeiro resultado da lista de Velocidades angulares': angular_velocities[0], 
-                'Inércia do pneu': inertia_wheel 
-            }
-
-        print("Resultados Calculados de calculate_angular_velocity:")
-        for i, result in resultados.items():
-            print(f"{i}: {result}")"""
-
         return angular_desaceleration, angular_velocity, angular_velocities, inertia_wheel
     
     # Imprime os resultados calculados
@@ -2096,6 +2063,18 @@ class BrakeSystem:
         '''
         Essa função nos mostra os valores de alguns parâmetros que foram caculados anteriormente. Isso serve 
         para monitorarmos os valores e o comportamento da Classe BrakeSystem.
+
+        Parâmetros
+        ----------
+        pedal_force : float
+            >>> Força aplicada no pedal do freio, em Newtons.
+
+        Methods Utilizados
+        ------------------
+        BrakeSystem.apply_brake(pedal_force) : method
+            >>> Calcula o torque de frenagem ajustado com base na força do pedal de freio.
+        BrakeSystem.calculate_angular_velocity(torque) : method
+            >>> Determina a velocidade angular da roda após a aplicação do torque de frenagem.
     
         Examples
         --------
@@ -2118,18 +2097,36 @@ class BrakeSystem:
 
     # Plota o gráfico da força longitudinal em relação à força aplicada ao pedal
     def show_graph(self, pedal_force, time_intervals):
-        '''
-        Utilizamos a biblioteca matplotlib para plotar um gráfico da força longitudinal em relação à força 
-        aplicada ao pedal. A função show_graph recebe dois parâmetros: longitudinal_force (que é uma lista ou 
-        array contendo as forças longitudinais) e pedal_forces (que é uma lista ou array contendo as forças 
-        aplicadas ao pedal). O gráfico gerado mostra como a força longitudinal varia conforme a força aplicada
-        no pedal aumenta. 
-        
-        Examples
-        --------
-        >>> BrakeSystem = BrakeSystem(params)
-        >>> BrakeSystem.show_graph(forca_longitudinal, pedal_forces)
-        '''
+         """Gera gráfico da dinâmica de frenagem.
+    
+        Utiliza a biblioteca `matplotlib` para criar um gráfico que relaciona a força longitudinal gerada durante 
+        a frenagem com a força aplicada no pedal ao longo do tempo. Permite visualizar como a resposta do sistema 
+        de freios varia conforme a aplicação de força.
+    
+        Parâmetros
+        ----------
+        pedal_force : float
+            >>> Força aplicada no pedal do freio, em Newtons.
+        time_intervals : numpy.ndarray
+            >>> Array de intervalos de tempo para a simulação, em segundos.
+    
+        Methods Utilizados
+        ------------------
+        BrakeSystem.apply_brake(pedal_force) : method
+            >>> Calcula o torque de frenagem ajustado com base na força do pedal de freio.
+        BrakeSystem.calculate_angular_velocity(torque) : method
+            >>> Determina a velocidade angular da roda após a aplicação do torque de frenagem.
+    
+        Returns
+        -------
+        None
+            >>> A função não retorna valores, mas exibe o gráfico gerado.
+    
+        Example
+        --------------
+        >>> brake_system = BrakeSystem(params)
+        >>> brake_system.show_graph(pedal_force=1000, time_intervals=np.arange(0, 10, 0.01))
+        """
         # Definindo os parâmetros
         params = {
         'RedP': 4,  # Redução do pedal
@@ -2199,6 +2196,82 @@ class BrakeSystem:
         plt.show()
 
     def brake_system_example():
+        """Exemplo de simulação do sistema de freio.
+    
+        Esta função demonstra o uso do sistema de freio ao calcular os resultados relacionados 
+        à frenagem, como forças aplicadas, torque gerado e outros parâmetros baseados em um 
+        conjunto de configurações do veículo e entradas de força no pedal. A função também 
+        exibe gráficos relacionados à dinâmica da frenagem.
+    
+        Parâmetros (internos à função)
+        ------------------------------
+        params : dict
+            >>> Dicionário contendo os parâmetros do sistema de freio e do veículo:
+            - 'RedP' : float
+                Redução do pedal.
+            - 'a' : float
+                Desaceleração em termos de gravidade (g).
+            - 'psi' : float
+                Distribuição de carga estática por eixo (adimensional).
+            - 'μl' : float
+                Coeficiente de atrito entre pastilha e disco.
+            - 'pi' : float
+                Valor de pi.
+            - 'HCG' : float
+                Altura do centro de gravidade do veículo, em metros.
+            - 'μ' : float
+                Coeficiente de atrito entre pneu e solo.
+            - 'FzF' : float
+                Força de reação estática no eixo dianteiro, em Newtons.
+            - 'FzR' : float
+                Força de reação estática no eixo traseiro, em Newtons.
+            - 'Rdp' : float
+                Raio do pneu, em metros.
+            - 'Dcm' : float
+                Diâmetro do cilindro mestre, em metros.
+            - 'Dwc' : float
+                Diâmetro do cilindro da roda, em metros.
+            - 'Npast' : int
+                Número de pastilhas por disco.
+            - 'atrito_coeficiente' : float
+                Coeficiente de atrito da pastilha.
+            - 'red' : float
+                Raio efetivo do disco, em metros.
+            - 'Mt' : float
+                Massa total do veículo, em kg.
+            - 'm_wheel' : float
+                Massa da roda, em kg.
+            - 'm_tire' : float
+                Massa do pneu, em kg.
+            - 'L' : float
+                Distância entre eixos, em metros.
+            - 'c_rr' : float
+                Coeficiente de resistência ao rolamento.
+    
+        time_step : float
+            >>> Passo de tempo para os cálculos da simulação, em segundos.
+        time_intervals : numpy.ndarray
+            >>> Array com os intervalos de tempo para a simulação.
+        pedal_forces : float
+            >>> Força aplicada no pedal do freio, em Newtons.
+    
+        Methods Utilizados
+        ------------------
+        BrakeSystem.print_resultados(pedal_force) : method
+            >>> Calcula e exibe os resultados da simulação, como torque e forças geradas pelo sistema de freio.
+        BrakeSystem.show_graph(pedal_force, time_intervals) : method
+            >>> Gera e exibe gráficos relacionados à frenagem ao longo do tempo, como torque aplicado, 
+            velocidade angular e outros parâmetros.
+    
+        Returns
+        -------
+        None
+            >>> A função não retorna valores, mas exibe resultados no console e gera gráficos explicativos.
+    
+        Exemplo de Uso
+        --------------
+        >>> brake_system_example()
+        """
         params = {
         'RedP': 4,  # Redução do pedal
         'a': 0.8,  # Desaceleração [g]
@@ -2231,7 +2304,51 @@ class BrakeSystem:
         brake.show_graph(pedal_force=pedal_forces, time_intervals=time_intervals)
 
 def dynamics_example(pedal_forces, rpm, torque, slip_angle):
-        
+        """
+        Exemplo de simulação de dinâmica veicular com entrada única.
+    
+        Esta função executa um exemplo pontual de cálculo de forças relacionadas ao pneu 
+        com base nos inputs fornecidos. São calculadas as forças longitudinais e laterais, 
+        bem como o torque auto-alinhante, considerando inputs de frenagem (sistema de freio) 
+        e aceleração (drivetrain). Os resultados são exibidos diretamente no console.
+    
+        Parâmetros
+        ----------
+        pedal_forces : float
+            >>> Força aplicada no pedal do freio, em Newtons.
+        rpm : float
+            >>> Rotação por minuto (RPM) do motor.
+        torque : float
+            >>> Torque do motor, em Newton-metros (N.m).
+        slip_angle : float
+            >>> Ângulo de escorregamento lateral do pneu, em graus.
+    
+        Methods Utilizados
+        ------------------
+        BrakeSystem.apply_brake(pedal_force) : method
+            >>> Calcula o torque de frenagem ajustado com base na força do pedal de freio.
+        BrakeSystem.calculate_angular_velocity(torque) : method
+            >>> Determina a velocidade angular da roda após a aplicação do torque de frenagem.
+        Tire.slip_ratio_1(angular_velocity, raio_pneu) : method
+            >>> Calcula a razão de escorregamento longitudinal do pneu.
+        Tire.Tire_forces(result) : method
+            >>> Calcula as forças laterais, longitudinais e o torque auto-alinhante do pneu.
+        Drivetrain.CarPerformance() : method
+            >>> Calcula o desempenho do veículo e retorna a faixa de rotação (RPM) e velocidades angulares.
+    
+        Returns
+        -------
+        None
+            >>> A função não retorna valores, mas imprime no console os resultados:
+                - Força lateral (lateral_force) [N]
+                - Torque auto-alinhante (auto_align_moment) [N.m]
+                - Força longitudinal de frenagem (brake_longitudinal_forces) [N]
+                - Força longitudinal de aceleração (drivetrain_longitudinal_forces) [N]
+    
+        Exemplo de Uso
+        --------------
+        >>> dynamics_example(pedal_forces=150, rpm=3000, torque=200, slip_angle=5)
+        """
         params = {
         'RedP': 4,  # Redução do pedal
         'a': 0.8,  # Desaceleração [g]
