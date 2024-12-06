@@ -11,22 +11,22 @@ np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
-    def __init__(self, elements,element_properties, nodes, m, Id, Ip):
-        self.elements = elements                                              #Matriz de elementos conectados
-        self.num_elements = len(elements)                                     #Número de elementos
-        self.element_properties = element_properties                          #Matriz de propriedades dos elementos
-        self.nodes = nodes                                                    #Matriz de nós com suas posições
-        self.coordinates = np.array(nodes[['x', 'y', 'z']])
-        self.connections = np.array(elements[['Node a', 'Node b']])
-        self.num_nodes = len(nodes)                                           #Número total de nós
-        self.massa = m                                                        #Massa do carro (Kg)
-        self.momento_inercia_direcao = Id                                     #Momento de inércia em relação à direção (kg.m^2)
-        self.momento_inercia_plano = Ip                                       #Momento de inércia em relação ao plano (kg.m^2)
-        self.num_dofs_per_node = 6                                            #Graus de liberdade por nó
-        self.num_dofs = self.num_nodes * self.num_dofs_per_node               #Total de Graus de liberdade (gdls)
-        self.K_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            #Tamanho adequado para a matriz global
-        self.M_global = np.zeros((len(nodes) * 6, len(nodes) * 6))
-        self.num_modes = 12                                                   #Número de modos de vibração a serem retornados
+    def __init__(self, elements,element_properties, nodes, Id, Ip):
+        self.elements = elements                                              # Matrix of connected elements
+        self.num_elements = len(elements)                                     # Number of elements
+        self.element_properties = element_properties                          # Matrix of element properties
+        self.nodes = nodes                                                    # Matrix of nodes with their positions
+        self.coordinates = np.array(nodes[['x', 'y', 'z']])                   # Coordinates of the nodes
+        self.connections = np.array(elements[['Node a', 'Node b']])           # Connections between nodes (elements)
+        self.num_nodes = len(nodes)                                           # Total number of nodes
+        self.car_mass = 0                                                     # Mass of the vehicle (kg)
+        self.moment_of_inertia_direction = Id                                 # Moment of inertia in a specific direction (kg.m^2)
+        self.moment_of_inertia_plane = Ip                                     # Moment of inertia in the plane (kg.m^2)
+        self.num_dofs_per_node = 6                                            # Degrees of freedom per node
+        self.num_dofs = self.num_nodes * self.num_dofs_per_node               # Total number of degrees of freedom
+        self.K_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global stiffness matrix
+        self.M_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global mass matrix
+        self.num_modes = 12                                                   # Number of vibration modes to return
 
     def node_loc_matrix(self):
         print(self.nodes)
@@ -34,7 +34,7 @@ class Estrutura:
     def connect_matrix(self):
         print(self.elements)
 
-    def calcular_comprimento(self, index): 
+    def lenght_calculator(self, index): 
         """
         Calculate the length of a finite element.
         Args:
@@ -54,6 +54,18 @@ class Estrutura:
         x2, y2, z2 = self.nodes['x'][node2], self.nodes['y'][node2], self.nodes['z'][node2]
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
     
+    def mass(self):
+        for index in range(self.num_elements):
+            L_e = self.lenght_calculator(index)
+            X = self.element_properties['X'][index]
+            A = self.element_properties['A'][index]
+            rho = 7870  # kg/m^3
+            raio_externo = np.sqrt(A/np.pi)
+            raio_interno = raio_externo - X
+            volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
+            self.car_mass+= volume*rho
+        print(f"{self.car_mass.round(2) } kg")
+
     def element(self, index):
         """
         Calculate the elemental stiffness and mass matrices for a given finite element.
@@ -80,7 +92,7 @@ class Estrutura:
 
         kappa=0.9       #Fator de correção para cisalhamento 
 
-        L_e = self.calcular_comprimento(index)
+        L_e = self.lenght_calculator(index)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
         rho = 7850  # kg/m^3
         c1 = E * A / L_e
@@ -243,7 +255,7 @@ class Estrutura:
             I = self.element_properties['I'][index]
             J = self.element_properties['J'][index]
             G = self.element_properties['G'][index]
-            L_e = self.calcular_comprimento(index)
+            L_e = self.lenght_calculator(index)
             # Equação de torsão
             torcao_val = (F_torcao * L_e) / (G * J)         #Fonte[1]
             torcao.append(torcao_val)
@@ -471,6 +483,7 @@ class Estrutura:
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
+        ax.set_ylim([-0.5,1.5])
         ax.set_title('Estrutura 3D do Chassi')
 
         plt.show()
@@ -524,6 +537,7 @@ class Estrutura:
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.set_title('Wireframe with Scalar Color Mapping')
+        ax.set_ylim([-0.5,1.5])
         plt.tight_layout()
         plt.show()
            
@@ -578,9 +592,9 @@ class Estrutura:
                 ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
 
             #Colocando a legenda dos nós após a deformação no gráfico
-            for i, (x, y, z) in enumerate(deformed_nodes):
-                ax.scatter(x, y, z, color='r', s=25)
-                ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
+            #for i, (x, y, z) in enumerate(deformed_nodes):
+            #    ax.scatter(x, y, z, color='r', s=25)
+            #    ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
 
             # Plot original structure
             for i, (node1, node2) in enumerate(self.connections):
@@ -596,6 +610,7 @@ class Estrutura:
             ax.set_title(f'Forma modal nº: {mode_idx + 1}')
             ax.legend()  # Ensure the legend is displayed
             ax.set_zlim([-0.5,2])
+            ax.set_ylim([-0.5,1.5])
             plt.tight_layout()
             plt.show()
 
@@ -680,10 +695,54 @@ class Estrutura:
         plt.show()
         print(f'KF Total: {KF_total:.2e} N/m \nKT Total: {KT_total:.2e} N/m')
 
+    def run(self,F_flexao1, F_flexao2, F_axial,F_torcao):
+        """
+    Executes the complete structural analysis workflow, including mass matrix generation, 
+    node and connectivity matrices, deformation visualization, modal analysis, and static analysis.
+    
+    Parameters:
+        F_flexao1 (array): Forces due to bending in one direction, applied to the structure.
+        F_flexao2 (array): Forces due to bending in a perpendicular direction, applied to the structure.
+        F_axial (array): Axial forces applied to the structure.
+        F_torcao (array): Torsional forces applied to the structure.
+        """
+        self.mass()
+        #Gerar as matrizes de localização dos nós e de conectividade
+        self.node_loc_matrix()
+        self.connect_matrix()
+        # Plotando o gráfico 3D da estrutura
+        self.structure_plot()
+        self.matrizes_global()
 
+        #Plotando os resultados das deformações
+        self.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
 
-nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Nodes.csv"
-elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Elements.csv"
+        #Gerar autovalores, autovetores e frequências naturais
+        autovalores, autovetores, frequencias = self.modal_analysis()
+        self.modal_analysis_plot()
+        #Exibindo as frequências naturais e modos de vibração da estrutura
+        print("\\n Frequências Naturais (ω) da estrutura:")
+        print(frequencias)
+        F_global = np.zeros(self.K_global.size)  # Force vector
+        F_global[2+5*6] = 100
+        F_global[2+5*9] = -50
+        fixed_dofs = [0, 1, 2, 3, 4, 5]
+
+        # Perform analysis
+        displacements = estrutura.static_analysis(self.K_global,F_global, fixed_dofs)
+        print("Displacement Vector:", displacements)
+
+        estrutura.plot_colored_wireframe(displacements)
+        print(self.num_nodes)
+        print(displacements.size)
+        print(F_torcao.size)
+        print(F_flexao1.size)
+                                            
+#nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Nodes.csv"
+#elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Elements.csv"
+
+nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nos_final.csv"
+elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Conectividade_final.csv"
 
 # Carregar o arquivo para inspecionar seu conteúdo
 nodes = pd.read_csv(nodes_file_path)
@@ -692,64 +751,24 @@ element_data = pd.read_csv(elements_file_path)
 # Selecionando as colunas de conectividades e propriedades dos elementos
 
 elements = element_data[['Element ID','Node a', 'Node b']]
-element_properties = element_data[['Element ID','A', 'I', 'J', 'E', 'G']]
+element_properties = element_data[['Element ID','A', 'I', 'J', 'E', 'G','X']]
 
-#Criar a estrutura e montar as matrizes de rigidez e massa globais
-#Dados: n = len(nodes), 
-#       m = 1500 kg, 
-#       rho = 7850 kg/m^3
-#       A = 0.225 m^2
-#       E = 210e9  # Módulo de elasticidade em Pa
-#       I = 8.33e-6  # Momento de inércia em m^4
-#       Ip = Id = 8.33e-6 kg.m^2
 
-#Criar a estrutura e montar as matrizes de rigidez e massa globais, atribuir forças
+
+#Atribuir forças
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
 F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
 F_axial   = np.array([1000, 2000, 3000, 4000, 5000])
 F_torcao  = np.array([1000, 2000, 3000, 4000, 5000])
 
 #Inicializando a Estrutura
-estrutura = Estrutura(elements, element_properties, nodes, 1500, 8.33e-6, 8.33e-6)
+estrutura = Estrutura(elements, element_properties, nodes, 8.33e-6, 8.33e-6)
+estrutura.run(F_flexao1, F_flexao2, F_axial, F_torcao)
 
-#Gerar as matrizes de localização dos nós e de conectividade
-estrutura.node_loc_matrix()
-estrutura.connect_matrix()
 
-# Plotando o gráfico 3D da estrutura
-estrutura.structure_plot()
-
-K_global, M_global = estrutura.matrizes_global()
-
-#Plotando os resultados das deformações
-estrutura.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
-
-#Gerar autovalores, autovetores e frequências naturais
-autovalores, autovetores, frequencias = estrutura.modal_analysis()
-
-#Exibindo as frequências naturais e modos de vibração da estrutura
-print("\\n Frequências Naturais (ω) da estrutura:")
-print(frequencias)
-
-#Plotagem dos modos de vibração para a estrutura de vigas
-estrutura.modal_analysis_plot()
-
-F_global = np.zeros(K_global.size)  # Force vector
-F_global[2+5*6] = 100
-F_global[2+5*9] = -50
-fixed_dofs = [0, 1, 2, 3, 4, 5]
-
-# Perform analysis
-displacements = estrutura.static_analysis(K_global,F_global, fixed_dofs)
-print("Displacement Vector:", displacements)
-
-estrutura.plot_colored_wireframe(displacements)
-print(nodes.size)
-print(displacements.size)
-print(F_torcao.size)
-print(F_flexao1.size)
 
 """
+
 Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
 Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
 Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
