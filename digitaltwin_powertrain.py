@@ -733,7 +733,7 @@ class Motor:
        
        
     def controle_pwm(self):
-        """Sinal PWM para controle do 
+        """Sinal PWM para controle do inversor
 
         Implementa o controle PWM (Modulação por Largura de Pulso) para o sistema. A função realiza o cálculo das tensões moduladas, das correntes e do sinal PWM, além de gerar gráficos para análise visual dos resultados.
 
