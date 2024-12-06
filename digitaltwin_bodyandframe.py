@@ -13,6 +13,16 @@ np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
     def __init__(self, elements, nodes, m, Id, Ip):
+        """
+        Initializes the structure with elements, nodes, and physical properties.
+        Inputs:
+            - elements: connectivity matrix between nodes (tuples of node indices).
+            - nodes: node coordinates (Nx3 array, where N is the number of nodes).
+            - m: total mass of the system (float).
+            - Id: directional moment of inertia (float).
+            - Ip: planar moment of inertia (float).
+        Outputs: None.
+        """
         self.elements = elements                                             #Matriz de elementos conectados
         self.num_elements = len(elements)                                    #Número de elementos
         self.nodes = nodes                                                   #Matriz de nós com suas posições
@@ -26,13 +36,27 @@ class Estrutura:
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
         self.num_modes = 12                                                  #Número de modos de vibração a serem retornados
 
-    def calcular_comprimento(self, element):                                 #Função auxiliar para cálculo de comprimento dos elementos
+    def calcular_comprimento(self, element):    
+        """
+        Calculates the length of an element based on node coordinates.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - element length (float).
+        """                    
         node1, node2 = element
         x1, y1, z1 = self.nodes[node1]
         x2, y2, z2 = self.nodes[node2]
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
-    def node_loc_matrix(self, node_tags, node_coord):
+    def node_loc_matrix(self, node_tags, node_coord): 
+          """
+        Creates a matrix with node locations for visualization.
+        Inputs:
+            - node_tags: list of node identifiers.
+            - node_coord: matrix of node coordinates.
+        Outputs: None."""
+          
         num_nodes = len(node_tags)
         node_loc_matrix = np.zeros((num_nodes, 4), dtype=float)
         for i, (x, y, z) in enumerate(node_coord, start=0):
@@ -44,6 +68,11 @@ class Estrutura:
         print(node_loc_matrix)
 
     def connect_matrix(self):
+          """
+        Generates and prints the connectivity matrix of elements.
+        Inputs: None (uses class attributes).
+        Outputs: None.
+        """
          # Inicializar uma lista para armazenar as conexões
         connections = []
 
@@ -59,6 +88,14 @@ class Estrutura:
         print(connections_matrix)
 
     def element(self, element):
+        """
+        Computes the element stiffness and mass matrices.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - k_e: element stiffness matrix.
+            - m_e: element mass matrix.
+        """
         # Variáveis e constantes físicas do modelo
         E = 210e9   	#Modulo de Young (Pa)
         I = 1.6667e-5 	#Momento de inercia (m^4)
@@ -115,12 +152,26 @@ class Estrutura:
         return k_e,m_e
 
     def aplicar_engastes(self, nodes, dofs):
+       """
+        Applies constraints (fixed DOFs) on specific nodes.
+        Inputs:
+            - nodes: list of node indices to be constrained.
+            - dofs: list of degrees of freedom to be fixed.
+        Outputs: None.
+        """
         for node in nodes:                                          # Laço para selecionar cada nó que será engastado
             for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
                 index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
 
     def matrizes_global(self):
+          """
+        Assembles the global stiffness and mass matrices.
+        Inputs: None (uses class attributes).
+        Outputs:
+            - K_global: global stiffness matrix.
+            - M_global: global mass matrix.
+        """
         for element in self.elements:
             node1, node2 = element
             k_e, m_e = self.element(element)
@@ -157,7 +208,17 @@ class Estrutura:
 
         return self.K_global,self.M_global
 
-    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
+    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
+         """
+        Calculates deformations and stiffness of elements under loads.
+        Inputs:
+            - F_flex1: array of point bending forces.
+            - F_flex2: array of distributed bending forces.
+            - F_axial: array of axial forces.
+            - F_torsion: array of torsion forces.
+        Outputs:
+            - Arrays of torsion, deformations, and stiffness (bending and torsional).
+        """
         E = 2.1e11  	#Modulo de Young (Pa)
         I = 1.6667e-5 	#Momento de inercia (m^4)
         G = 81.2e9  	#Modulo de Cisalhamento (Pa)
@@ -199,6 +260,15 @@ class Estrutura:
             np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
 
     def modal_analysis(self):
+         
+        """
+        Performs modal analysis to compute natural frequencies and mode shapes.
+        Inputs: None.
+        Outputs:
+            - eigenvalues: eigenvalues (squared natural frequencies).
+            - eigenvectors: eigenvectors (mode shapes).
+            - frequencies: natural frequencies (Hz).
+        """
         # Análise modal por resolução do problema de autovalor e autovetor
         unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
 
@@ -217,6 +287,7 @@ class Estrutura:
     
 
     def static_analysis(K_global, F_global, fixed_dofs):
+
         """
         Perform static analysis by solving Ku = F with boundary conditions.
 
@@ -227,7 +298,16 @@ class Estrutura:
 
         Returns:
             displacements (ndarray): Displacement vector (N).
+
+        Resolve uma análise estática para deslocamentos em DOFs livres.
+        Entradas:
+            - K_global: matriz de rigidez global.
+            - F_global: vetor de forças globais.
+            - fixed_dofs: índices de graus de liberdade fixos.
+        Saídas:
+            - displacements: vetor de deslocamentos nos DOFs.
         """
+   
         # Total number of DOFs
         n_dofs = K_global.shape[0]
 
@@ -249,7 +329,13 @@ class Estrutura:
 
 
     def Mesh(self):
-
+         
+         """
+        Generates a `.geo` file for the structure mesh in GMSH.
+        Inputs: None (uses class attributes and user-provided file name).
+        Outputs: None.
+        """
+         
         filename = input("Insira o nome do arquivo: ") + ".geo"
         diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
 
@@ -288,8 +374,6 @@ class Estrutura:
         Returns:
             strains (list of ndarray): Strain tensors for all elements.
         """
-        #### AQUI A MATRIZ B PRECISA SER CALCULADA DIRETO DAS FUNÇÕES DE FORMA
-        #### NÃO É TRIVIAL E VAI LEVAR TEMPO, MAS O RESTO DAS CONTAS ESTÃO OK
 
         strains = []
         for B in B_matrices:
@@ -418,8 +502,6 @@ elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1
 #nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
 #elements = [    (0,     1),    (1,     2),    (4,     3),    (3,     5),    (1,     3) ]
 
-
-
 #Criar a estrutura e montar as matrizes de rigidez e massa globais
 #Dados: n = len(nodes), 
 #       m = 1500 kg, 
@@ -530,8 +612,6 @@ plt.xlim([-20,120])
 plt.ylim([-45,60])
 plt.tight_layout()
 plt.show()
-
-
 #Exibindo as frequências naturais e modos de vibração da estrutura
 print("\n Frequências Naturais (ω) da estrutura montada por vigas:")
 print(frequencias)
@@ -581,9 +661,6 @@ for mode_idx in range(len(autovalores)):
     plt.show()
 
 # estrutura.Mesh()
-
-
-
 F_global = np.zeros(K_global.size)  # Force vector
 F_global[2+5*6] = 100
 F_global[2+5*9] = -50
@@ -592,22 +669,14 @@ fixed_dofs = [0, 1, 2, 3, 4, 5]
 # Perform analysis
 displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
-
-
-
-
 # Simulated scalar values for demonstration
 scalar_values = np.random.rand(len(nodes))
-
 Estrutura.plot_colored_wireframe(nodes, elements, scalar_values)
-
 print(nodes.size)
 print(scalar_values.size)
 print(torcao.size)
 print(flexao1.size)
-
 """
-
 Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
 Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
 Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
@@ -616,4 +685,3 @@ Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
 """
 
 #Autores do Código: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes; Cayque Lemos Souza; Antônio Marcos Lopes Brito Junior;
-
