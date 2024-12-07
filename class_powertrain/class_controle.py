@@ -6,15 +6,13 @@ import control as clt
 from class_motor import Motor
 
 class Controle:
+    """
+    Classe que modela o controle de um motor trifásico utilizando PWM para modulação de tensão. 
+    Inclui cálculos de funções de transferência, representação no espaço de estados, diagramas de Bode e Nyquist, 
+    resposta ao degrau e configuração de chaves de inversor.
+    """
+
     def __init__(self, motor: Motor):
-        """
-        Inicializa a classe Controle com uma instância de Motor.
-        
-        Parameters
-        ----------
-        motor : Motor
-            Instância da classe Motor.
-        """
         self.motor = motor
         self.msr = motor.msr
         self.p = motor.p
@@ -62,8 +60,9 @@ class Controle:
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.plot_bode()
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.plot_bode()
         """
 
         num, den = self.transfer_function()
@@ -97,8 +96,9 @@ class Controle:
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.plot_nyquist()
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.plot_nyquist()
         """
 
         num, den = self.transfer_function()
@@ -186,9 +186,9 @@ class Controle:
 
         Examples:
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.step_response()
-
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.step_response()
         """
         
         num, den = self.transfer_function()
@@ -208,7 +208,6 @@ class Controle:
     def chaves(self):
         """ A configuração de chaves do inversor.
 
-
         Determina a configuração das seis chaves que 
         compõem o do inversor de frequência (q1, q2, q3, q4, q5, q6). 
         Sendo q4, q5 e q6 os complementares de q1, q2 e q3, respectivamente.
@@ -222,10 +221,9 @@ class Controle:
             Chave 6: Chave 6 Fechada (True) ou Aberta (False)
                    
         Example
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) 
-        >>> motor.chaves()
-       
-        
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.chaves()
         """
         
         if self.q1 == 1: chave_1 = True # Retorno chave 1 fechada
@@ -253,7 +251,7 @@ class Controle:
         return print(f'A configuração de chaves do inversor é: C1={chave_1}, C2={chave_2}, C3={chave_3}, C4={chave_4}, C5={chave_5}, C6={chave_6}')
             
     def controle_pwm(self):
-        """Sinal PWM para controle do 
+        """Sinal PWM para controle do Inversor
 
         Implementa o controle PWM (Modulação por Largura de Pulso) para o sistema. A função realiza o cálculo das tensões moduladas, das correntes e do sinal PWM, além de gerar gráficos para análise visual dos resultados.
 
@@ -263,14 +261,13 @@ class Controle:
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.controle_pwm()
-        # O código exibirá gráficos de tensões moduladas, sinais PWM e correntes.
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.controle_pwm()
 
         Notes
         -----
         A função considera parâmetros do sistema previamente definidos, como tensão de alimentação, frequência da onda portadora, e fator de modulação.
-
         """
 
         # Define o passo de tempo do controlador
@@ -360,3 +357,16 @@ class Controle:
                 
                 self.valor_mu = mu  
                 self.controle_pwm()  
+
+    def example():
+        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) # Varia o valor de mu entre 0 e 1
+        controle = Controle(motor)
+        controle.plot_bode()
+        controle.plot_nyquist() 
+        controle.print_state_space()
+        controle.step_response()
+        controle.chaves()
+        controle.exec_pwm()
+
+Controle.example()
+
