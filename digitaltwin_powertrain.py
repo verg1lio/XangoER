@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt
 from scipy import signal
 import control as clt
 
-
-__all__ = ["Motor", "Peso"]
-
-
 class Motor:
+    """
+    Classe que modela o comportamento de um motor de indução trifasico. Inclui modelagem de tensão da fonte, 
+    tensão direta e em quadratura, corrente, derivadas dos fluxos e correntes, fases de corrente e fluxos, 
+    torque de carga,, torque eletromagnético, velocidade mecânica, torque mecânico.
+    """
+    
     def __init__(self, rs, rr, ls, lr, mrs, jm, kf, q1, q2, q3, valor_mu):
         # Constants
         self.pi23 = 2 * np.pi / 3
@@ -508,6 +510,38 @@ class Motor:
         plt.tight_layout()
         plt.show()
 
+
+    def example():
+        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) # Varia o valor de mu entre 0 e 1
+        motor.simulate()
+        motor.plot_motor()
+
+Motor.example()
+
+
+
+class Controle:
+    """
+    Classe que modela o controle de um motor trifásico utilizando PWM para modulação de tensão. 
+    Inclui cálculos de funções de transferência, representação no espaço de estados, diagramas de Bode e Nyquist, 
+    resposta ao degrau e configuração de chaves de inversor.
+    """
+
+    def __init__(self, motor: Motor):
+        self.motor = motor
+        self.msr = motor.msr
+        self.p = motor.p
+        self.jm = motor.jm
+        self.kf = motor.kf
+        self.rs = motor.rs
+        self.ls = motor.ls
+        self.q1 = motor.q1
+        self.q2 = motor.q2
+        self.q3 = motor.q3
+        self.valor_mu = motor.valor_mu
+        self.Vs = motor.Vs
+        self.f_onda_p = motor.f_onda_p
+
     def transfer_function(self):
         """Função de transferência
 
@@ -537,12 +571,14 @@ class Motor:
     def plot_bode(self):
         """Gera o diagrama de Bode do sistema.
 
-        Esta função calcula a função de transferência do motor e plota o diagrama de Bode, que inclui a magnitude e a fase em função da frequência.
+        Esta função calcula a função de transferência do motor e plota o diagrama de Bode
+        inclui a magnitude e a fase em função da frequência.
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.plot_bode()
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.plot_bode()
         """
 
         num, den = self.transfer_function()
@@ -572,12 +608,14 @@ class Motor:
     def plot_nyquist(self):
         """Gera o diagrama de Nyquist do sistema.
 
-        Esta função calcula a função de transferência do motor e plota o diagrama de Nyquist, que representa a resposta em frequência do sistema no domínio complexo.
+        Esta função calcula a função de transferência do motor e plota o diagrama de Nyquist
+        representa a resposta em frequência do sistema no domínio complexo.
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.plot_nyquist()
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.plot_nyquist()
         """
 
         num, den = self.transfer_function()
@@ -665,9 +703,9 @@ class Motor:
 
         Examples:
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.step_response()
-
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.step_response()
         """
         
         num, den = self.transfer_function()
@@ -687,7 +725,6 @@ class Motor:
     def chaves(self):
         """ A configuração de chaves do inversor.
 
-
         Determina a configuração das seis chaves que 
         compõem o do inversor de frequência (q1, q2, q3, q4, q5, q6). 
         Sendo q4, q5 e q6 os complementares de q1, q2 e q3, respectivamente.
@@ -701,41 +738,40 @@ class Motor:
             Chave 6: Chave 6 Fechada (True) ou Aberta (False)
                    
         Example
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) 
-        >>> motor.chaves()
-       
-        
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.chaves()
         """
         
-        if self.q1 == 1: chave_1 = True # Retorno chave 1 fechada
-        else: chave_1 = False # Retorno chave 1 aberta
+        if self.q1 == 1: chave_1 = True      # Retorno chave 1 fechada
+        else: chave_1 = False                # Retorno chave 1 aberta
 
-        if self.q2 == 1: chave_2 = True # Retorno chave 2 fechada
-        else: chave_2 = False # Retorno chave 2 aberta
+        if self.q2 == 1: chave_2 = True      # Retorno chave 2 fechada
+        else: chave_2 = False                # Retorno chave 2 aberta
 
-        if self.q3 == 1: chave_3 = True # Retorno chave 3 fechada
-        else: chave_3 = False # Retorno chave 3 aberta
+        if self.q3 == 1: chave_3 = True      # Retorno chave 3 fechada
+        else: chave_3 = False                # Retorno chave 3 aberta
 
         q1_bar = 1 - self.q1
         q2_bar = 1 - self.q2
         q3_bar = 1 - self.q3
             
-        if q1_bar == 1: chave_4 = True # Retorno chave 1_bar fechada
-        else: chave_4 = False # Retorno chave 1_bar aberta
+        if q1_bar == 1: chave_4 = True      # Retorno chave 1_bar fechada
+        else: chave_4 = False               # Retorno chave 1_bar aberta
 
-        if q2_bar == 1: chave_5 = True # Retorno chave 2_bar fechada
-        else: chave_5 = False # Retorno chave 2_bar aberta
+        if q2_bar == 1: chave_5 = True      # Retorno chave 2_bar fechada
+        else: chave_5 = False               # Retorno chave 2_bar aberta
 
-        if q3_bar == 1: chave_6 = True # Retorno chave 3_bar fechada
-        else: chave_6 = False # Retorno chave 3_bar aberta    
+        if q3_bar == 1: chave_6 = True      # Retorno chave 3_bar fechada
+        else: chave_6 = False               # Retorno chave 3_bar aberta    
 
         return print(f'A configuração de chaves do inversor é: C1={chave_1}, C2={chave_2}, C3={chave_3}, C4={chave_4}, C5={chave_5}, C6={chave_6}')
-       
-       
+            
     def controle_pwm(self):
-        """Sinal PWM para controle do inversor
+        """Sinal PWM para controle do Inversor
 
-        Implementa o controle PWM (Modulação por Largura de Pulso) para o sistema. A função realiza o cálculo das tensões moduladas, das correntes e do sinal PWM, além de gerar gráficos para análise visual dos resultados.
+        Implementa o controle PWM (Modulação por Largura de Pulso) para o sistema. A função realiza o cálculo 
+        das tensões moduladas, das correntes e do sinal PWM, além de gerar gráficos para análise visual dos resultados.
 
         Returns
         Plots do gráfico do sinal PWM, onda triangular portadora, correntes, tensão de entrada e tensão modulada
@@ -743,14 +779,13 @@ class Motor:
 
         Examples
         --------
-        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        >>> motor.controle_pwm()
-        # O código exibirá gráficos de tensões moduladas, sinais PWM e correntes.
+        >>> motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1)
+        >>> controle = Controle(motor)
+        >>> controle.controle_pwm()
 
         Notes
         -----
         A função considera parâmetros do sistema previamente definidos, como tensão de alimentação, frequência da onda portadora, e fator de modulação.
-
         """
 
         # Define o passo de tempo do controlador
@@ -830,8 +865,6 @@ class Motor:
         plt.tight_layout()
         plt.show()
 
-
-    
     def exec_pwm(self):
         self.mu_values = np.linspace(0, 10e-1, 1)  # Variação de mu
         
@@ -843,20 +876,26 @@ class Motor:
                 self.valor_mu = mu  
                 self.controle_pwm()  
 
-
     def example():
         motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01, q1=1, q2=1, q3=0, valor_mu=1) # Varia o valor de mu entre 0 e 1
-        motor.simulate()
-        motor.plot_motor()
-        motor.plot_bode()
-        motor.plot_nyquist() 
-        motor.print_state_space()
-        motor.step_response()
-        motor.chaves()
-        motor.exec_pwm()
+        controle = Controle(motor)
+        controle.plot_bode()
+        controle.plot_nyquist() 
+        controle.print_state_space()
+        controle.step_response()
+        controle.chaves()
+        controle.exec_pwm()
+
+Controle.example()
+
 
 
 class Peso:
+    """
+    Classe que calcula o peso total de um sistema de powertrain, considerando os pesos 
+    individuais da bateria, do inversor, do motor e do chicote elétrico.
+    """
+    
     def __init__(self, peso_bateria, peso_inversor, peso_motor, peso_chicote):
         self.peso_bateria = peso_bateria
         self.peso_inversor = peso_inversor
@@ -864,29 +903,30 @@ class Peso:
         self.peso_chicote = peso_chicote
 
     def peso_total(self):
-        """Peso total dos componentes do sistema de powertrain
+        """
+        Calcula o peso total dos componentes do sistema de powertrain.
 
-        Calcula o peso total dos componentes do sistema de powertrain, somando o peso da bateria, do inversor e do motor.
+        Soma o peso da bateria, do inversor, do motor e do chicote elétrico.
 
         Returns
         -------
-        peso_total : float
-            Somatorio dos pesos dos componentes do sistema
+        float
+            Somatório dos pesos dos componentes do sistema.
 
         Examples
         --------
-        >>> peso_pwt = peso(10, 10, 65, 5)
-            90
+        >>> peso_pwt = Peso(10, 10, 65, 5)
+        >>> peso_pwt.peso_total()
+        (90 kg)
         """
-        peso_total = self.peso_bateria + self.peso_inversor + self.peso_motor + self.peso_chicote
-        return peso_total
+        return self.peso_bateria + self.peso_inversor + self.peso_motor + self.peso_chicote
 
+    @staticmethod
     def example():
         peso_pwt = Peso(10, 10, 65, 5)
         total = peso_pwt.peso_total()
-        print(f"O peso total é {total} Kg")
+        print(f"O peso total é {total} kg")
 
-
-# exemplos
-Motor.example()
 Peso.example()
+
+
