@@ -12,6 +12,16 @@ np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
     def __init__(self, elements,element_properties, nodes, Id, Ip):
+        """
+        Initializes the structure with elements, nodes, and physical properties.
+        Inputs:
+            - elements: connectivity matrix between nodes (tuples of node indices).
+            - nodes: node coordinates (Nx3 array, where N is the number of nodes).
+            - m: total mass of the system (float).
+            - Id: directional moment of inertia (float).
+            - Ip: planar moment of inertia (float).
+        Outputs: None.
+        """
         self.elements = elements                                              # Matrix of connected elements
         self.num_elements = len(elements)                                     # Number of elements
         self.element_properties = element_properties                          # Matrix of element properties
@@ -29,25 +39,31 @@ class Estrutura:
         self.num_modes = 12                                                   # Number of vibration modes to return
 
     def node_loc_matrix(self):
+        """
+        Creates a matrix with node locations for visualization.
+        Inputs:
+            - node_tags: list of node identifiers.
+            - node_coord: matrix of node coordinates.
+        Outputs: None.
+        """
         print(self.nodes)
 
     def connect_matrix(self):
+        """
+        Prints the connectivity matrix of elements.
+        Inputs: None (uses class attributes).
+        Outputs: None.
+        """
         print(self.elements)
 
     def lenght_calculator(self, index): 
         """
-        Calculate the length of a finite element.
-        Args:
-            index (int): The index of the element whose length is to be calculated.
-        Returns:
-            float: The length of the element.
-        Process:
-            1. Extracts the indices of the nodes (`Node a` and `Node b`) that define the element.
-            - Node indices in the `elements` dictionary are converted to zero-based indexing.
-            2. Retrieves the 3D coordinates (`x`, `y`, `z`) of the nodes from the `nodes` dictionary.
-            3. Computes the Euclidean distance between the two nodes:
-            \( L = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2 + (z_2 - z_1)^2} \)
-        """                              
+        Calculates the length of an element based on node coordinates.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - element length (float).
+        """                                
         
         node1 , node2 = int(self.elements["Node a"][index]-1) , int(self.elements["Node b"][index]-1)
         x1, y1, z1 = self.nodes['x'][node1], self.nodes['y'][node1], self.nodes['z'][node1]
@@ -55,6 +71,18 @@ class Estrutura:
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
     
     def mass(self):
+        """
+        Calculate the mass of the entire structure.
+
+        Parameters:
+        None (uses class attributes):
+            - K_global (array): Global stiffness matrix of the structure.
+            - M_global (array): Global mass matrix of the structure.
+            - num_modes (int): Number of modes to retain in the analysis.
+
+        Returns
+        self.car_mass (float): Mass of the entire structure
+        """
         for index in range(self.num_elements):
             L_e = self.lenght_calculator(index)
             X = self.element_properties['X'][index]
@@ -68,20 +96,12 @@ class Estrutura:
 
     def element(self, index):
         """
-        Calculate the elemental stiffness and mass matrices for a given finite element.
-
-        Args:
-            index (int): Index of the element for which the stiffness and mass matrices are to be computed.
-
-        Returns:
-            tuple: A tuple containing:
-                - `k_e` (numpy.ndarray): The 12x12 stiffness matrix for the element, considering either 
-                Euler-Bernoulli or Timoshenko beam theory.
-                - `m_e` (numpy.ndarray): The 12x12 mass matrix for the element.
-        Notes:
-            - Euler-Bernoulli and Timoshenko beam theories differ in how they handle shear deformation:
-            - Replace `c4` with `c3` in the stiffness matrix to use Euler-Bernoulli theory.
-            - Mass matrix assumes consistent mass distribution along the element.
+        Computes the element stiffness and mass matrices.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - k_e: element stiffness matrix.
+            - m_e: element mass matrix.
         """
         #Tomando as propriedades de cada elemento
         E = self.element_properties['E'][index]
@@ -141,16 +161,11 @@ class Estrutura:
 
     def aplicar_engastes(self, nodes, dofs):
         """
-        Apply constraints (fixed supports) to specific degrees of freedom (DOFs) in the global stiffness matrix.
-
-        This method modifies the global stiffness matrix (`K_global`) to simulate fixed supports (encastrés)
-        by applying large stiffness values to the specified DOFs of the given nodes. This effectively 
-        constrains the structure's motion in those directions.
-
-        Args:
-            nodes (list of int): Indices of the nodes where constraints are to be applied. 
-                                Each node index corresponds to its position in the global node list.
-            dofs (list of int): Degrees of freedom to be constrained for each node. 
+        Applies constraints (fixed DOFs) on specific nodes.
+        Inputs:
+            - nodes: list of node indices to be constrained.
+            - dofs: list of degrees of freedom to be fixed.
+        Outputs: None.
         """
         for node in nodes:                                          #Laço para selecionar cada nó que será engastado
             for dof in dofs:                                        #Laço para selecionar quais graus de liberdade serão fixados
@@ -159,23 +174,11 @@ class Estrutura:
                    
     def matrizes_global(self):
         """
-        Compute and assemble the global stiffness and mass matrices for the entire structure.
-
-        This function calculates the stiffness (`K_global`) and mass (`M_global`) matrices of each element
-        and assembles them into the global matrices by appropriately mapping the degrees of freedom (DOFs).
-
-        Steps:
-            1. Iterates over all elements in the structure.
-            2. For each element, retrieves the stiffness and mass matrices using the `element` method.
-            3. Maps the local element matrices to the corresponding global DOFs.
-            4. Updates the global matrices with contributions from each element.
-            5. Saves the assembled matrices as CSV files for further use.
-            6. Visualizes the sparsity patterns of the global matrices using `spy` plots.
-
-        Returns:
-            tuple: `(K_global, M_global)`
-                - `K_global` (numpy.ndarray): Global stiffness matrix of the structure.
-                - `M_global` (numpy.ndarray): Global mass matrix of the structure.
+        Assembles the global stiffness and mass matrices.
+        Inputs: None (uses class attributes).
+        Outputs:
+            - K_global: global stiffness matrix.
+            - M_global: global mass matrix.
 
         Files exported:
             - `Matriz_Global_Rigidez.csv`: Global stiffness matrix.
@@ -483,7 +486,9 @@ class Estrutura:
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_ylim([-0.5,1.5])
+        ax.set_xlim([-0.5,2.0])
+        ax.set_ylim([-0.5,2.0])
+        ax.set_zlim([-0.5,1.5])
         ax.set_title('Estrutura 3D do Chassi')
 
         plt.show()
@@ -715,17 +720,17 @@ class Estrutura:
         self.matrizes_global()
 
         #Plotando os resultados das deformações
-        self.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
+        #self.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
 
         #Gerar autovalores, autovetores e frequências naturais
         autovalores, autovetores, frequencias = self.modal_analysis()
-        self.modal_analysis_plot()
+        #self.modal_analysis_plot()
         #Exibindo as frequências naturais e modos de vibração da estrutura
         print("\\n Frequências Naturais (ω) da estrutura:")
         print(frequencias)
         F_global = np.zeros(self.K_global.size)  # Force vector
-        F_global[2+5*6] = 100
-        F_global[2+5*9] = -50
+        F_global[2+5*6] = 1000
+        F_global[2+5*9] = 0
         fixed_dofs = [0, 1, 2, 3, 4, 5]
 
         # Perform analysis
