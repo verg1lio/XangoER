@@ -1,5 +1,31 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
+class Pista:
+    def __init__(self, gps_coords, largura_pista):
+        self.gps_coords = gps_coords
+        self.largura_pista = largura_pista
+
+    def calcular_segmentos(self):
+        segmentos = []
+        for i in range(len(self.gps_coords) - 1):
+            ponto1 = self.gps_coords[i]
+            ponto2 = self.gps_coords[i + 1]
+            distancia = np.sqrt((ponto2[0] - ponto1[0])**2 + (ponto2[1] - ponto1[1])**2)
+            segmentos.append(distancia)
+        return segmentos
+
+    def plotar_pista(self):
+        latitudes = [coord[0] for coord in self.gps_coords]
+        longitudes = [coord[1] for coord in self.gps_coords]
+        plt.plot(longitudes, latitudes, marker="o")
+        plt.xlabel("Longitude")
+        plt.ylabel("Latitude")
+        plt.title("Mapa da Pista")
+        plt.grid(True)
+        plt.show()
+
+# Função para simular a pista
 def simulate_track(segments, max_acceleration, max_deceleration, time_step=1):
     """
     Simula a aceleração, desaceleração e velocidade constante ao longo de uma pista.
@@ -57,17 +83,44 @@ def simulate_track(segments, max_acceleration, max_deceleration, time_step=1):
 
     return time_vector, accel_vector
 
-# Código para simular a temperatura da bateria
-import matplotlib.pyplot as plt
-
 # Parâmetros da pista
-total_distance = 1200  # Distância total da pista (em metros)
+gps_coords = [
+    (-22.738674, -47.533101),
+    (-22.738810, -47.533171),
+    (-22.740274, -47.533893),
+    (-22.740422, -47.533944),
+    (-22.740595, -47.533935),
+    (-22.740704, -47.533817),
+    (-22.740757, -47.533727),
+    (-22.740757, -47.533568),
+    (-22.740707, -47.533415),
+    (-22.739457, -47.532591),
+    (-22.739448, -47.532462),
+    (-22.739348, -47.531396),
+    (-22.739221, -47.531150),
+    (-22.739011, -47.530965),
+    (-22.738653, -47.530897),
+    (-22.738491, -47.530954),
+    (-22.738281, -47.531067),
+    (-22.737617, -47.531700),
+    (-22.737422, -47.532007),
+    (-22.737395, -47.532266),
+    (-22.737480, -47.532472),
+    (-22.737598, -47.532587),
+    (-22.738110, -47.532835),
+    (-22.738501, -47.533029),
+    (-22.738674, -47.533101)
+]
+
+pista = Pista(gps_coords, largura_pista=10)
+pista.plotar_pista()
+
 segments = [
-    {"type": "straight", "length": 300, "speed": 30},  # Segmento reto
-    {"type": "curve", "length": 100, "speed": 15},    # Curva apertada
-    {"type": "straight", "length": 400, "speed": 30}, # Segmento reto
-    {"type": "curve", "length": 150, "speed": 20},    # Curva suave
-    {"type": "straight", "length": 250, "speed": 30}, # Segmento reto
+    {"type": "straight", "length": 300, "speed": 30},
+    {"type": "curve", "length": 100, "speed": 15},
+    {"type": "straight", "length": 400, "speed": 30},
+    {"type": "curve", "length": 150, "speed": 20},
+    {"type": "straight", "length": 250, "speed": 30},
 ]
 
 # Parâmetros do carro
@@ -129,7 +182,7 @@ while laps <= 30:  # Executar o código para 30 voltas
                 timecounter += 1
                 k += 1
             k = 0
-
+            
         i += 1
     i = 0
     laps += 1
