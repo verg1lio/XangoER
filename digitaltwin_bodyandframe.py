@@ -685,3 +685,26 @@ Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
 """
 
 #Autores do Código: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes; Cayque Lemos Souza; Antônio Marcos Lopes Brito Junior;
+
+"""
+Referências
+[1] FERREIRA, L. C. M.; SILVA, M. C. F.; GOMES, L. A. Análise da Rigidez Torsional do Chassi de um Protótipo de Competição Formula SAE. Anais do Congresso Brasileiro de Engenharia Mecânica (COBEM), 2021. Disponível em: https://www.scielo.br. Acesso em: 7 jul. 2024.
+
+[2] ZAVATTI, A.; JARDIM, A.; BALTHAZAR, J. M. Estudo Experimental e Numérico da Rigidez Torsional de um Chassi Tubular de Competição. Revista Brasileira de Engenharia Mecânica, v. 22, n. 2, p. 89-101, 2022. Disponível em: https://doi.org. Acesso em: 7 jul. 2024.
+
+[3] KRZIKALLA, F.; et al. Analysis of Torsional Stiffness of the Frame of a Formula Student Vehicle. Journal of Applied Mechanical Engineering, v. 8, n. 1, p. 1-6, 2019. Disponível em: https://www.walshmedicalmedia.com. Acesso em: 7 jul. 2024.
+
+[4] MONTEIRO, R. B.; CORREIA, M. D.; SANTOS, T. A. Determinação Experimental da Rigidez Torsional em Estruturas Tubulares. Anais do Simpósio de Engenharia Automotiva, 2020. Disponível em: https://www.researchgate.net. Acesso em: 7 jul. 2024.
+
+[5] AZEVEDO CANUT, Felipe; MALCHER, Lucival; HENRIQUES, Antonio Manuel Dias. Structural Analysis of a Formula SAE Chassis Under Rollover Loads. In: Proceedings of the 23rd ABCM International Congress of Mechanical Engineering. ABCM, 2015. Disponível em: ABCM Proceedings. Acesso em: 7 jul. 2024.
+
+[6] SETHUPATHI, P. Baskara et al. Design and Optimization of FSAE Chassis Using FEA. IOP Conference Series: Materials Science and Engineering, vol. 402, 2018. Disponível em: IOPscience. Acesso em: 7 jul. 2024.
+
+[7] PATEL, Vijaykumar V.; PATEL, Vibhu. Finite Element Analysis of Truck Chassis Frame. World Journal of Science and Technology, vol. 2, n. 4, p. 5-8, 2012. Disponível em: ResearchGate. Acesso em: 7 jul. 2024.
+
+[8] CALLISTER, William D.; RETHWISCH, David G. Ciência e Engenharia de Materiais: Uma Introdução. 9. ed. Rio de Janeiro: LTC, 2016.
+
+[9] ZIENKIEWICZ, O. C.; TAYLOR, R. L.; ZHU, J. Z. The Finite Element Method for Solid and Structural Mechanics. 6. ed. Oxford: Butterworth-Heinemann, 2005.
+
+[10] EER, Ferdinand P.; JOHNSTON Jr., E. Russell; DEWOLF, John T.; MAZUREK, David F. Resistência dos Materiais. 7. ed. São Paulo: McGraw-Hill Brasil, 2016.
+"""
