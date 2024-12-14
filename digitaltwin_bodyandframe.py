@@ -50,7 +50,7 @@ class Estrutura:
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
     def node_loc_matrix(self, node_tags, node_coord): 
-          """
+        """
         Creates a matrix with node locations for visualization.
         Inputs:
             - node_tags: list of node identifiers.
@@ -68,7 +68,7 @@ class Estrutura:
         print(node_loc_matrix)
 
     def connect_matrix(self):
-          """
+        """
         Generates and prints the connectivity matrix of elements.
         Inputs: None (uses class attributes).
         Outputs: None.
@@ -152,7 +152,7 @@ class Estrutura:
         return k_e,m_e
 
     def aplicar_engastes(self, nodes, dofs):
-       """
+        """
         Applies constraints (fixed DOFs) on specific nodes.
         Inputs:
             - nodes: list of node indices to be constrained.
@@ -165,7 +165,7 @@ class Estrutura:
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
 
     def matrizes_global(self):
-          """
+        """
         Assembles the global stiffness and mass matrices.
         Inputs: None (uses class attributes).
         Outputs:
@@ -209,7 +209,7 @@ class Estrutura:
         return self.K_global,self.M_global
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
-         """
+        """
         Calculates deformations and stiffness of elements under loads.
         Inputs:
             - F_flex1: array of point bending forces.
@@ -330,7 +330,7 @@ class Estrutura:
 
     def Mesh(self):
          
-         """
+        """
         Generates a `.geo` file for the structure mesh in GMSH.
         Inputs: None (uses class attributes and user-provided file name).
         Outputs: None.
@@ -676,6 +676,7 @@ print(nodes.size)
 print(scalar_values.size)
 print(torcao.size)
 print(flexao1.size)
+
 """
 Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
 Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
