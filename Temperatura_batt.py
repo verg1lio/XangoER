@@ -2,11 +2,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Pista:
-    def __init__(self, gps_coords, largura_pista):
+    def __init__(self, gps_coords):
+        """Inicializa a classe Pista.
+
+        Parâmetros
+        ----------
+        gps_coords : list of tuples
+            Lista de coordenadas GPS (latitude, longitude) representando a pista.
+
+        Examples
+        --------
+        >>> gps_coords = [(-22.73895, -47.53324), (-22.7387, -47.53312)]
+        >>> pista = Pista(gps_coords)
+        >>> pista.gps_coords
+        [(-22.73895, -47.53324), (-22.7387, -47.53312)]
+        """
         self.gps_coords = gps_coords
-        self.largura_pista = largura_pista
 
     def calcular_segmentos(self):
+        """Calcula os segmentos da pista com base nas coordenadas GPS.
+
+        Retorna
+        -------
+        list
+            Lista contendo as distâncias (em metros) entre os pontos consecutivos da pista.
+
+        Examples
+        --------
+        >>> gps_coords = [(-22.73895, -47.53324), (-22.7387, -47.53312)]
+        >>> pista = Pista(gps_coords)
+        >>> pista.calcular_segmentos()
+        [0.0002583091105784877]
+        """
         segmentos = []
         for i in range(len(self.gps_coords) - 1):
             ponto1 = self.gps_coords[i]
@@ -15,32 +42,38 @@ class Pista:
             segmentos.append(distancia)
         return segmentos
 
-    def plotar_pista(self):
-        latitudes = [coord[0] for coord in self.gps_coords]
-        longitudes = [coord[1] for coord in self.gps_coords]
-        plt.plot(longitudes, latitudes, marker="o")
-        plt.xlabel("Longitude")
-        plt.ylabel("Latitude")
-        plt.title("Mapa da Pista")
-        plt.grid(True)
-        plt.show()
 
 # Função para simular a pista
 def simulate_track(segments, max_acceleration, max_deceleration, time_step=1):
-    """
-    Simula a aceleração, desaceleração e velocidade constante ao longo de uma pista.
+    """Simula a dinâmica de um veículo ao percorrer a pista.
 
-    Parâmetros:
-    - segments: Lista de dicionários, cada um contendo 'length' (comprimento do segmento)
-                e 'speed' (velocidade alvo para o segmento).
-    - max_acceleration: Aceleração máxima permitida (positiva).
-    - max_deceleration: Desaceleração máxima permitida (positiva).
-    - time_step: Intervalo de tempo para a simulação (em segundos).
+    Parâmetros
+    ----------
+    segments : list of dicts
+        Lista de segmentos da pista, com cada segmento contendo 'length' (comprimento) e 'speed' (velocidade alvo).
+    max_acceleration : float
+        Aceleração máxima permitida (m/s²).
+    max_deceleration : float
+        Desaceleração máxima permitida (m/s²).
+    time_step : float, opcional
+        Intervalo de tempo em segundos para a simulação. Padrão é 1.
 
-    Retorna:
-    - time_vector: Vetor de tempo total.
-    - accel_vector: Vetor de aceleração em cada instante.
+    Retorna
+    -------
+    time_vector : list
+        Vetor de tempo (s) ao longo da simulação.
+    accel_vector : list
+        Vetor de aceleração (m/s²) aplicada em cada instante de tempo.
+
+    Examples
+    --------
+    >>> segments = [{"length": 100, "speed": 20}, {"length": 50, "speed": 10}]
+    >>> max_acceleration = 2
+    >>> max_deceleration = -3
+    >>> simulate_track(segments, max_acceleration, max_deceleration)
+    ([0, 1, 2, ...], [2, 2, 2, ...])
     """
+
     time_vector = []
     accel_vector = []
 
@@ -62,11 +95,14 @@ def simulate_track(segments, max_acceleration, max_deceleration, time_step=1):
             accel_time = np.sqrt(2 * segment_length / abs(acceleration))
             accel_distance = segment_length
 
+        # Acelerando
         accel_steps = int(accel_time / time_step)
-        for step in range(accel_steps):
+        step_count = 0
+        while step_count < accel_steps:
             accel_vector.append(acceleration)
             time_vector.append(current_time)
             current_time += time_step
+            step_count += 1
 
         # Atualiza a velocidade atual após aceleração
         current_speed = target_speed
@@ -76,12 +112,111 @@ def simulate_track(segments, max_acceleration, max_deceleration, time_step=1):
         if remaining_distance > 0:
             cruise_time = remaining_distance / current_speed
             cruise_steps = int(cruise_time / time_step)
-            for step in range(cruise_steps):
+            step_count = 0
+            while step_count < cruise_steps:
                 accel_vector.append(0)  # Velocidade constante implica aceleração zero
                 time_vector.append(current_time)
                 current_time += time_step
+                step_count += 1
 
     return time_vector, accel_vector
+
+# Definição das constantes globais
+Ti = 32  # Temperatura inicial (°C)
+Tinf = 30  # Temperatura ambiente (°C)
+m = 22e-3  # Massa da bateria (kg)
+c = 385  # Calor específico da bateria (J/(kg·°C))
+h_bar = 10  # Coeficiente de transferência de calor (W/(m²·°C))
+As = 0.791 * 0.838 * (0.0254)**2 * 2  # Área de superfície da bateria (m²)
+qbat_default = 0.3  # Taxa de calor gerada pela bateria (W)
+laps_default = 30  # Número de voltas simuladas
+
+def simular_modelo_termico(vector, Ti=Ti, Tinf=Tinf, m=m, c=c, h_bar=h_bar, As=As, qbat=qbat_default, laps=laps_default):
+    """Simula o comportamento térmico da bateria ao longo da pista.
+
+    Parâmetros
+    ----------
+    vector : list
+        Vetor de aceleração aplicado ao longo do tempo.
+    Ti : float, opcional
+        Temperatura inicial da bateria (°C). Padrão é 32°C.
+    Tinf : float, opcional
+        Temperatura ambiente (°C). Padrão é 30°C.
+    m : float, opcional
+        Massa da bateria (kg). Padrão é 22e-3 kg.
+    c : float, opcional
+        Calor específico da bateria (J/(kg·°C)). Padrão é 385 J/(kg·°C).
+    h_bar : float, opcional
+        Coeficiente de transferência de calor (W/(m²·°C)). Padrão é 10.
+    As : float, opcional
+        Área de superfície da bateria (m²). Padrão é 0.791 * 0.838 * (0.0254)**2 * 2.
+    qbat : float, opcional
+        Taxa de calor gerada pela bateria (W). Padrão é 0.3.
+    laps : int, opcional
+        Número de voltas simuladas. Padrão é 30.
+
+    Retorna
+    -------
+    timevector : list
+        Vetor de tempo (s) ao longo da simulação.
+    Temp : list
+        Vetor de temperatura (°C) da bateria ao longo do tempo.
+
+    Examples
+    --------
+    >>> accel_vector = [5, 5, 0, -5, -5]
+    >>> simular_modelo_termico(accel_vector)
+    ([0, 1, 2, ...], [32.0, 32.5, ...])
+    """
+    Temp = []
+    timevector = []
+    i = j = k = tempcounter = otimecounter = 0
+
+    Tss = qbat / (h_bar * As) + Tinf  # Temperatura de equilíbrio
+    tt = 2 * m * c / (h_bar * As)  # Constante de tempo
+
+    for _ in range(laps):
+        while i < len(vector):
+            if i > 0:
+                Ti_new = Temp[-1]
+
+            if vector[i] > 0:  # Acelerando
+                t_on_accel = abs(vector[i])
+                timecounter = 0
+                while j < t_on_accel:
+                    if i == 0 and _ == 0:
+                        Temp.append((Ti - Tss) * np.exp(-timecounter / tt) + Tss)
+                    else:
+                        Temp.append((Ti_new - Tss) * np.exp(-timecounter / tt) + Tss)
+
+                    timevector.append(otimecounter)
+                    tempcounter += 1
+                    otimecounter += 1
+                    timecounter += 1
+                    j += 1
+                j = 0
+
+            else:  # Desacelerando
+                t_on_deccel = abs(vector[i])
+                timecounter = 0
+                while k < t_on_deccel:
+                    if i == 0 and _ == 0:
+                        Temp.append((Ti - Tinf) * np.exp(-h_bar * As / (m * c) * timecounter) + Tinf)
+                    else:
+                        Temp.append((Ti_new - Tinf) * np.exp(-h_bar * As / (m * c) * timecounter) + Tinf)
+
+                    timevector.append(otimecounter)
+                    tempcounter += 1
+                    otimecounter += 1
+                    timecounter += 1
+                    k += 1
+                k = 0
+
+            i += 1
+        i = 0
+
+    return timevector, Temp
+
 
 gps_coords = [
     (-22.73895, -47.53324),
@@ -139,8 +274,7 @@ gps_coords = [
     (-22.73895,-47.53324)
 ]
 
-pista = Pista(gps_coords, largura_pista=10)
-pista.plotar_pista()
+pista = Pista(gps_coords)
 
 segments = [
     {"type": "straight", "length": 300, "speed": 30},
@@ -157,63 +291,8 @@ max_deceleration = -4.5  # m/s^2
 # Simular a pista
 time_vector, accel_vector = simulate_track(segments, max_acceleration, max_deceleration, time_step=1)
 
-# Substituir valores no modelo de temperatura
-vector = np.array(accel_vector)
-i = j = k = tempcounter = otimecounter = laps = 0
-timevector = []
-Temp = []
-
-Ti = 32  # Temperatura inicial (°C)
-Tinf = 30  # Temperatura ambiente (°C)
-m = 22 * 10**-3  # Massa do cobre (kg)
-c = 385  # Calor específico do cobre (J/kg-K)
-h_bar = 10  # Coeficiente de transferência de calor (W/m^2-K)
-As = 0.791 * 0.838 * (0.0254)**2 * 2
-qbat = 0.3  # Potência dissipada pela bateria (W)
-Tss = qbat / (h_bar * As) + Tinf  # Temperatura de equilíbrio
-
-tt = 2 * m * c / (h_bar * As)  # Constante de tempo
-
-while laps <= 30:  # Executar o código para 30 voltas
-    while i < len(vector):
-        if i > 0:
-            Ti_new = Temp[-1]
-
-        if vector[i] > 0:  # Acelerando
-            t_on_accel = abs(vector[i])
-            timecounter = 0
-            while j < t_on_accel:
-                if i == 0 and laps == 0:
-                    Temp.append((Ti - Tss) * np.exp(-timecounter / tt) + Tss)
-                else:
-                    Temp.append((Ti_new - Tss) * np.exp(-timecounter / tt) + Tss)
-
-                timevector.append(otimecounter)  # Atualiza aqui
-                tempcounter += 1
-                otimecounter += 1  # Passo ajustado para simular minutos reais
-                timecounter += 1
-                j += 1
-            j = 0
-       
-        else:  # Desacelerando
-            t_on_deccel = abs(vector[i])
-            timecounter = 0
-            while k < t_on_deccel:
-                if i == 0 and laps == 0:
-                    Temp.append((Ti - Tinf) * np.exp(-h_bar * As / (m * c) * timecounter) + Tinf)
-                else:
-                    Temp.append((Ti_new - Tinf) * np.exp(-h_bar * As / (m * c) * timecounter) + Tinf)
-
-                timevector.append(otimecounter)  # Atualiza aqui
-                tempcounter += 1
-                otimecounter += 1  # Passo ajustado para simular minutos reais
-                timecounter += 1
-                k += 1
-            k = 0
-            
-        i += 1
-    i = 0
-    laps += 1
+# Simular a temperatura da bateria
+timevector, Temp = simular_modelo_termico(accel_vector)
 
 # Plotar o resultado da temperatura
 timevector_min = np.array(timevector) / 60
