@@ -307,7 +307,7 @@ class Estrutura:
         Saídas:
             - displacements: vetor de deslocamentos nos DOFs.
         """
-   
+        
         # Total number of DOFs
         n_dofs = K_global.shape[0]
 
@@ -318,8 +318,10 @@ class Estrutura:
         K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
         F_reduced = F_global[free_dofs]
 
-        # Solve for displacements at free DOFs
-        u_reduced = np.linalg.solve(K_reduced, F_reduced)
+        # Solve for displacements at free DOFs 
+        # USE "linalg.lstsq" FOR NEAR SINGULAR MATRICES (ALL OF THEM)
+        u_reduced = np.linalg.lstsq(K_reduced, F_reduced)
+        # u_reduced = np.linalg.solve(K_reduced, F_reduced)
 
         # Construct full displacement vector
         displacements = np.zeros(n_dofs)
@@ -329,7 +331,7 @@ class Estrutura:
 
 
     def Mesh(self):
-         
+        
         """
         Generates a `.geo` file for the structure mesh in GMSH.
         Inputs: None (uses class attributes and user-provided file name).
@@ -530,7 +532,6 @@ autovalores, autovetores, frequencias = estrutura.modal_analysis()
 
 # Chamando a função shape_fun
 torcao, deformacao_axial, flexao1, flexao2, flexao3, KF_total, KT_total, KF_elements, KT_elements = estrutura.shape_fun(F_flexao1, F_flexao2, F_axial, F_torcao)
-
 
 # Plotando os resultados das deformações
 fig, axs = plt.subplots(6, 1, figsize=(12, 22))
