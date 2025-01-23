@@ -684,9 +684,7 @@ fixed_dofs = [0, 1, 2, 3, 4, 5]
 # Perform analysis
 displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
-# Simulated scalar values for demonstration
-scalar_values = np.random.rand(len(nodes))
-Estrutura.plot_colored_wireframe(nodes, elements, scalar_values, 'Displacements', 'Displacements [m]')
+Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 
 
 
