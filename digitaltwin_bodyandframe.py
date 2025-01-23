@@ -307,7 +307,7 @@ class Estrutura:
         Saídas:
             - displacements: vetor de deslocamentos nos DOFs.
         """
-        
+
         # Total number of DOFs
         n_dofs = K_global.shape[0]
 
@@ -318,13 +318,13 @@ class Estrutura:
         K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
         F_reduced = F_global[free_dofs]
 
-        # Solve for displacements at free DOFs 
+        # Solve for displacements at free DOFs
         # USE "linalg.lstsq" FOR NEAR SINGULAR MATRICES (ALL OF THEM)
-        u_reduced = np.linalg.lstsq(K_reduced, F_reduced)
-        # u_reduced = np.linalg.solve(K_reduced, F_reduced)
+        u_reduced = np.linalg.lstsq(K_reduced, F_reduced, rcond=None)[0]  # Get only the solution vector
 
         # Construct full displacement vector
         displacements = np.zeros(n_dofs)
+
         displacements[free_dofs] = u_reduced
 
         return displacements
@@ -337,7 +337,7 @@ class Estrutura:
         Inputs: None (uses class attributes and user-provided file name).
         Outputs: None.
         """
-         
+        
         filename = input("Insira o nome do arquivo: ") + ".geo"
         diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
 
