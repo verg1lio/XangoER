@@ -15,13 +15,24 @@ class Estrutura:
     def __init__(self, elements, nodes, m, Id, Ip):
         """
         Initializes the structure with elements, nodes, and physical properties.
+        
         Inputs:
             - elements: connectivity matrix between nodes (tuples of node indices).
             - nodes: node coordinates (Nx3 array, where N is the number of nodes).
             - m: total mass of the system (float).
             - Id: directional moment of inertia (float).
             - Ip: planar moment of inertia (float).
+
         Outputs: None.
+
+        Code authors: 
+            - Patrícia Nascimento Vaccarezza; 
+            - Eduardo Almeida Menezes; 
+            - Cayque Lemos Souza; 
+            - Antônio Marcos Lopes Brito Junior; 
+            - Larissa Pereira Leanor;
+            - Alexandre Duque;
+            - Vergílio Torezan Silingardi Del Claro.
         """
         self.elements = elements                                             #Matriz de elementos conectados
         self.num_elements = len(elements)                                    #Número de elementos
@@ -414,6 +425,7 @@ class Estrutura:
             stresses.append(stress)
         return stresses
 
+
     def compute_von_mises(stresses):
         """
         Compute von Mises stress for all elements.
@@ -439,7 +451,7 @@ class Estrutura:
         return von_mises_stresses
 
 
-    def plot_colored_wireframe(nodes, elements, scalar_values, colormap='jet'):
+    def plot_colored_wireframe(nodes, elements, scalar_values, graphtitle='Wireframe plot', scalelabel='Your variable here', colormap='jet'):
         """
         Plots a 3D wireframe of the structure with color mapping based on scalar values.
         
@@ -447,6 +459,8 @@ class Estrutura:
             nodes (array): Array of node coordinates (N x 3).
             elements (list): List of tuples defining connections between nodes.
             scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            graphtitle (str): Graph title.
+            scalelabel (str): LColormap scale label description.
             colormap (str): Colormap name for visualization.
         """
         # Normalize scalar values to [0, 1] for colormap
@@ -477,13 +491,13 @@ class Estrutura:
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         mappable.set_array(scalar_values)
         cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
-        cbar.set_label("Strain (or other variable)", fontsize=12)
+        cbar.set_label(scalelabel, fontsize=12)
 
         # Set axis labels and title
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_title('Wireframe with Scalar Color Mapping')
+        ax.set_title(graphtitle)
         plt.xlim([-20,120])
         plt.ylim([-45,60])
         plt.tight_layout()
@@ -672,21 +686,9 @@ displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
 # Simulated scalar values for demonstration
 scalar_values = np.random.rand(len(nodes))
-Estrutura.plot_colored_wireframe(nodes, elements, scalar_values)
-print(nodes.size)
-print(scalar_values.size)
-print(torcao.size)
-print(flexao1.size)
+Estrutura.plot_colored_wireframe(nodes, elements, scalar_values, 'Displacements', 'Displacements [m]')
 
-"""
-Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
-Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao2)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
-"""
 
-#Autores do Código: Patrícia Nascimento Vaccarezza; Eduardo Almeida Menezes; Cayque Lemos Souza; Antônio Marcos Lopes Brito Junior; Larissa Pereira Leanor.
 
 """
 Referências
