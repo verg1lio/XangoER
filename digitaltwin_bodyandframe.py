@@ -12,6 +12,8 @@ np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
+
+
     def __init__(self, elements, nodes, m, Id, Ip):
         """
         Initializes the structure with elements, nodes, and physical properties.
@@ -47,6 +49,7 @@ class Estrutura:
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
         self.num_modes = 12                                                  #Número de modos de vibração a serem retornados
 
+
     def calcular_comprimento(self, element):    
         """
         Calculates the length of an element based on node coordinates.
@@ -60,6 +63,7 @@ class Estrutura:
         x2, y2, z2 = self.nodes[node2]
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
+
     def node_loc_matrix(self, node_tags, node_coord): 
         """
         Creates a matrix with node locations for visualization.
@@ -67,7 +71,7 @@ class Estrutura:
             - node_tags: list of node identifiers.
             - node_coord: matrix of node coordinates.
         Outputs: None."""
-          
+
         num_nodes = len(node_tags)
         node_loc_matrix = np.zeros((num_nodes, 4), dtype=float)
         for i, (x, y, z) in enumerate(node_coord, start=0):
@@ -78,13 +82,14 @@ class Estrutura:
         print("\n   Nó   x   y   z")
         print(node_loc_matrix)
 
+
     def connect_matrix(self):
         """
         Generates and prints the connectivity matrix of elements.
         Inputs: None (uses class attributes).
         Outputs: None.
         """
-         # Inicializar uma lista para armazenar as conexões
+        # Inicializar uma lista para armazenar as conexões
         connections = []
 
         # Criando a lista a partir de Connections para monstar a matriz connect
@@ -97,6 +102,7 @@ class Estrutura:
 
         print("Matriz de conectividade:")
         print(connections_matrix)
+
 
     def element(self, element):
         """
@@ -162,6 +168,7 @@ class Estrutura:
             ])
         return k_e,m_e
 
+
     def aplicar_engastes(self, nodes, dofs):
         """
         Applies constraints (fixed DOFs) on specific nodes.
@@ -174,6 +181,7 @@ class Estrutura:
             for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
                 index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
+
 
     def matrizes_global(self):
         """
@@ -218,6 +226,7 @@ class Estrutura:
         plt.show()
 
         return self.K_global,self.M_global
+
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
         """
@@ -270,8 +279,8 @@ class Estrutura:
         return (np.array(torcao), np.array(deformacao), np.array(flexao1), 
             np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
 
+
     def modal_analysis(self):
-         
         """
         Performs modal analysis to compute natural frequencies and mode shapes.
         Inputs: None.
@@ -298,7 +307,6 @@ class Estrutura:
     
 
     def static_analysis(K_global, F_global, fixed_dofs):
-
         """
         Perform static analysis by solving Ku = F with boundary conditions.
 
@@ -318,7 +326,6 @@ class Estrutura:
         Saídas:
             - displacements: vetor de deslocamentos nos DOFs.
         """
-
         # Total number of DOFs
         n_dofs = K_global.shape[0]
 
@@ -341,41 +348,6 @@ class Estrutura:
         return displacements
 
 
-    def Mesh(self):
-        
-        """
-        Generates a `.geo` file for the structure mesh in GMSH.
-        Inputs: None (uses class attributes and user-provided file name).
-        Outputs: None.
-        """
-        
-        filename = input("Insira o nome do arquivo: ") + ".geo"
-        diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
-
-        if not os.path.exists(diretorio):
-            os.makedirs(diretorio)
-
-        filepath = os.path.join(diretorio, filename)
-
-        with open(filepath, 'w') as geo_file:
-            for i, (x, y, z) in enumerate(self.nodes):
-                geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
-
-            for i, (start, end) in enumerate(self.elements):
-                geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
-
-            if len(self.elements) > 2:
-                line_loop_indices = ', '.join(str(i + 1) for i in range(len(elements)))
-                geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
-                geo_file.write('Plane Surface(1) = {1};\n')
-
-            geo_file.write('Mesh.Algorithm = 6;\n')
-            geo_file.write('Mesh.ElementOrder = 1;\n')
-            geo_file.write('Mesh.Format = 1;\n')
-
-        print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
-
-
     def compute_strain(displacements, B_matrices):
         """
         Compute strains for all elements.
@@ -387,7 +359,6 @@ class Estrutura:
         Returns:
             strains (list of ndarray): Strain tensors for all elements.
         """
-
         strains = []
         for B in B_matrices:
             strain = np.dot(B, displacements)  # B-matrix times displacement vector
@@ -451,6 +422,41 @@ class Estrutura:
         return von_mises_stresses
 
 
+    def Mesh(self):
+        
+        """
+        Generates a `.geo` file for the structure mesh in GMSH.
+        Inputs: None (uses class attributes and user-provided file name).
+        Outputs: None.
+        """
+        
+        filename = input("Insira o nome do arquivo: ") + ".geo"
+        diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
+
+        if not os.path.exists(diretorio):
+            os.makedirs(diretorio)
+
+        filepath = os.path.join(diretorio, filename)
+
+        with open(filepath, 'w') as geo_file:
+            for i, (x, y, z) in enumerate(self.nodes):
+                geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
+
+            for i, (start, end) in enumerate(self.elements):
+                geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
+
+            if len(self.elements) > 2:
+                line_loop_indices = ', '.join(str(i + 1) for i in range(len(elements)))
+                geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
+                geo_file.write('Plane Surface(1) = {1};\n')
+
+            geo_file.write('Mesh.Algorithm = 6;\n')
+            geo_file.write('Mesh.ElementOrder = 1;\n')
+            geo_file.write('Mesh.Format = 1;\n')
+
+        print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
+
+
     def plot_colored_wireframe(nodes, elements, scalar_values, graphtitle='Wireframe plot', scalelabel='Your variable here', colormap='jet'):
         """
         Plots a 3D wireframe of the structure with color mapping based on scalar values.
@@ -505,7 +511,7 @@ class Estrutura:
 
 
 
-
+# THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
 
 #Coordenadas dos nós (x, y, z)
 i = 1.7
