@@ -2097,7 +2097,7 @@ class BrakeSystem:
 
     # Plota o gráfico da força longitudinal em relação à força aplicada ao pedal
     def show_graph(self, pedal_force, time_intervals):
-         """Gera gráfico da dinâmica de frenagem.
+        """Gera gráfico da dinâmica de frenagem.
     
         Utiliza a biblioteca `matplotlib` para criar um gráfico que relaciona a força longitudinal gerada durante 
         a frenagem com a força aplicada no pedal ao longo do tempo. Permite visualizar como a resposta do sistema 
