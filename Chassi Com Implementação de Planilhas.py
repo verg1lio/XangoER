@@ -22,7 +22,6 @@ class Estrutura:
             - Ip: planar moment of inertia (float).
         Outputs: None.
         """
-
         self.elements = elements                                              # Matrix of connected elements
         self.num_elements = len(elements)                                     # Number of elements
         self.element_properties = element_properties                          # Matrix of element properties
@@ -51,7 +50,7 @@ class Estrutura:
 
     def connect_matrix(self):
         """
-        Generates and prints the connectivity matrix of elements.
+        Prints the connectivity matrix of elements.
         Inputs: None (uses class attributes).
         Outputs: None.
         """
@@ -59,12 +58,12 @@ class Estrutura:
 
     def lenght_calculator(self, index): 
         """
-        Creates a matrix with node locations for visualization.
+        Calculates the length of an element based on node coordinates.
         Inputs:
-            - node_tags: list of node identifiers.
-            - node_coord: matrix of node coordinates.
-        Outputs: None.
-        """                               
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - element length (float).
+        """                                
         
         node1 , node2 = int(self.elements["Node a"][index]-1) , int(self.elements["Node b"][index]-1)
         x1, y1, z1 = self.nodes['x'][node1], self.nodes['y'][node1], self.nodes['z'][node1]
@@ -180,6 +179,15 @@ class Estrutura:
         Outputs:
             - K_global: global stiffness matrix.
             - M_global: global mass matrix.
+
+        Files exported:
+            - `Matriz_Global_Rigidez.csv`: Global stiffness matrix.
+            - `Matriz_Global_Massa.csv`: Global mass matrix.
+
+        Visualization:
+            - Two spy plots are generated:
+                1. Sparsity pattern of the global stiffness matrix.
+                2. Sparsity pattern of the global mass matrix.
         """
         #Calculando as matrizes de rigidez e massa de cada elemento
         for index in range(self.num_elements):
@@ -194,7 +202,7 @@ class Estrutura:
             self.K_global[np.ix_(dofs, dofs)] += k_e
             self.M_global[np.ix_(dofs, dofs)] += m_e
 
-        #self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
+        #self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                                    #Por enquanto não estaremos considerando engastes
         pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
         pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
 
@@ -219,15 +227,26 @@ class Estrutura:
 
     def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
         """
-        Calculates deformations and stiffness of elements under loads.
-        Inputs:
-            - F_flex1: array of point bending forces.
-            - F_flex2: array of distributed bending forces.
-            - F_axial: array of axial forces.
-            - F_torsion: array of torsion forces.
-        Outputs:
-            - Arrays of torsion, deformations, and stiffness (bending and torsional).
-        """
+    Calculates deformation and stiffness values for axial, torsional, and flexural forces for all elements in the structure.
+
+    Parameters:
+        F_flexao1 (float): Force applied for flexural deformation (point load at mid-span).
+        F_flexao2 (float): Force applied for distributed flexural deformation.
+        F_axial (float): Axial force applied to the elements.
+        F_torcao (float): Torsional force applied to the elements.
+
+    Returns:
+        tuple:
+            - torcao (array): Torsional deformation for each element.
+            - deformacao (array): Axial deformation for each element.
+            - flexao1 (array): Flexural deformation due to point load for each element.
+            - flexao2 (array): Flexural deformation due to distributed load for each element.
+            - flexao3 (array): Combined flexural deformation for each element.
+            - KF_total (float): Total flexural stiffness of the structure.
+            - KT_total (float): Total torsional stiffness of the structure.
+            - KF_elements (list): Flexural stiffness for each element.
+            - KT_elements (list): Torsional stiffness for each element.
+    """
         KF_total = 0
         KT_total = 0
         KF_elements = []
@@ -270,13 +289,23 @@ class Estrutura:
     
     def modal_analysis(self):
         """
-        Performs modal analysis to compute natural frequencies and mode shapes.
-        Inputs: None.
-        Outputs:
-            - eigenvalues: eigenvalues (squared natural frequencies).
-            - eigenvectors: eigenvectors (mode shapes).
-            - frequencies: natural frequencies (Hz).
-        """
+    Performs modal analysis of the structure by solving the eigenvalue problem.
+
+    This function computes the natural frequencies and mode shapes of the structure 
+    using the global stiffness (`K_global`) and mass (`M_global`) matrices.
+
+    Returns:
+        tuple:
+            - eigenvalues (array): Array of the selected eigenvalues corresponding to the natural frequencies.
+            - eigenvectors (array): Array of the selected eigenvectors representing mode shapes.
+            - frequencies (array): Array of the selected natural frequencies in Hertz.
+
+    Parameters:
+        None (uses class attributes):
+            - K_global (array): Global stiffness matrix of the structure.
+            - M_global (array): Global mass matrix of the structure.
+            - num_modes (int): Number of modes to retain in the analysis.
+    """
         # Análise modal por resolução do problema de autovalor e autovetor
         unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
 
@@ -304,14 +333,6 @@ class Estrutura:
 
         Returns:
             displacements (ndarray): Displacement vector (N).
-
-        Resolve uma análise estática para deslocamentos em DOFs livres.
-        Entradas:
-            - K_global: matriz de rigidez global.
-            - F_global: vetor de forças globais.
-            - fixed_dofs: índices de graus de liberdade fixos.
-        Saídas:
-            - displacements: vetor de deslocamentos nos DOFs.
         """
         # Total number of DOFs
         n_dofs = K_global.shape[0]
@@ -409,11 +430,6 @@ class Estrutura:
         return von_mises_stresses
 
     def Mesh(self):
-        """
-        Generates a `.geo` file for the structure mesh in GMSH.
-        Inputs: None (uses class attributes and user-provided file name).
-        Outputs: None.
-        """
 
         filename = input("Insira o nome do arquivo: ") + ".geo"
         diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
@@ -686,14 +702,14 @@ class Estrutura:
 
     def run(self,F_flexao1, F_flexao2, F_axial,F_torcao):
         """
-        Executes the complete structural analysis workflow, including mass matrix generation, 
-        node and connectivity matrices, deformation visualization, modal analysis, and static analysis.
-        
-        Parameters:
-            F_flexao1 (array): Forces due to bending in one direction, applied to the structure.
-            F_flexao2 (array): Forces due to bending in a perpendicular direction, applied to the structure.
-            F_axial (array): Axial forces applied to the structure.
-            F_torcao (array): Torsional forces applied to the structure.
+    Executes the complete structural analysis workflow, including mass matrix generation, 
+    node and connectivity matrices, deformation visualization, modal analysis, and static analysis.
+    
+    Parameters:
+        F_flexao1 (array): Forces due to bending in one direction, applied to the structure.
+        F_flexao2 (array): Forces due to bending in a perpendicular direction, applied to the structure.
+        F_axial (array): Axial forces applied to the structure.
+        F_torcao (array): Torsional forces applied to the structure.
         """
         self.mass()
         #Gerar as matrizes de localização dos nós e de conectividade
