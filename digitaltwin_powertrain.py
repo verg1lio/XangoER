@@ -73,6 +73,7 @@ class Motor:
         self.conjcarga = []  # Load torque (N*m)
         self.correnteo = []  # Zero-sequence current (A)
         self.torque_mecanico = []  # Mechanical torque (N*m)
+        self.temperatura = []  # Temperature (K)
 
     def reset_initial_conditions(self):
         # Initialize conditions
@@ -96,6 +97,9 @@ class Motor:
         self.irq = 0  # Quadrature-axis rotor current (A)
         self.iso = 0  # Zero-sequence stator current (A)
         self.rg = 0  # Rotor angle (rad)
+        self.temp = 25 #Temperature (C°)
+        self.m = 65/1.5 #Mass of stator(Kg)
+        self.C =0.385 #specific heat capacity(J/(kg·K))
 
     def source_voltage(self,):
         """Tensão da fonte
@@ -147,7 +151,7 @@ class Motor:
         10
         """
         if self.t >= self.tmax / 2:
-            self.cl = 10        
+            self.cl = 40        
     
     def direct_voltage_and_quadrature(self, vs1, vs2, vs3):
         """Tensão direta e em quadratura
@@ -392,6 +396,29 @@ class Motor:
         cm = self.ce - self.cl
         return cm
 
+    def calcular_temperatura(self, h):
+        """Temperatura do Estator
+        
+        Calcula a temperatura do motor com base na corrente do estator.
+        
+        Returns
+        -------
+        temp : float
+            Temperatura do Estator.
+
+        Examples
+        --------
+        >>> temperatura = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
+        >>> temp = temperatura.calcular_temperatura()
+        >>> ctemp
+        (25.0)
+        """
+        corrente_eficaz = np.sqrt((self.currents_and_fluxes_phases(1)[0])**2 + (self.currents_and_fluxes_phases( 1)[1])**2 + (self.currents_and_fluxes_phases( 1)[2])**2)  # Corrente eficaz
+        potencia_perdida = self.rs * corrente_eficaz**2  # Perdas no estator
+        dT = ((potencia_perdida * self.h) / (self.m * self.C))  # Variação de temperatura
+        self.temp += dT  # Atualiza temperatura # Changed from temp to self.temp
+        return self.temp # Changed from temp to self.temp
+
     def outputs(self, is1, is2, is3, fs1, fs2, fs3, fso, cm, vso, vsd, vsq):
         self.tempo.append(self.t)
         self.corrented.append(self.isd)
@@ -416,6 +443,7 @@ class Motor:
         self.frequencia.append(self.ws)
         self.torque_mecanico.append(cm)
         self.conjcarga.append(self.cl) 
+        self.temperatura.append(self.temp)
 
     def simulate(self):
         while self.t < self.tmax:
@@ -429,13 +457,15 @@ class Motor:
             is1, is2, is3, fs1, fs2, fs3 = self.currents_and_fluxes_phases(fso)
             self.wm = self.mechanical_speed()
             cm = self.mechanical_torque()
+            self.temp = self.calcular_temperatura(self.h)
             if self.t >= self.tp:
                 self.tp += self.hp
                 self.outputs(is1, is2, is3, fs1, fs2, fs3, fso, cm, vso, vsd, vsq)
 
     def plot_motor(self):
+        
 
-        # Plota as correntes das fases
+         # Plota as correntes das fases
         plt.figure(1)
         plt.plot(self.tempo, self.corrente1, label='Current 1 (A)')
         plt.plot(self.tempo, self.corrente2, label='Current 2 (A)')
@@ -477,6 +507,15 @@ class Motor:
         plt.ylabel('Current (A)')
         plt.show()
 
+       # Plota a temperatura do motor
+        plt.figure(6)
+        plt.plot(self.tempo, self.temperatura, label='Temperature C°')
+        plt.title('Stator Temperature')
+        plt.legend()
+        plt.xlabel('Time (s)')
+        plt.ylabel('Temperature (C°)')
+        plt.show()
+
         # Plota múltiplos gráficos em uma única figura
         plt.figure(figsize=(12, 8))
         plt.subplot(2, 2, 1)
@@ -509,6 +548,9 @@ class Motor:
 
         plt.tight_layout()
         plt.show()
+
+
+
 
 
     def example():
@@ -928,5 +970,3 @@ class Peso:
         print(f"O peso total é {total} kg")
 
 Peso.example()
-
-
