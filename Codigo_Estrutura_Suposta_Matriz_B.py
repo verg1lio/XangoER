@@ -171,24 +171,22 @@ class Estrutura:
         L_e = self.calcular_comprimento(index)  # Comprimento do elemento
         x = L_e / 2  # Ponto médio do elemento (ou outro ponto de interesse)
 
-        # Derivadas das funções de forma para deslocamentos axiais
+        # Derivadas das funções de forma para deslocamento axial e torção
         dN1_dx = -1 / L_e
         dN2_dx = 1 / L_e
 
-        # Derivadas das funções de forma para deslocamentos transversais e rotações
-        dN3_dx = (-6 * x / L_e**2) + (6 * x**2 / L_e**3)
-        dN5_dx = (6 * x / L_e**2) - (6 * x**2 / L_e**3)
+        # Derivadas das funções de forma para flexão
+        d2N1_dx2 = -6 / L_e**2 + 12 * x / L_e**3
+        d2N2_dx2 = 6 / L_e**2 - 12 * x / L_e**3
 
-        # Montagem da B-matriz para Timoshenko
+        # Matriz B
         B = np.array([
-            [dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0, 0, 0],     # Extensão axial
-            [0, -dN3_dx, 0, 0, 0, 0, 0, -dN5_dx, 0, 0, 0, 0],   # Curvatura em y
-            [0, 0, -dN3_dx, 0, 0, 0, 0, 0, -dN5_dx, 0, 0, 0],   # Curvatura em z
-            [0, 0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0],     # Torção
-            [0, 0, 0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0],     # Cisalhamento em y
-            [0, 0, 0, 0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx],     # Cisalhamento em z
-            [0, dN3_dx, 0, 0, 0, 0, 0, dN5_dx, 0, 0, 0, 0],     # Deformação por cisalhamento em xy
-            [0, 0, dN3_dx, 0, 0, 0, 0, 0, dN5_dx, 0, 0, 0]      # Deformação por cisalhamento em xz
+            [dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0, 0, 0],
+            [0, d2N1_dx2, 0, 0, 0, 0, 0, d2N2_dx2, 0, 0, 0, 0],
+            [0, 0, d2N1_dx2, 0, 0, 0, 0, 0, d2N2_dx2, 0, 0, 0],
+            [0, 0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0],
+            [0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0, 0],
+            [0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0]
         ])
 
         return B
@@ -423,9 +421,9 @@ class Estrutura:
         for strain in strains:
             stress = np.dot(C, strain)  # Hooke's law: C times strain
             stresses.append(stress)
-        return stresses
+        return np.array(stresses)
 
-    def compute_von_mises(self,B_matrices,F_global, fixed_dofs, E, nu):
+    def compute_von_mises(self,stresses):
         """
         Compute von Mises stress for all elements.
 
@@ -435,7 +433,7 @@ class Estrutura:
         Returns:
             von_mises_stresses (list of float): Von Mises stress for each element.
         """
-        stresses = self.compute_stress(B_matrices,F_global, fixed_dofs, E, nu)
+
         von_mises_stresses = []
         for stress in stresses:
             sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
@@ -448,7 +446,7 @@ class Estrutura:
                 )
             )
             von_mises_stresses.append(von_mises)
-        return von_mises_stresses
+        return np.array(von_mises_stresses)
 
     def Mesh(self):
         """
@@ -762,18 +760,24 @@ class Estrutura:
         # Perform analysis
         displacements = estrutura.static_analysis(self.K_global,F_global, fixed_dofs)
         print("Displacement Vector:", displacements)
+
         estrutura.plot_colored_wireframe(displacements)
         strain=self.compute_strain(displacements)
         print("Strain:",strain)
         #print(strain.size)
-        stress = self.compute_stress(strain,210e9,0.8)
-        print(stress)
-                                            
+
+        stress = self.compute_stress(strain,210e9,0.3)
+        print("Stresses",stress)
+
+        von_misses = self.compute_von_mises(stress)
+        print("Von misses stress",von_misses)
+        estrutura.plot_colored_wireframe(von_misses)  
+
 #nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Nodes.csv"
 #elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Elements.csv"
 
-nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nos_final.csv"
-elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Conectividade_final.csv"
+nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\XangoER\\Nós e Elementos modelo de chassi completo - nodes.csv"
+elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\XangoER\\Nós e Elementos modelo de chassi completo - Elements.csv"
 
 # Carregar o arquivo para inspecionar seu conteúdo
 nodes = pd.read_csv(nodes_file_path)
@@ -788,7 +792,7 @@ element_properties = element_data[['Element ID','A', 'I', 'J', 'E', 'G','X']]
 
 #Atribuir forças
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
-F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
+F_flexao2 = np.array([1000, 2000, 3000, 4000, 5000])
 F_axial   = np.array([1000, 2000, 3000, 4000, 5000])
 F_torcao  = np.array([1000, 2000, 3000, 4000, 5000])
 
