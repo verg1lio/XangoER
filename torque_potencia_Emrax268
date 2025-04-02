@@ -1,0 +1,49 @@
+# @title Estimação de curva EMRAX268 - Escalas Invertidas
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+
+# Dados de RPM e valores característicos
+rpm = np.array([0, 1000, 2000, 3000, 3500, 4000, 4500, 5000, 5500])
+
+# Valores de potência (escala à esquerda)
+potencia_continua = np.array([0, 20, 40, 60, 75, 85, 90, 95, 97])
+potencia_pico = np.array([0, 50, 100, 150, 180, 200, 210, 215, 215])
+
+# Valores de torque (escala à direita)
+torque_continuo = np.array([200, 200, 200, 200, 190, 170, 150, 130, 110])
+torque_pico = np.array([500, 500, 500, 500, 480, 450, 400, 370, 350])
+
+# Interpolação suavizada
+rpm_interp = np.linspace(0, 5500, 1000)
+torque_continuo_interp = interp1d(rpm, torque_continuo, kind='cubic')(rpm_interp)
+torque_pico_interp = interp1d(rpm, torque_pico, kind='cubic')(rpm_interp)
+potencia_continua_interp = interp1d(rpm, potencia_continua, kind='cubic')(rpm_interp)
+potencia_pico_interp = interp1d(rpm, potencia_pico, kind='cubic')(rpm_interp)
+
+# Configuração do gráfico com escalas invertidas
+fig, ax1 = plt.subplots(figsize=(10, 6))
+
+# Curvas de Potência (eixo Y esquerdo)
+ax1.set_xlabel('Motor speed (RPM)', fontsize=12)
+ax1.set_ylabel('Power (kW)', color='tab:green', fontsize=12)
+ax1.plot(rpm_interp, potencia_continua_interp, label='Continuous power', color='tab:green', linestyle='--', linewidth=2)
+ax1.plot(rpm_interp, potencia_pico_interp, label='Peak power', color='tab:green', linewidth=2)
+ax1.set_ylim(0, 220)
+ax1.tick_params(axis='y', labelcolor='tab:green')
+
+# Curvas de Torque (eixo Y direito)
+ax2 = ax1.twinx()
+ax2.set_ylabel('Torque (Nm)', color='tab:blue', fontsize=12)
+ax2.plot(rpm_interp, torque_continuo_interp, label='Continuous torque', color='tab:blue', linestyle='--', linewidth=2)
+ax2.plot(rpm_interp, torque_pico_interp, label='Peak torque', color='tab:blue', linewidth=2)
+ax2.set_ylim(0, 550)
+ax2.tick_params(axis='y', labelcolor='tab:blue')
+
+# Formatação final
+fig.suptitle('EMRAX 268MV LC - Torque and Power Curves', fontsize=14)
+ax1.legend(loc="upper left", bbox_to_anchor=(0.02, 0.98))
+ax2.legend(loc="upper right", bbox_to_anchor=(0.98, 0.98))
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
