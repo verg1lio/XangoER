@@ -305,8 +305,7 @@ class Estrutura:
 
         return eigenvalues, eigenvectors, frequencies
     
-
-    def static_analysis(K_global, F_global, fixed_dofs):
+    def static_analysis(self, K_global, F_global, fixed_dofs):
         """
         Perform static analysis by solving Ku = F with boundary conditions.
 
@@ -351,19 +350,43 @@ class Estrutura:
         Calcula a matriz B de um elemento individual.
         """
         L_e = self.calcular_comprimento(element)
-        N1 = 1-displacements[element]/L_e
-        N2 = displacements[element]/L_e
+        node1, node2 = element
 
+        # Extract displacements for the nodes of the element
+        dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
+        dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
+
+        # Construct the B matrix (simplified for axial and bending)
         B = np.array([
-            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
-            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
-            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
-            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
-            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
-            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
+            [-(dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0],
+            [0, -(dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0],
+            [0, 0, -(dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0],
+            [0, 0, 0, -(dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0],
+            [-(dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, -(dofs_node2[5] - dofs_node1[5]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[5] - dofs_node1[5]) / L_e, 0]
         ])
 
         return B
+
+
+#    def calcular_B_Elementar(self, displacements, element):
+#        """
+#        Calcula a matriz B de um elemento individual.
+#        """
+#        L_e = self.calcular_comprimento(element)
+#        N1 = 1-displacements[element]/L_e
+#        N2 = displacements[element]/L_e
+#
+#        B = np.array([
+#            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+#            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+#            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+#            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+#            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
+#            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
+#        ])
+#
+#        return B
 
     def compute_strain(self, displacements):
         """
@@ -381,9 +404,22 @@ class Estrutura:
         strains = []
         for element in self.elements:
             B = self.calcular_B_Elementar(displacements, element)
-            strain = np.dot(B, displacements)  # B-matrix times displacement vector
+            node1, node2 = element
+            element_dofs = []
+            for node in [node1, node2]:
+                for dof in range(self.num_dofs_per_node):
+                    element_dofs.append(node * self.num_dofs_per_node + dof)
+            element_displacements = displacements[element_dofs]
+            strain = np.dot(B, element_displacements)  # B-matrix times element's displacement vector
             strains.append(strain)
         return strains
+
+#        strains = []
+#        for element in self.elements:
+#            B = self.calcular_B_Elementar(displacements, element)
+#            strain = np.dot(B, displacements)  # B-matrix times displacement vector
+#            strains.append(strain)
+#        return strains
     
 
     def compute_stress(self, strains, E, nu):
@@ -523,8 +559,9 @@ class Estrutura:
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.set_title(graphtitle)
-        plt.xlim([-20,120])
-        plt.ylim([-45,60])
+        ax.set_box_aspect([3,1,2])
+        #plt.xlim([min(nodes)*1.1,max(nodes)*1.1])
+        #plt.ylim([min(nodes)*1.1,max(nodes)*1.1])
         plt.tight_layout()
         plt.show()
 
@@ -533,9 +570,13 @@ class Estrutura:
 # THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
 
 #Coordenadas dos nós (x, y, z)
-i = 1.7
-j = 1.5
-k = 1.8
+#i = 1.7
+#j = 1.5
+#k = 1.8
+
+i = 0.3
+j = 0.4
+k = 0.3
 
 nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
@@ -636,8 +677,7 @@ ax.set_ylabel('Y')
 ax.set_zlabel('Z')
 ax.set_title('Estrutura 3D')
 ax.legend()
-plt.xlim([-20,120])
-plt.ylim([-45,60])
+ax.set_box_aspect([3,1,2])
 plt.tight_layout()
 plt.show()
 #Exibindo as frequências naturais e modos de vibração da estrutura
@@ -683,8 +723,7 @@ for mode_idx in range(len(autovalores)):
     ax.set_zlabel('Z')
     ax.set_title(f'Forma modal nº: {mode_idx}')
     ax.legend()
-    plt.xlim([-20,120])
-    plt.ylim([-45,60])
+    ax.set_box_aspect([3,1,2])
     plt.tight_layout()
     plt.show()
 
@@ -695,14 +734,14 @@ F_global[2+5*9] = -50
 fixed_dofs = [0, 1, 2, 3, 4, 5]
 
 # Perform deformation analysis
-displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
+displacements = estrutura.static_analysis(K_global, F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
 Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 
 # Perform equivalent von mises stress determination
-strains = Estrutura.compute_strain(displacements)
-stresses = Estrutura.compute_stress(strains, 2.1e11, 0.27)
-eq_von_mises = Estrutura.compute_von_mises(stresses)
+strains = estrutura.compute_strain(displacements)
+stresses = estrutura.compute_stress(strains, 2.1e11, 0.27)
+eq_von_mises = estrutura.compute_von_mises(stresses)
 print("Equivalent Von-Mises Stress:", eq_von_mises)
 Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
 
