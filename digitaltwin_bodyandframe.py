@@ -347,17 +347,32 @@ class Estrutura:
         return displacements
 
 
-    def compute_strain(displacements, B_matrices):
+    def compute_strain(self, displacements, element):
         """
-        Compute strains for all elements.
+        Compute strains for all elements. The B_matrices (Strain-displacement 
+        matrices for each element are computed here, locally, by the will of
+        Newton.
 
         Parameters:
             displacements (ndarray): Displacement vector for all nodes.
-            B_matrices (list of ndarray): Strain-displacement matrices for each element.
 
         Returns:
             strains (list of ndarray): Strain tensors for all elements.
         """
+
+        L_e = self.calcular_comprimento(element)
+        N1 = 1 - y/L_e
+        N2 = y/L_e
+
+        B_matrices = np.array([
+            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
+            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
+        ])
+
         strains = []
         for B in B_matrices:
             strain = np.dot(B, displacements)  # B-matrix times displacement vector
@@ -519,18 +534,6 @@ k = 1.8
 nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
 
-#nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
-#elements = [    (0,     1),    (1,     2),    (4,     3),    (3,     5),    (1,     3) ]
-
-#Criar a estrutura e montar as matrizes de rigidez e massa globais
-#Dados: n = len(nodes), 
-#       m = 1500 kg, 
-#       rho = 7850 kg/m^3
-#       A = 0.225 m^2
-#       E = 210e9  # Módulo de elasticidade em Pa
-#       I = 8.33e-6  # Momento de inércia em m^4
-#       Ip = Id = 8.33e-6 kg.m^2
-
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
 F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
 F_axial = np.array([1000, 2000, 3000, 4000, 5000])
@@ -685,11 +688,15 @@ F_global[2+5*6] = 100
 F_global[2+5*9] = -50
 fixed_dofs = [0, 1, 2, 3, 4, 5]
 
-# Perform analysis
+# Perform deformation analysis
 displacements = Estrutura.static_analysis(K_global, F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
 Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 
+# Perform equivalent von mises stress determination
+strains = Estrutura.compute_strain(displacements, element)
+print("Equivalent Von-Mises Stress:", strains)
+Estrutura.plot_colored_wireframe(nodes, elements, strains, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
 
 
 """
