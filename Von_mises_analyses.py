@@ -48,7 +48,7 @@ class Estrutura:
         self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
         self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
-        self.num_modes = 1                                                   #Número de modos de vibração a serem retornados
+        self.num_modes = 6                                                   #Número de modos de vibração a serem retornados
         self.B_Global = np.zeros((6, self.num_dofs))                         #Matriz global B inicializada
 
 
@@ -246,6 +246,7 @@ class Estrutura:
         G = 81.2e9  	#Modulo de Cisalhamento (Pa)
         A= 0.0125	    #Área da seção do elemento (m^2)	
         J = I/2     	#Momento polar de inércia (m^4)
+        
         KF_total = 0
         KT_total = 0
         KF_elements = []
