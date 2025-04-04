@@ -346,8 +346,26 @@ class Estrutura:
         
         return displacements
 
+    def calcular_B_Elementar(self, displacements, element):
+        """
+        Calcula a matriz B de um elemento individual.
+        """
+        L_e = self.calcular_comprimento(element)
+        N1 = 1-displacements[element]/L_e
+        N2 = displacements[element]/L_e
 
-    def compute_strain(self, displacements, element):
+        B = np.array([
+            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
+            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
+        ])
+
+        return B
+
+    def compute_strain(self, displacements):
         """
         Compute strains for all elements. The B_matrices (Strain-displacement 
         matrices for each element are computed here, locally, by the will of
@@ -360,21 +378,9 @@ class Estrutura:
             strains (list of ndarray): Strain tensors for all elements.
         """
 
-        L_e = self.calcular_comprimento(element)
-        N1 = 1 - y/L_e
-        N2 = y/L_e
-
-        B_matrices = np.array([
-            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
-            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
-            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
-            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
-            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
-            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
-        ])
-
         strains = []
-        for B in B_matrices:
+        for element in self.elements:
+            B = self.calcular_B_Elementar(displacements, element)
             strain = np.dot(B, displacements)  # B-matrix times displacement vector
             strains.append(strain)
         return strains
@@ -694,9 +700,11 @@ print("Displacement Vector:", displacements)
 Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 
 # Perform equivalent von mises stress determination
-strains = Estrutura.compute_strain(displacements, element)
-print("Equivalent Von-Mises Stress:", strains)
-Estrutura.plot_colored_wireframe(nodes, elements, strains, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
+strains = Estrutura.compute_strain(displacements)
+stresses = Estrutura.compute_stress(strains, 2.1e11, 0.27)
+eq_von_mises = Estrutura.compute_von_mises(stresses)
+print("Equivalent Von-Mises Stress:", eq_von_mises)
+Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
 
 
 """
