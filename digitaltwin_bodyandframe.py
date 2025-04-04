@@ -411,7 +411,6 @@ class Estrutura:
 
 
     def Mesh(self):
-        
         """
         Generates a `.geo` file for the structure mesh in GMSH.
         Inputs: None (uses class attributes and user-provided file name).
