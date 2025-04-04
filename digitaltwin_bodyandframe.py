@@ -386,7 +386,7 @@ class Estrutura:
         return strains
     
 
-    def compute_stress(strains, E, nu):
+    def compute_stress(self, strains, E, nu):
         """
         Compute stresses for all elements using Hooke's law.
 
@@ -417,7 +417,7 @@ class Estrutura:
         return stresses
 
 
-    def compute_von_mises(stresses):
+    def compute_von_mises(self, stresses):
         """
         Compute von Mises stress for all elements.
 
