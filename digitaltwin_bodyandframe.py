@@ -329,10 +329,21 @@ class Estrutura:
         # Total number of DOFs
         n_dofs = K_global.shape[0]
 
+        # Create a mask for free DOFs (DOFs not constrained)
+        free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
+
+        # Reduce the stiffness matrix and force vector
+        K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
+        F_reduced = F_global[free_dofs]
+
         # Solve for displacements at free DOFs
         # USE "linalg.lstsq" FOR NEAR SINGULAR MATRICES (ALL OF THEM)
-        displacements = np.linalg.lstsq(K_global, F_global, rcond=None)[0]  # Get only the solution vector
+        u_reduced = np.linalg.lstsq(K_reduced, F_reduced, rcond=None)[0]  # Get only the solution vector
 
+        # Construct full displacement vector
+        displacements = np.zeros(n_dofs)
+        displacements[free_dofs] = u_reduced
+        
         return displacements
 
 
