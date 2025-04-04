@@ -350,24 +350,36 @@ class Estrutura:
 
         return displacements
 
-    def calcular_B_Elementar(self, element):
+    def calcular_B_Elementar(self, displacements, element):
         """
         Calcula a matriz B de um elemento individual.
         """
         L_e = self.calcular_comprimento(element)
 
-        dN_dX = 1 / L_e
-        dN_dY = 1 / L_e
-        dN_dZ = 1 / L_e
+#        dN_dX = 1 / L_e
+#        dN_dY = 1 / L_e
+#        dN_dZ = 1 / L_e
+
+        N1 = 1-displacements[element]/L_e
+        N2 = displacements[element]/L_e
 
         B = np.array([
-            [dN_dX, 0, 0, 0, 0, 0, dN_dX, 0, 0, 0, 0, 0],
-            [0, dN_dY, 0, 0, 0, 0, 0, dN_dY, 0, 0, 0, 0],
-            [0, 0, dN_dZ, 0, 0, 0, 0, 0, dN_dZ, 0, 0, 0],
-            [dN_dY, dN_dX, 0, 0, 0, 0, dN_dY, dN_dX, 0, 0, 0, 0],
-            [0, dN_dZ, dN_dY, 0, 0, 0, 0, dN_dZ, dN_dY, 0, 0, 0],
-            [dN_dZ, 0, dN_dX, 0, 0, 0, dN_dZ, 0, dN_dX, 0, 0, 0]
+            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-N1[5],1/L_e,  0   ,  0  ,   0  ,   0  , -N2[11]],
+            [  0   ,   0  ,-1/L_e, N1[3],   0  ,   0  ,  0  ,  0   ,1/L_e, N2[9],  0   ,   0    ],
         ])
+
+#        B = np.array([
+#            [dN_dX, 0, 0, 0, 0, 0, dN_dX, 0, 0, 0, 0, 0],
+#            [0, dN_dY, 0, 0, 0, 0, 0, dN_dY, 0, 0, 0, 0],
+#            [0, 0, dN_dZ, 0, 0, 0, 0, 0, dN_dZ, 0, 0, 0],
+#            [dN_dY, dN_dX, 0, 0, 0, 0, dN_dY, dN_dX, 0, 0, 0, 0],
+#            [0, dN_dZ, dN_dY, 0, 0, 0, 0, dN_dZ, dN_dY, 0, 0, 0],
+#            [dN_dZ, 0, dN_dX, 0, 0, 0, dN_dZ, 0, dN_dX, 0, 0, 0]
+#        ])
         
         return B
     
@@ -386,7 +398,7 @@ class Estrutura:
                 D[6 * node2 + 3], D[6 * node2 + 4], D[6 * node2 + 5]
             ]).reshape(-1, 1)  
 
-            B_matrices = self.calcular_B_Elementar(element)  
+            B_matrices = self.calcular_B_Elementar(element, displacements)  
             
             strains = np.dot(B_matrices, D_T)  
 
@@ -727,7 +739,7 @@ print(f'a ordem da matriz dos deslocamentos é {ordem_displacements}')
 Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 strain = estrutura.compute_strain2(displacements)
 stress = estrutura.compute_stress(strain, 210e9, 0.3)
-print(strain)
+#print(strain)
 #print(stress)
 von_mises = estrutura.compute_von_mises(stress)
 #print(von_mises)
