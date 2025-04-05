@@ -1,0 +1,41 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def calcular_torque_autoalinhante(C, slip_angle, p, r, caster_fixo):
+    """
+    Calcula o torque auto-alinhante variando o slip angle com o caster fixo.
+    """
+    forca_lateral = C * np.radians(slip_angle)  # Modelo linear de força lateral
+    mechanical_trail = r * np.tan(np.radians(caster_fixo))  # Trail mecânico fixo pelo caster
+    
+    # Calcular torque auto-alinhante
+    Mz = forca_lateral * (p + mechanical_trail)
+    
+    return slip_angle, Mz
+
+# Parâmetros fixos
+C = 9170    # Cornering stiffness (N/rad)  gera aproximadadamente uma f_y max = 800 N
+p = 0.01   # Ponto de aplicação da força lateral (m)
+r = 0.24   # Raio mecânico da roda (m)
+caster_fixo = 4  # Caster fixo em graus
+
+# Slip angle variando de 0° a 5°
+slip_angle = np.linspace(0, 5, 100)  
+
+# Calcular torque auto-alinhante
+slip_angle_plot, Mz_plot = calcular_torque_autoalinhante(C, slip_angle, p, r, caster_fixo)
+
+# Criar gráfico
+plt.figure(figsize=(8, 5))
+plt.plot(slip_angle_plot, Mz_plot, label=f'Caster = {caster_fixo}°', color='b')
+
+# Adicionar rótulos e título
+plt.xlabel('Slip Angle (°)')
+plt.ylabel('Torque Auto-Alinhante (Nm)')
+plt.title('Torque Auto-Alinhante vs Slip Angle')
+plt.legend()
+plt.grid()
+
+# Exibir gráfico
+plt.show()
+
