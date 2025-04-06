@@ -79,8 +79,9 @@ class Estrutura:
             node_loc_matrix[i][1] = x
             node_loc_matrix[i][2] = y
             node_loc_matrix[i][3] = z
-        print("\n   Nó   x   y   z")
-        print(node_loc_matrix)
+        
+        # print("\n   Nó   x   y   z")
+        # print(node_loc_matrix)
 
 
     def connect_matrix(self):
@@ -100,8 +101,8 @@ class Estrutura:
         # Converter a lista em um array numpy
         connections_matrix = np.array(connections)
 
-        print("Matriz de conectividade:")
-        print(connections_matrix)
+        # print("Matriz de conectividade:")
+        # print(connections_matrix)
 
 
     def element(self, element):
@@ -117,7 +118,7 @@ class Estrutura:
         E = 210e9   	#Modulo de Young (Pa)
         I = 1.6667e-5 	#Momento de inercia (m^4)
         G = 81.2e9  	#Modulo de Cisalhamento(Pa)
-        A= 0.0125	    #Área da seção do elemento (m^2)	
+        A = 0.0125	    #Área da seção do elemento (m^2)	
         J = I/2     	#Momento polar de inércia (m^4) 
         kappa=0.9       #Fator de correção para cisalhamento 
         L_e = self.calcular_comprimento(element)
@@ -601,57 +602,57 @@ autovalores, autovetores, frequencias = estrutura.modal_analysis()
 # Chamando a função shape_fun
 torcao, deformacao_axial, flexao1, flexao2, flexao3, KF_total, KT_total, KF_elements, KT_elements = estrutura.shape_fun(F_flexao1, F_flexao2, F_axial, F_torcao)
 
-# Plotando os resultados das deformações
-fig, axs = plt.subplots(6, 1, figsize=(12, 22))
-
-# Plot da Torção
-axs[0].plot(torcao, 'o-', label=[f'Força {F}N' for F in F_torcao])
-axs[0].set_title('Deformação por Torção de cada Elemento')
-axs[0].set_xlabel('Elemento')
-axs[0].set_ylabel('Torção (rad)')
-axs[0].legend()
-
-# Plot da Deformação Axial
-axs[1].plot(deformacao_axial, 's-', label=[f'Força {F}N' for F in F_axial])
-axs[1].set_title('Deformação Axial de cada Elemento')
-axs[1].set_xlabel('Elemento')
-axs[1].set_ylabel('Deformação (m)')
-axs[1].legend()
-
-# Plot da Flexão por Carga Pontual
-axs[2].plot(flexao1,'o-', label=[f'Força {F}N' for F in F_flexao1])
-axs[2].set_title('Deformação por Carga Pontual de cada Elemento')
-axs[2].set_xlabel('Elemento')
-axs[2].set_ylabel('Deflexão(m)')
-axs[2].legend()
-
-# Plot da Flexão por Carga Distribuída
-axs[3].plot(flexao2,'o-', label=[f'Força {F}N' for F in F_flexao2])
-axs[3].set_title('Deformação por Carga Distribuída de cada Elemento')
-axs[3].set_xlabel('Elemento')
-axs[3].set_ylabel('Deflexão(m)')
-axs[3].legend()
-
-# Plot da Flexão Mista
-axs[4].plot(flexao3, 'o-', label='Carregamento misto')
-axs[4].set_title('Deformação por Flexão Mista de cada Elemento')
-axs[4].set_xlabel('Elemento')
-axs[4].set_ylabel('Deflexão (m)')
-axs[4].legend()
-
-# Plot da Rigidez Flexional e Torsional por Elemento
-axs[5].plot(KF_elements, 'o-', label='Rigidez Flexional (KF)')
-axs[5].plot(KT_elements, 's-', label='Rigidez Torsional (KT)')
-axs[5].set_title('Rigidez Flexional e Torsional de cada Elemento')
-axs[5].set_xlabel('Elemento')
-axs[5].set_ylabel('Rigidez (N/m)')
-axs[5].legend()
-
-# Mostrando os totais no título geral
-plt.suptitle(f'KF Total: {KF_total:.2e} N/m, KT Total: {KT_total:.2e} N/m', fontsize=16)
-
-plt.tight_layout(rect=[0, 0, 1, 0.96])
-plt.show()
+# # Plotando os resultados das deformações
+# fig, axs = plt.subplots(6, 1, figsize=(12, 22))
+# 
+# # Plot da Torção
+# axs[0].plot(torcao, 'o-', label=[f'Força {F}N' for F in F_torcao])
+# axs[0].set_title('Deformação por Torção de cada Elemento')
+# axs[0].set_xlabel('Elemento')
+# axs[0].set_ylabel('Torção (rad)')
+# axs[0].legend()
+# 
+# # Plot da Deformação Axial
+# axs[1].plot(deformacao_axial, 's-', label=[f'Força {F}N' for F in F_axial])
+# axs[1].set_title('Deformação Axial de cada Elemento')
+# axs[1].set_xlabel('Elemento')
+# axs[1].set_ylabel('Deformação (m)')
+# axs[1].legend()
+# 
+# # Plot da Flexão por Carga Pontual
+# axs[2].plot(flexao1,'o-', label=[f'Força {F}N' for F in F_flexao1])
+# axs[2].set_title('Deformação por Carga Pontual de cada Elemento')
+# axs[2].set_xlabel('Elemento')
+# axs[2].set_ylabel('Deflexão(m)')
+# axs[2].legend()
+# 
+# # Plot da Flexão por Carga Distribuída
+# axs[3].plot(flexao2,'o-', label=[f'Força {F}N' for F in F_flexao2])
+# axs[3].set_title('Deformação por Carga Distribuída de cada Elemento')
+# axs[3].set_xlabel('Elemento')
+# axs[3].set_ylabel('Deflexão(m)')
+# axs[3].legend()
+# 
+# # Plot da Flexão Mista
+# axs[4].plot(flexao3, 'o-', label='Carregamento misto')
+# axs[4].set_title('Deformação por Flexão Mista de cada Elemento')
+# axs[4].set_xlabel('Elemento')
+# axs[4].set_ylabel('Deflexão (m)')
+# axs[4].legend()
+# 
+# # Plot da Rigidez Flexional e Torsional por Elemento
+# axs[5].plot(KF_elements, 'o-', label='Rigidez Flexional (KF)')
+# axs[5].plot(KT_elements, 's-', label='Rigidez Torsional (KT)')
+# axs[5].set_title('Rigidez Flexional e Torsional de cada Elemento')
+# axs[5].set_xlabel('Elemento')
+# axs[5].set_ylabel('Rigidez (N/m)')
+# axs[5].legend()
+# 
+# # Mostrando os totais no título geral
+# plt.suptitle(f'KF Total: {KF_total:.2e} N/m, KT Total: {KT_total:.2e} N/m', fontsize=16)
+# 
+# plt.tight_layout(rect=[0, 0, 1, 0.96])
+# plt.show()
 
 # Plotando o gráfico 3D da estrutura
 fig = plt.figure(figsize=(10, 8))
@@ -735,14 +736,14 @@ fixed_dofs = [0, 1, 2, 3, 4, 5]
 
 # Perform deformation analysis
 displacements = estrutura.static_analysis(K_global, F_global, fixed_dofs)
-print("Displacement Vector:", displacements)
+# print("Displacement Vector:", displacements)
 Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
 
 # Perform equivalent von mises stress determination
 strains = estrutura.compute_strain(displacements)
 stresses = estrutura.compute_stress(strains, 2.1e11, 0.27)
 eq_von_mises = estrutura.compute_von_mises(stresses)
-print("Equivalent Von-Mises Stress:", eq_von_mises)
+# print("Equivalent Von-Mises Stress:", eq_von_mises)
 Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
 
 
