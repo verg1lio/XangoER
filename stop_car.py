@@ -286,18 +286,20 @@ def generate_animation_and_plots(F_pedal, pos_acel_max, pos_freio, pos_desejada)
     print(f"S1 = {S1:.2f} m")
     print(f"S2 = {S2:.2f} m")
     print(f"S3 = {S3:.2f} m")
+    
+def prints():
+    # Parâmetros de otimização
+    pos_desejada = int(input('Em que posição o carro deve parar?: '))  # Posição desejada para parar o carro (m)
+    best_F, best_pos_acel, best_pos_freio, best_fitness, best_pos_final = differential_evolution(pos_desejada)
 
-# Parâmetros de otimização
-pos_desejada = int(input('Em que posição o carro deve parar?: '))  # Posição desejada para parar o carro (m)
-best_F, best_pos_acel, best_pos_freio, best_fitness, best_pos_final = differential_evolution(pos_desejada)
+    # Resultados finais
+    print("\nResultados finais:")
+    print(f"Melhor F_pedal encontrado: {best_F} N")
+    print(f"Melhor pos_acel_max encontrada: {best_pos_acel} m")
+    print(f"Melhor pos_freio encontrada: {best_pos_freio} m")
+    print(f"Posição final do carro: {best_pos_final} m")
+    print(f"Diferença para a posição desejada: {best_fitness} m")
 
-# Resultados finais
-print("\nResultados finais:")
-print(f"Melhor F_pedal encontrado: {best_F} N")
-print(f"Melhor pos_acel_max encontrada: {best_pos_acel} m")
-print(f"Melhor pos_freio encontrada: {best_pos_freio} m")
-print(f"Posição final do carro: {best_pos_final} m")
-print(f"Diferença para a posição desejada: {best_fitness} m")
+    generate_animation_and_plots(best_F, best_pos_acel, best_pos_freio, pos_desejada)
 
-# Gerar animação e gráficos com os valores otimizados
-generate_animation_and_plots(best_F, best_pos_acel, best_pos_freio, pos_desejada)
+prints()
