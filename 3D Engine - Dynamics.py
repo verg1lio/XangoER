@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 class Kinematics:
-    def __init__(self, L0=None, L1=None, L2=None, L3=None, alpha=np.radians(45), theta2_start=75, theta2_end=105, theta2_step=0.6):
+    def __init__(self, L0=None, L1=None, L2=None, L3=None, alpha=np.radians(45), theta2_start=75, theta2_end=105, theta2_step=0.6, space=200, mirror=230):
         self.L0 = L0
         self.L1 = L1
         self.L2 = L2
@@ -12,6 +12,8 @@ class Kinematics:
         self.L_AP = L2 / np.sqrt(2)
         self.theta2 = np.arange(theta2_start, theta2_end, theta2_step)
         self.theta2_rad = np.radians(self.theta2)
+        self.space = space # Espaçamento entre os braços
+        self.mirror = mirror # Distância do espelhamento (ou largura do chassis)
 
         # Inicialização das listas de resultados
         self.AC = []
@@ -116,23 +118,23 @@ class Kinematics:
                 angulo_camber = self.calcular_camber(self.Ax[i], self.Az[i], self.Bx[i], self.Bz[i])
 
                 # Desenha as barras
-                ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i], self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2)  # Entrada
+                ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] - self.space/2, self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2)  # Entrada
                 ax.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2)  # Acoplamento
-                ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i]], [self.Bz[i], self.Cz[i]], 'b', linewidth=2)  # Saída
+                ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] - self.space/2], [self.Bz[i], self.Cz[i]], 'b', linewidth=2)  # Saída
                 ax.plot([self.Ax[i], self.Px[i]], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1)  # Braço adicional
                 ax.plot([self.Bx[i], self.Px[i]], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1)  # Braço adicional
-                ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] + 40 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento
-                ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] + 40] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento
+                ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] + self.space/2 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento
+                ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] + self.space/2] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento
 
                 #### ESPELHAMENTO
 
-                ax.plot([(self.Ox[i] * -1) - 230, (self.Ax[i]* -1) - 230], [self.Oy[i], self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada espelhada
-                ax.plot([(self.Ax[i] * -1) - 230, (self.Bx[i]* -1) - 230], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2) # Acoplamento espelhado
-                ax.plot([(self.Bx[i] * -1) - 230, (self.Cx[i]* -1) - 230], [self.By[i], self.Cy[i]], [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída espelhada
-                ax.plot([(self.Ax[i] * -1) - 230, (self.Px[i]* -1) - 230], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1) # Braço adicional espelhada
-                ax.plot([(self.Bx[i]* -1) - 230, (self.Px[i]* -1) - 230], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1) # Braço adicional espelhada
-                ax.plot([(self.Ox[i]* -1) - 230, (self.Ax[i]* -1) - 230], [self.Oy[i] + 40 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento espelhada
-                ax.plot([(self.Bx[i]* -1) - 230, (self.Cx[i]* -1) - 230], [self.By[i], self.Cy[i] + 40] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento espelhada
+                ax.plot([(self.Ox[i] * -1) - self.mirror, (self.Ax[i]* -1) - self.mirror], [self.Oy[i] - self.space/2, self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada espelhada
+                ax.plot([(self.Ax[i] * -1) - self.mirror, (self.Bx[i]* -1) - self.mirror], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2) # Acoplamento espelhado
+                ax.plot([(self.Bx[i] * -1) - self.mirror, (self.Cx[i]* -1) - self.mirror], [self.By[i], self.Cy[i] - self.space/2], [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída espelhada
+                ax.plot([(self.Ax[i] * -1) - self.mirror, (self.Px[i]* -1) - self.mirror], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1) # Braço adicional espelhada
+                ax.plot([(self.Bx[i]* -1) - self.mirror, (self.Px[i]* -1) - self.mirror], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1) # Braço adicional espelhada
+                ax.plot([(self.Ox[i]* -1) - self.mirror, (self.Ax[i]* -1) - self.mirror], [self.Oy[i] + self.space/2 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento espelhada
+                ax.plot([(self.Bx[i]* -1) - self.mirror, (self.Cx[i]* -1) - self.mirror], [self.By[i], self.Cy[i] + self.space/2] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento espelhada
 
 
 
@@ -171,25 +173,24 @@ class Kinematics:
 
             angulo_camber = self.calcular_camber(self.Ax[i], self.Az[i], self.Bx[i], self.Bz[i])
 
-            ax2.plot([self.Ox[i], self.Ax[i]], [self.Oy[i], self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2)  # Entrada
-            ax2.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2) # Acoplamento
-            ax2.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i]], [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída
-            ax2.plot([self.Ax[i], self.Px[i]], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1) # Braço adicional
-            ax2.plot([self.Bx[i], self.Px[i]], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1) # Braço adicional
-
-            ax2.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] + 40 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento
-            ax2.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] + 40] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento
-
+            ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] - self.space/2, self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2)  # Entrada
+            ax.plot([self.Ax[i], self.Bx[i]], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2)  # Acoplamento
+            ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] - self.space/2], [self.Bz[i], self.Cz[i]], 'b', linewidth=2)  # Saída
+            ax.plot([self.Ax[i], self.Px[i]], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1)  # Braço adicional
+            ax.plot([self.Bx[i], self.Px[i]], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1)  # Braço adicional
+            ax.plot([self.Ox[i], self.Ax[i]], [self.Oy[i] + self.space/2 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento
+            ax.plot([self.Bx[i], self.Cx[i]], [self.By[i], self.Cy[i] + self.space/2] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento
 
             #### ESPELHAMENTO
 
-            ax2.plot([(self.Ox[i] * -1) - 230, (self.Ax[i]* -1) - 230], [self.Oy[i], self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada espelhada
-            ax2.plot([(self.Ax[i] * -1) - 230, (self.Bx[i]* -1) - 230], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2) # Acoplamento espelhado
-            ax2.plot([(self.Bx[i] * -1) - 230, (self.Cx[i]* -1) - 230], [self.By[i], self.Cy[i]], [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída espelhada
-            ax2.plot([(self.Ax[i] * -1) - 230, (self.Px[i]* -1) - 230], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1) # Braço adicional espelhada
-            ax2.plot([(self.Bx[i]* -1) - 230, (self.Px[i]* -1) - 230], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1) # Braço adicional espelhada
-            ax2.plot([(self.Ox[i]* -1) - 230, (self.Ax[i]* -1) - 230], [self.Oy[i] + 40 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento espelhada
-            ax2.plot([(self.Bx[i]* -1) - 230, (self.Cx[i]* -1) - 230], [self.By[i], self.Cy[i] + 40] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento espelhada
+            ax.plot([(self.Ox[i] * -1) - self.mirror, (self.Ax[i]* -1) - self.mirror], [self.Oy[i] - self.space/2, self.Ay[i]], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada espelhada
+            ax.plot([(self.Ax[i] * -1) - self.mirror, (self.Bx[i]* -1) - self.mirror], [self.Ay[i], self.By[i]], [self.Az[i], self.Bz[i]], 'b--', linewidth=2) # Acoplamento espelhado
+            ax.plot([(self.Bx[i] * -1) - self.mirror, (self.Cx[i]* -1) - self.mirror], [self.By[i], self.Cy[i] - self.space/2], [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída espelhada
+            ax.plot([(self.Ax[i] * -1) - self.mirror, (self.Px[i]* -1) - self.mirror], [self.Ay[i], self.Py[i]], [self.Az[i], self.Pz[i]], 'r', linewidth=1) # Braço adicional espelhada
+            ax.plot([(self.Bx[i]* -1) - self.mirror, (self.Px[i]* -1) - self.mirror], [self.By[i], self.Py[i]], [self.Bz[i], self.Pz[i]], 'g', linewidth=1) # Braço adicional espelhada
+            ax.plot([(self.Ox[i]* -1) - self.mirror, (self.Ax[i]* -1) - self.mirror], [self.Oy[i] + self.space/2 , self.Ay[i] ], [self.Oz[i], self.Az[i]], 'b', linewidth=2) # Entrada com espaçamento espelhada
+            ax.plot([(self.Bx[i]* -1) - self.mirror, (self.Cx[i]* -1) - self.mirror], [self.By[i], self.Cy[i] + self.space/2] , [self.Bz[i], self.Cz[i]], 'b', linewidth=2) # Saída com espaçamento espelhada
+
 
 
 
