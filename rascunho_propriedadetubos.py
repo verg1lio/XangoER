@@ -149,11 +149,13 @@ class Estrutura:
             - m_e: element mass matrix.
         """
         # Variáveis e constantes físicas do modelo
-        E = self.obter_propriedades(element[2])[3]      #Modulo de Young (Pa)
-        I = self.obter_propriedades(element[2])[1] 	    #Momento de inercia (m^4)
-        G = self.obter_propriedades(element[2])[4]  	#Modulo de Cisalhamento(Pa)
-        A = self.obter_propriedades(element[2])[0]	    #Área da seção do elemento (m^2)	
-        J = self.obter_propriedades(element[2])[2]     	#Momento polar de inércia (m^4) 
+        d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
+        e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
+        E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
+        G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
+        A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
+        I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
+        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4) 
         kappa=0.9       #Fator de correção para cisalhamento 
         L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
