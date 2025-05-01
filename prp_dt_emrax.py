@@ -52,7 +52,7 @@ class Torque:
     @staticmethod
     def example():
         motor = Torque()
-        return motor.torque_pico_interp[:]
+        return motor.torque_continuo_interp[:] * 2
         
 
 # Teste de execução
@@ -182,7 +182,7 @@ class Drivetrain:
             aceleracao_angular = (torque - momento_y) / Iw
 
             # Atualizando a velocidade angular (rad/s)
-            velocidade_angular += aceleracao_angular * tempo  # Atualiza a velocidade angular com base no tempo
+            velocidade_angular += (aceleracao_angular * tempo)   # Atualiza a velocidade angular com base no tempo
 
             # Cálculo da velocidade tangencial (km/h)
             velocidade_tangencial = ((velocidade_angular * (self.raio_pneu * 0.001)) * transmissao_motor_roda) * 3.6
@@ -208,12 +208,12 @@ class Drivetrain:
       
         return parametros, variacao_rpm, variacao_tempo
 
-    def printCarPerformance(self):
+    def printCarPerformance(self,performance ):
                   
         rpm = self.rpm
         new_rpm = self.new_rpm
         
-        performance, variacao_rpm, variacao_tempo = self.CarPerformance()
+        #performance, variacao_rpm, variacao_tempo = self.CarPerformance()
         
         print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Tangencial [km/h]")
         
@@ -341,7 +341,7 @@ class Tire:
         return tire_lateral_force + 0.5 * camber_thrust, (10 + (tire_auto_align_moment / 55)), tire_longitudinal_force
 
     def calcular_velocidade_linear(self, forcas_finais, massa, tempos):
-        tempos = np.array(tempos)[::-1]  # Garante que os tempos estão em ordem crescente
+        tempos = np.array(tempos) # Garante que os tempos estão em ordem crescente
         forcas_finais = np.array(forcas_finais)  # Ajusta as forças para bater com os tempos
         
         aceleracoes = forcas_finais / massa  # Calcula aceleração em cada instante
@@ -358,17 +358,13 @@ class Tire:
             velocidades[i] = velocidades[i - 1] + aceleracoes[i] * dt
             print(f"t = {tempos[i]:.2f}s, dt = {dt:.2f}s, v = {velocidades[i]:.2f} m/s")
 
-        print("\nVelocidades Calculadas:", velocidades)
         return velocidades
 
-    @staticmethod
     def slip_ratio_1(velocidade_angular, raio_pneu, velocidade_linear):
-        v_roda = velocidade_angular * raio_pneu
-        numerador = v_roda - velocidade_linear
-        denominador = np.maximum(v_roda, velocidade_linear)
-        denominador = np.maximum(denominador, 1e-3)  # evita divisão por zero
-        return numerador / denominador
 
+       
+        value = (velocidade_angular * raio_pneu / velocidade_linear) -1
+        return value
         
     @staticmethod
     def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):
@@ -448,50 +444,47 @@ def unite_example():
 
     # Atualização de parâmetros dinâmicos
     dt_model.new_rpm = 5500  # Novo RPM final
-    dt_model.tempo_f = 10  # Tempo final [s]
-
-    # Exibição da performance do carro em forma de lista
-    dt_model.printCarPerformance()
+    dt_model.tempo_f = 10    # Tempo final [s]
 
     # Coleta dos dados de performance do carro
     performance_veiculo, variacao_rpm, variacao_tempo = dt_model.CarPerformance()
 
-    # Extração das forças finais dos dados de performance
+    # Exibição da performance do carro em forma de lista
+    dt_model.printCarPerformance(performance_veiculo)
+
+    # Extração das forças finais para integração da velocidade linear
     forcas_finais = [dado["ff"] for dado in performance_veiculo]
 
-    # Cálculo das velocidades lineares
+    # Cálculo da velocidade linear
     velocidades_lineares = Tire().calcular_velocidade_linear(
         forcas_finais, dt_model.massa, variacao_tempo
     )
 
-    # Cálculo do slip ratio para cada ponto
-    velocidade_angular = [dado["va"] for dado in performance_veiculo]
-    velocidade_angular = np.array(velocidade_angular)
-    raio_pneu_metros = dt_model.raio_pneu / 1000  # Conversão do raio para metros
+    # Extração da velocidade angular dos dados de performance
+    velocidade_angular = np.array([dado["va"] for dado in performance_veiculo])
+
+    # Conversão do raio do pneu para metros
+    raio_pneu_metros = dt_model.raio_pneu / 1000
+
+    # Cálculo da velocidade linear
+    print(">>> Verificação dos parâmetros para slip_ratio_1 <<<")
+    print("Velocidade Angular (rad/s):", velocidade_angular)
+    print("Raio do Pneu (m):", raio_pneu_metros)
+    print("Velocidade Linear (m/s):", velocidades_lineares)
+
+    # Cálculo do slip ratio
     slip_ratios = Tire.slip_ratio_1(velocidade_angular, raio_pneu_metros, velocidades_lineares)
 
     # Plotagem dos resultados de slip ratio
     Tire.show_slip_ratio(variacao_rpm, slip_ratios, velocidade_angular)
 
-    # Reobtendo os dados de performance do carro para análise adicional
-    performance_veiculo, variacao_rpm, variacao_tempo = dt_model.CarPerformance()
-
-    # Filtrando a velocidade angular dos dados de performance
-    velocidade_angular = [dado["va"] for dado in performance_veiculo]
-    velocidade_angular = np.array(velocidade_angular)
-    variacao_rpm = np.array(variacao_rpm)
-
-    # Cálculo do slip ratio em forma de array
-    slip_ratio = Tire.slip_ratio_1(velocidade_angular, 0.259, velocidades_lineares)
-    slip_ratios = np.array(slip_ratio)
-
-    # Instância da classe Tire com os parâmetros fornecidos
+    # Instância da classe Tire com os slip ratios calculados
     slip_model = Tire(
-        tire_Fz=1500,  # Carga vertical no pneu [N]
-        tire_Sa=0,  # Ângulo de escorregamento lateral [rad]
-        tire_Ls=slip_ratios,  # Escorregamento longitudinal
-        tire_friction_coef=1.45,  # Coeficiente de fricção
-        tire_Ca=0  # Ângulo de camber
+        tire_Fz=1500,              # Carga vertical no pneu [N]
+        tire_Sa=0,                 # Ângulo de escorregamento lateral [rad]
+        tire_Ls=slip_ratios,       # Slip ratio já calculado
+        tire_friction_coef=1.45,   # Coeficiente de fricção
+        tire_Ca=0                  # Ângulo de camber
     )
 
     # Parâmetros experimentais fornecidos
