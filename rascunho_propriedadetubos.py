@@ -66,26 +66,26 @@ class Estrutura:
 
     def momento_inercia_area_e_polar(self, diametro, espessura):            #Função para calculo dos momentos de inércia de área e polar
             outer_radius = diametro / 2
-            inner_radius = (diametro - 2 * espessura) / 2 
+            inner_radius = outer_radius - espessura 
             I = (np.pi * 0.25) * (outer_radius ** 4 - inner_radius ** 4)
             J = (np.pi * 0.5) * (outer_radius ** 4 - inner_radius ** 4)
             return I, J
 
 
-    def area_seccao_transversal(self, diametro):
-        radius = diametro/2
+    def area_seccao_transversal(self, diameter):                            #Função para calcular a área da secção transversal do tubo (diâmetro externo)
+        radius = diameter / 2
         A = (radius ** 2) * np.pi
         return A 
 
 
-    def obter_propriedades(self, tube_nome):
-        df = pd.read_csv('tubos.csv')  # ou o caminho absoluto se for fora do notebook
+    def obter_propriedades(self, tube_nome):                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
+        df = pd.read_csv('tubos.csv')  
         tubo = df[df['Tube'] == tube_nome]
     
         if tubo.empty:
             raise ValueError(f"Tubo '{tube_nome}' não encontrado.")
     
-        # Extrai os valores e transforma em variáveis
+       
         propriedades = tubo.iloc[0]
         A = propriedades['A']
         I = propriedades['I']
@@ -155,7 +155,7 @@ class Estrutura:
         G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
         A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
         I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
-        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4) 
+        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
         kappa=0.9       #Fator de correção para cisalhamento 
         L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
@@ -170,7 +170,7 @@ class Estrutura:
         d1 = rho*A*L_e
         d2 = (I*L_e)/6
         d3 = (rho*A*L_e)/420
-
+        print(A, I, J, d, e)
         # Matriz de Rigidez Elementar (Euler-Bernoulli)
         # Para converter para timoshenko basta trocar c3 por c4,onde tem (4 * L_e**2 * c3) substitui por (t1* L_e**2 * c4) e onde tiver (2 * L_e**2 * c3) por (t2* L_e**2 * c4))
         k_e= np.array([
@@ -276,11 +276,11 @@ class Estrutura:
         Outputs:
             - Arrays of torsion, deformations, and stiffness (bending and torsional).
         """
-        E = 2.1e11  	#Modulo de Young (Pa)
-        I = 1.6667e-5 	#Momento de inercia (m^4)
-        G = 81.2e9  	#Modulo de Cisalhamento (Pa)
-        A= 0.0125	    #Área da seção do elemento (m^2)	
-        J = I/2     	#Momento polar de inércia (m^4)
+        #E = 2.1e11  	#Modulo de Young (Pa)
+        #I = 1.6667e-5 	#Momento de inercia (m^4)
+        #G = 81.2e9  	#Modulo de Cisalhamento (Pa)
+        #A= 0.0125	    #Área da seção do elemento (m^2)	
+        #J = I/2     	#Momento polar de inércia (m^4)
         KF_total = 0
         KT_total = 0
         KF_elements = []
@@ -618,41 +618,35 @@ class Estrutura:
 #j = 1.5
 #k = 1.8
 
-i = 0.3
-j = 0.4
-k = 0.3
+i = 0.03
+j = 0.04
+k = 0.03
 
-#nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
-#elements = [(0,1),(0,2),(1,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
+# nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])    
+#elements = [(0,1),(0,6),(6,2),(1,7),(7,3),(2,3),(4,0),(4,2),(5,1),(5,3),(4,5),(6,7),(0,8),(1,9),(4,8),(5,9),(8,9),(10,8),(10,4),(11,9),(11,5),(10,11),(12,10),(12,4),(13,11),(13,5),(14,12),(14,4),(15,13),(15,5),(16,14),(16,4),(17,15),(17,5),(2,16),(3,17),(16,18),(17,19),(20,18),(20,16),(20,14),(20,10),(21,19),(21,17),(21,15),(21,11),(22,10),(22,20),(23,11),(23,21),(22,23),(24,18),(24,20),(24,22),(25,19),(25,21),(25,23),(26,22),(26,24),(27,23),(27,25),(26,27),(28,30),(28,32),(29,31),(29,33),(30,26),(31,27),(30,31),(28,24),(29,25),(32,24),(32,18),(33,25),(33,19),(32,33),(34,18),(34,32),(35,19),(35,33),(34,35),(36,34),(36,18),(37,35),(37,19),(36,38),(37,38),(16,39),(17,39)]
 
 #nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
 #elements = [    (0,     1, 'Tubo A'),    (1,     2, 'Tubo C'),    (4,     3, 'Tubo D'),    (3,     5, 'Tubo C'),    (1,     3, 'Tubo B') ]
 
-nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])
-elements = [
-    (0, 1, 'Tubo C'), (0, 2, 'Tubo B'), (1, 3, 'Tubo D'), (2, 3, 'Tubo A'),
-    (4, 0, 'Tubo B'), (4, 2, 'Tubo C'), (5, 1, 'Tubo D'), (5, 3, 'Tubo D'),
-    (4, 5, 'Tubo A'), (6, 7, 'Tubo A'), (0, 8, 'Tubo C'), (1, 9, 'Tubo C'),
-    (4, 8, 'Tubo C'), (5, 9, 'Tubo C'), (8, 9, 'Tubo C'), (10, 8, 'Tubo D'),
-    (10, 4, 'Tubo C'), (11, 9, 'Tubo C'), (11, 5, 'Tubo D'), (10, 11, 'Tubo B'),
-    (12, 10, 'Tubo B'), (12, 4, 'Tubo A'), (13, 11, 'Tubo B'), (13, 5, 'Tubo A'),
-    (14, 12, 'Tubo B'), (14, 4, 'Tubo D'), (15, 13, 'Tubo A'), (15, 5, 'Tubo C'),
-    (16, 14, 'Tubo A'), (16, 4, 'Tubo C'), (17, 15, 'Tubo B'), (17, 5, 'Tubo A'),
-    (2, 16, 'Tubo D'), (3, 17, 'Tubo B'), (16, 18, 'Tubo A'), (17, 19, 'Tubo C'),
-    (20, 18, 'Tubo D'), (20, 16, 'Tubo B'), (20, 14, 'Tubo D'), (20, 10, 'Tubo A'),
-    (21, 19, 'Tubo C'), (21, 17, 'Tubo B'), (21, 15, 'Tubo C'), (21, 11, 'Tubo D'),
-    (22, 10, 'Tubo A'), (22, 20, 'Tubo B'), (23, 11, 'Tubo C'), (23, 21, 'Tubo D'),
-    (22, 23, 'Tubo D'), (24, 18, 'Tubo B'), (24, 20, 'Tubo C'), (24, 22, 'Tubo B'),
-    (25, 19, 'Tubo C'), (25, 21, 'Tubo B'), (25, 23, 'Tubo A'), (26, 22, 'Tubo C'),
-    (26, 24, 'Tubo C'), (27, 23, 'Tubo D'), (27, 25, 'Tubo A'), (26, 27, 'Tubo A'),
-    (28, 30, 'Tubo A'), (28, 32, 'Tubo D'), (29, 31, 'Tubo B'), (29, 33, 'Tubo C'),
-    (30, 26, 'Tubo B'), (31, 27, 'Tubo D'), (30, 31, 'Tubo A'), (28, 24, 'Tubo A'),
-    (29, 25, 'Tubo C'), (32, 24, 'Tubo D'), (32, 18, 'Tubo B'), (33, 25, 'Tubo A'),
-    (33, 19, 'Tubo C'), (32, 33, 'Tubo B'), (34, 18, 'Tubo D'), (34, 32, 'Tubo B'),
-    (35, 19, 'Tubo B'), (35, 33, 'Tubo C'), (34, 35, 'Tubo A'), (36, 34, 'Tubo A'),
-    (36, 18, 'Tubo D'), (37, 35, 'Tubo A'), (37, 19, 'Tubo B'), (36, 38, 'Tubo C'),
-    (37, 38, 'Tubo C'), (16, 39, 'Tubo B'), (17, 39, 'Tubo A')
-]
+nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
+elements = [(0, 1, 'Tubo D'), (0, 6, 'Tubo A'), (6, 2, 'Tubo C'), (1, 7, 'Tubo D'), (7, 3, 'Tubo B'),
+ (2, 3, 'Tubo C'), (4, 0, 'Tubo A'), (4, 2, 'Tubo B'), (5, 1, 'Tubo B'), (5, 3, 'Tubo C'),
+ (4, 5, 'Tubo D'), (6, 7, 'Tubo D'), (0, 8, 'Tubo A'), (1, 9, 'Tubo B'), (4, 8, 'Tubo A'),
+ (5, 9, 'Tubo D'), (8, 9, 'Tubo A'), (10, 8, 'Tubo B'), (10, 4, 'Tubo C'), (11, 9, 'Tubo C'),
+ (11, 5, 'Tubo A'), (10, 11, 'Tubo B'), (12, 10, 'Tubo C'), (12, 4, 'Tubo A'), (13, 11, 'Tubo D'),
+ (13, 5, 'Tubo A'), (14, 12, 'Tubo B'), (14, 4, 'Tubo C'), (15, 13, 'Tubo D'), (15, 5, 'Tubo B'),
+ (16, 14, 'Tubo D'), (16, 4, 'Tubo B'), (17, 15, 'Tubo D'), (17, 5, 'Tubo A'), (2, 16, 'Tubo C'),
+ (3, 17, 'Tubo A'), (16, 18, 'Tubo D'), (17, 19, 'Tubo C'), (20, 18, 'Tubo B'), (20, 16, 'Tubo A'),
+ (20, 14, 'Tubo B'), (20, 10, 'Tubo D'), (21, 19, 'Tubo B'), (21, 17, 'Tubo C'), (21, 15, 'Tubo C'),
+ (21, 11, 'Tubo A'), (22, 10, 'Tubo B'), (22, 20, 'Tubo D'), (23, 11, 'Tubo C'), (23, 21, 'Tubo A'),
+ (22, 23, 'Tubo B'), (24, 18, 'Tubo D'), (24, 20, 'Tubo C'), (24, 22, 'Tubo B'), (25, 19, 'Tubo D'),
+ (25, 21, 'Tubo D'), (25, 23, 'Tubo C'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
+ (27, 25, 'Tubo B'), (26, 27, 'Tubo C'), (28, 30, 'Tubo C'), (28, 32, 'Tubo C'), (29, 31, 'Tubo A'),
+ (29, 33, 'Tubo B'), (30, 26, 'Tubo A'), (31, 27, 'Tubo C'), (30, 31, 'Tubo B'), (28, 24, 'Tubo D'),
+ (29, 25, 'Tubo A'), (32, 24, 'Tubo C'), (32, 18, 'Tubo B'), (33, 25, 'Tubo C'), (33, 19, 'Tubo A'),
+ (32, 33, 'Tubo C'), (34, 18, 'Tubo B'), (34, 32, 'Tubo C'), (35, 19, 'Tubo A'), (35, 33, 'Tubo B'),
+ (34, 35, 'Tubo D'), (36, 34, 'Tubo D'), (36, 18, 'Tubo A'), (37, 35, 'Tubo B'), (37, 19, 'Tubo A'),
+ (36, 38, 'Tubo C'), (37, 38, 'Tubo C'), (16, 39, 'Tubo B'), (17, 39, 'Tubo D')]
 
 
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
