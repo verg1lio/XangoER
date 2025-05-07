@@ -142,7 +142,7 @@ class Drivetrain:
         area_frontal = 1.06
         c_r = 0.025  # Coeficiente de resistência ao rolamento 
         f_v = 0.012  
-        Iw = (self.massa * (self.raio_pneu * 0.001)) / 2  # Momento de inércia da roda
+        Iw = (self.massa * (self.raio_pneu * 0.001)**2) / 2  # Momento de inércia da roda
 
         # Listas para armazenar os dados
         variacao_rpm = []
