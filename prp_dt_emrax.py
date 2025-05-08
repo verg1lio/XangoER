@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 
-class Torque:
+class Motor:
 
     def __init__(self):
         self.rpm_interp = None
@@ -50,15 +50,25 @@ class Torque:
         plt.show()
 
     @staticmethod
-    def example():
-        motor = Torque()
+    def get_torque():
+        motor = Motor()
         return motor.torque_continuo_interp[:] * 2
-        
 
+    @staticmethod
+    def get_potencia():
+        motor = Motor()
+        return motor.potencia_continua_interp[:] 
+    @staticmethod
+    def get_rpm():
+        motor = Motor()
+        return motor.rpm_interp[:]
+    
 # Teste de execução
-valores = Torque.example()
-print(valores)
 
+# valores_t = Motor.get_torque()
+# valores_p = Motor.get_potencia()
+# print(f'torque:{valores_t}')
+# print(f'potencia:{valores_p}')
 
 
 class Drivetrain:
@@ -141,18 +151,20 @@ class Drivetrain:
         densidade_ar = 1.162
         area_frontal = 1.06
         c_r = 0.025  # Coeficiente de resistência ao rolamento 
-        f_v = 0.012  
-        Iw = (self.massa * (self.raio_pneu * 0.001)**2) / 2  # Momento de inércia da roda
+        f_v = 0.012  # fator velocidade
+       
 
         # Listas para armazenar os dados
         variacao_rpm = []
         variacao_tempo = []
         variacao_torque = []
+        variacao_potencia = []
 
         if self.new_rpm:
-            variacao_rpm = range(self.rpm, self.new_rpm, 30)
+            variacao_rpm = Motor.get_rpm()
             variacao_tempo = np.linspace(self.tempo_i, self.tempo_f, len(variacao_rpm))
-            variacao_torque = Torque.example()
+            variacao_torque = Motor.get_torque()
+            variacao_potencia = Motor.get_potencia()
             self.tempo_i = self.tempo_f
             self.rpm = self.new_rpm
             self.new_rpm = 0
@@ -164,25 +176,16 @@ class Drivetrain:
 
         parametros = []
 
-        for rpm, tempo, torque in zip(variacao_rpm, variacao_tempo, variacao_torque):
+        for rpm, tempo, torque, potencia in zip(variacao_rpm, variacao_tempo, variacao_torque, variacao_potencia):
 
             # Inicializa a velocidade angular (rad/s) a partir da RPM
-            velocidade_angular = (rpm * 2 * math.pi) / (60 * self.reducao_primaria * self.reducao_unica)
+            velocidade_angular = (potencia * 1000 * rendimento_transmissao / torque) / self.reducao_primaria * self.reducao_unica
 
             # Cálculo da força trativa (N)
             forca_trativa = ((torque * self.reducao_primaria * self.reducao_unica) / (self.raio_pneu * 0.001)) * rendimento_transmissao
 
             # Cálculo da resistência ao rolamento (N)
             resistencia_rolamento = (c_r + (3.24 * f_v * (((velocidade_angular) * (self.raio_pneu * 0.001)) ** 2.5))) * peso
-
-            # Cálculo do momento My (Nm)
-            momento_y = c_r * peso * self.raio_pneu * 0.001  
-
-            # Cálculo da aceleração angular (rad/s^2)
-            aceleracao_angular = (torque - momento_y) / Iw
-
-            # Atualizando a velocidade angular (rad/s)
-            velocidade_angular += (aceleracao_angular * tempo)   # Atualiza a velocidade angular com base no tempo
 
             # Cálculo da velocidade tangencial (km/h)
             velocidade_tangencial = ((velocidade_angular * (self.raio_pneu * 0.001)) * transmissao_motor_roda) * 3.6
@@ -200,7 +203,6 @@ class Drivetrain:
                 "vt": velocidade_tangencial,
                 "fa": forca_arrasto,
                 "rr": resistencia_rolamento,
-                "my": momento_y,
                 "ff": forca_final
             }
 
@@ -213,8 +215,7 @@ class Drivetrain:
         rpm = self.rpm
         new_rpm = self.new_rpm
         
-        #performance, variacao_rpm, variacao_tempo = self.CarPerformance()
-        
+
         print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Tangencial [km/h]")
         
         for param in performance:
@@ -230,7 +231,7 @@ class Drivetrain:
     def HalfShaftsSizing(self, fsi=1.25, tet=786, tec=471.6, dif=1):
         
         # Obtendo o maior torque do motor a partir dos dados experimentais 
-        torque_max_motor = max(Torque.example())
+        torque_max_motor = max(Motor.get_torque())
         
         # Calculando o torque máximo nos semieixos
         torque_max_semieixo = torque_max_motor * self.reducao_primaria * self.reducao_unica * self.cp * dif
@@ -360,11 +361,15 @@ class Tire:
 
         return velocidades
 
+    @staticmethod
     def slip_ratio_1(velocidade_angular, raio_pneu, velocidade_linear):
+        v_roda = velocidade_angular * raio_pneu
+        numerador = v_roda - velocidade_linear
+        denominador = np.maximum(v_roda, velocidade_linear)
+        denominador = np.maximum(denominador, 1e-3)  # evita divisão por zero
+        return numerador / denominador
 
        
-        value = (velocidade_angular * raio_pneu / velocidade_linear) -1
-        return value
         
     @staticmethod
     def show_slip_ratio(rpm_values, slip_ratio, velocidade_angular):
@@ -433,7 +438,7 @@ def unite_example():
         tempo_i=0  # Tempo inicial [s]
     )
 
-    motor = Torque()
+    motor = Motor()
     motor.plot()
 
     # Exibindo resultados iniciais do Drivetrain
