@@ -72,9 +72,10 @@ class Estrutura:
             return I, J
 
 
-    def area_seccao_transversal(self, diameter):                            #Função para calcular a área da secção transversal do tubo (diâmetro externo)
-        radius = diameter / 2
-        A = (radius ** 2) * np.pi
+    def area_seccao_transversal(self, diameter, espessura):                            #Função para calcular a área da secção transversal do tubo (diâmetro externo)
+        outer_radius = diameter / 2
+        inner_radius = (diameter - 2 * espessura) / 2
+        A = (outer_radius ** 2 - inner_radius ** 2) * np.pi
         return A 
 
 
@@ -153,7 +154,7 @@ class Estrutura:
         e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
         E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
         G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
-        A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
+        A = self.area_seccao_transversal(d, e)                #Área da seção do elemento (m^2)
         I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
         J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
         kappa=0.9       #Fator de correção para cisalhamento 
@@ -291,7 +292,7 @@ class Estrutura:
             e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
             E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
             G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
-            A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
+            A = self.area_seccao_transversal(d, e)                #Área da seção do elemento (m^2)
             I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
             J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
             L_e = self.calcular_comprimento(element)
@@ -628,7 +629,7 @@ k = 0.03
 #nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
 #elements = [    (0,     1, 'Tubo A'),    (1,     2, 'Tubo C'),    (4,     3, 'Tubo D'),    (3,     5, 'Tubo C'),    (1,     3, 'Tubo B') ]
 
-nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [41*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
+nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [38*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
 elements = [(0, 1, 'Tubo D'), (0, 6, 'Tubo A'), (6, 2, 'Tubo C'), (1, 7, 'Tubo D'), (7, 3, 'Tubo B'),
  (2, 3, 'Tubo C'), (4, 0, 'Tubo A'), (4, 2, 'Tubo B'), (5, 1, 'Tubo B'), (5, 3, 'Tubo C'),
  (4, 5, 'Tubo D'), (6, 7, 'Tubo D'), (0, 8, 'Tubo A'), (1, 9, 'Tubo B'), (4, 8, 'Tubo A'),
