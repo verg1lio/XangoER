@@ -2,6 +2,7 @@ import numpy as np
 from scipy.linalg import eigh
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.collections import LineCollection
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 import pandas as pd
@@ -11,65 +12,67 @@ np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
-    def __init__(self, elements,element_properties, nodes, Id, Ip):
+
+    def __init__(self, elements, nodes, m, Id, Ip):
         """
         Initializes the structure with elements, nodes, and physical properties.
+        
         Inputs:
             - elements: connectivity matrix between nodes (tuples of node indices).
             - nodes: node coordinates (Nx3 array, where N is the number of nodes).
             - m: total mass of the system (float).
             - Id: directional moment of inertia (float).
             - Ip: planar moment of inertia (float).
+
         Outputs: None.
-        """
 
-        self.elements = elements                                              # Matrix of connected elements
-        self.num_elements = len(elements)                                     # Number of elements
-        self.element_properties = element_properties                          # Matrix of element properties
-        self.nodes = nodes                                                    # Matrix of nodes with their positions
-        self.coordinates = np.array(nodes[['x', 'y', 'z']])                   # Coordinates of the nodes
-        self.connections = np.array(elements[['Node a', 'Node b']])           # Connections between nodes (elements)
-        self.num_nodes = len(nodes)                                           # Total number of nodes
-        self.car_mass = 0                                                     # Mass of the vehicle (kg)
-        self.moment_of_inertia_direction = Id                                 # Moment of inertia in a specific direction (kg.m^2)
-        self.moment_of_inertia_plane = Ip                                     # Moment of inertia in the plane (kg.m^2)
-        self.num_dofs_per_node = 6                                            # Degrees of freedom per node
-        self.num_dofs = self.num_nodes * self.num_dofs_per_node               # Total number of degrees of freedom
-        self.K_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global stiffness matrix
-        self.M_global = np.zeros((len(nodes) * 6, len(nodes) * 6))            # Global mass matrix
-        self.num_modes = 1                                                    # Number of vibration modes to return
-
-    def node_loc_matrix(self):
+        Code authors: 
+            - Patrícia Nascimento Vaccarezza; 
+            - Eduardo Almeida Menezes; 
+            - Cayque Lemos Souza; 
+            - Antônio Marcos Lopes Brito Junior; 
+            - Larissa Pereira Leanor;
+            - Alexandre Duque;
+            - Vergílio Torezan Silingardi Del Claro.
         """
-        Creates a matrix with node locations for visualization.
+        self.elements = elements                                             #Matriz de elementos conectados
+        self.num_elements = len(elements)                                    #Número de elementos
+        self.nodes = nodes                                                   #Matriz de nós com suas posições
+        self.num_nodes = len(nodes)                                          #Número total de nós
+        self.massa = 30                                                      #Massa do carro (Kg)
+        self.momento_inercia_direcao = Id                                    #Momento de inércia em relação à direção (kg.m^2)
+        self.momento_inercia_plano = Ip                                      #Momento de inércia em relação ao plano (kg.m^2)
+        self.num_dofs_per_node = 6                                           #6 graus de liberdade por nó
+        self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
+        self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
+        self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
+        self.num_modes = 1                                                  #Número de modos de vibração a serem retornados
+        self.car_mass = 0
+
+    def calcular_comprimento(self, element):    
+        """
+        Calculates the length of an element based on node coordinates.
         Inputs:
-            - node_tags: list of node identifiers.
-            - node_coord: matrix of node coordinates.
-        Outputs: None.
-        """
-        print(self.nodes)
-
-    def connect_matrix(self):
-        """
-        Generates and prints the connectivity matrix of elements.
-        Inputs: None (uses class attributes).
-        Outputs: None.
-        """
-        print(self.elements)
-
-    def calcular_comprimento(self, index): 
-        """
-        Creates a matrix with node locations for visualization.
-        Inputs:
-            - node_tags: list of node identifiers.
-            - node_coord: matrix of node coordinates.
-        Outputs: None.
-        """                               
-        
-        node1 , node2 = int(self.elements["Node a"][index]-1) , int(self.elements["Node b"][index]-1)
-        x1, y1, z1 = self.nodes['x'][node1], self.nodes['y'][node1], self.nodes['z'][node1]
-        x2, y2, z2 = self.nodes['x'][node2], self.nodes['y'][node2], self.nodes['z'][node2]
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - element length (float).
+        """                    
+        node1, node2, tube_type = element
+        x1, y1, z1 = self.nodes[node1]
+        x2, y2, z2 = self.nodes[node2]
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
+    def momento_inercia_area_e_polar(self, diametro, espessura):            #Função para calculo dos momentos de inércia de área e polar
+            outer_radius = diametro / 2
+            inner_radius = outer_radius - espessura 
+            I = (np.pi * 0.25) * (outer_radius ** 4 - inner_radius ** 4)
+            J = (np.pi * 0.5) * (outer_radius ** 4 - inner_radius ** 4)
+            return I, J
+
+    def area_seccao_transversal(self, diameter):                            #Função para calcular a área da secção transversal do tubo (diâmetro externo)
+        radius = diameter / 2
+        A = (radius ** 2) * np.pi
+        return A 
     
     def mass(self):
         """
@@ -84,18 +87,79 @@ class Estrutura:
         outputs:
             - self.car_mass (float): Mass of the entire structure
         """
-        for index in range(self.num_elements):
-            L_e = self.calcular_comprimento(index)
-            X = self.element_properties['X'][index]
-            A = self.element_properties['A'][index]
-            rho = 7870  # kg/m^3
+        for element in self.elements:
+            L_e = self.calcular_comprimento(element)
+            d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
+            A = self.area_seccao_transversal(d)
+            rho = 7850  # kg/m^3
             raio_externo = np.sqrt(A/np.pi)
-            raio_interno = raio_externo - X
+            raio_interno = raio_externo - e
             volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
             self.car_mass+= volume*rho
-        print(f"{self.car_mass.round(2) } kg")
 
-    def element(self, index):
+ 
+        return self.car_mass
+    
+    def obter_propriedades(self, tube_nome):                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
+        df = pd.read_csv("tubos.csv")  
+        tubo = df[df['Tube'] == tube_nome]
+    
+        if tubo.empty:
+            raise ValueError(f"Tubo '{tube_nome}' não encontrado.")
+    
+       
+        propriedades = tubo.iloc[0]
+        A = propriedades['A']
+        I = propriedades['I']
+        J = propriedades['J']
+        E = propriedades['E']
+        G = propriedades['G']
+        diametro = propriedades['Diametro(m)']
+        espessura = propriedades['Espessura(m)']
+
+        return float(A), float(I), float(J), float(E), float(G), float(diametro), float(espessura)
+
+    def node_loc_matrix(self, node_tags, node_coord): 
+        """
+        Creates a matrix with node locations for visualization.
+        Inputs:
+            - node_tags: list of node identifiers.
+            - node_coord: matrix of node coordinates.
+        Outputs: None."""
+
+        num_nodes = len(node_tags)
+        node_loc_matrix = np.zeros((num_nodes, 4), dtype=float)
+        for i, (x, y, z) in enumerate(node_coord, start=0):
+            node_loc_matrix[i][0] = node_tags[i] + 1
+            node_loc_matrix[i][1] = x
+            node_loc_matrix[i][2] = y
+            node_loc_matrix[i][3] = z
+        
+        # print("\n   Nó   x   y   z")
+        # print(node_loc_matrix)
+
+    def connect_matrix(self):
+        """
+        Generates and prints the connectivity matrix of elements.
+        Inputs: None (uses class attributes).
+        Outputs: None.
+        """
+        # Inicializar uma lista para armazenar as conexões
+        connections = []
+
+        # Criando a lista a partir de Connections para monstar a matriz connect
+        for i, element in enumerate(self.elements):
+            node_start, node_end, tube_type = element
+            connections.append([i + 1, node_start, node_end])
+            
+        # Converter a lista em um array numpy
+        connections_matrix = np.array(connections)
+
+        # print("Matriz de conectividade:")
+        # print(connections_matrix)
+
+    def element(self, element):
         """
         Computes the element stiffness and mass matrices.
         Inputs:
@@ -104,18 +168,19 @@ class Estrutura:
             - k_e: element stiffness matrix.
             - m_e: element mass matrix.
         """
-        #Tomando as propriedades de cada elemento
-        E = self.element_properties['E'][index]
-        A = self.element_properties['A'][index]
-        I = self.element_properties['I'][index]
-        J = self.element_properties['J'][index]
-        G = self.element_properties['G'][index]
-
+        # Variáveis e constantes físicas do modelo
+        d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
+        e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
+        E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
+        G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
+        A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
+        I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
+        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
         kappa=0.9       #Fator de correção para cisalhamento 
-
-        L_e = self.calcular_comprimento(index)
+        L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
         rho = 7850  # kg/m^3
+
         c1 = E * A / L_e
         c2 = G * J / L_e
         c3 = E * I / L_e**3             #Euler-Bernoulli
@@ -125,7 +190,7 @@ class Estrutura:
         d1 = rho*A*L_e
         d2 = (I*L_e)/6
         d3 = (rho*A*L_e)/420
-
+        #print(A, I, J, d, e)
         # Matriz de Rigidez Elementar (Euler-Bernoulli)
         # Para converter para timoshenko basta trocar c3 por c4,onde tem (4 * L_e**2 * c3) substitui por (t1* L_e**2 * c4) e onde tiver (2 * L_e**2 * c3) por (t2* L_e**2 * c4))
         k_e= np.array([
@@ -160,37 +225,6 @@ class Estrutura:
             ])
         return k_e,m_e
 
-    def B_matrix(self,index):
-        """
-        Calculates the B-matrix for a 3D Timoshenko beam element.
-        Inputs:
-            - element: tuple (start node index, end node index).
-        Outputs:
-            - B: B-matrix for the element.
-        """
-        L_e = self.calcular_comprimento(index)  # Comprimento do elemento
-        x = L_e / 2  # Ponto médio do elemento (ou outro ponto de interesse)
-
-        # Derivadas das funções de forma para deslocamento axial e torção
-        dN1_dx = -1 / L_e
-        dN2_dx = 1 / L_e
-
-        # Derivadas das funções de forma para flexão
-        d2N1_dx2 = -6 / L_e**2 + 12 * x / L_e**3
-        d2N2_dx2 = 6 / L_e**2 - 12 * x / L_e**3
-
-        # Matriz B
-        B = np.array([
-            [dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0, 0, 0],
-            [0, d2N1_dx2, 0, 0, 0, 0, 0, d2N2_dx2, 0, 0, 0, 0],
-            [0, 0, d2N1_dx2, 0, 0, 0, 0, 0, d2N2_dx2, 0, 0, 0],
-            [0, 0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0],
-            [0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0, 0],
-            [0, 0, dN1_dx, 0, 0, 0, 0, 0, dN2_dx, 0, 0, 0]
-        ])
-
-        return B
-
     def aplicar_engastes(self, nodes, dofs):
         """
         Applies constraints (fixed DOFs) on specific nodes.
@@ -199,11 +233,11 @@ class Estrutura:
             - dofs: list of degrees of freedom to be fixed.
         Outputs: None.
         """
-        for node in nodes:                                          #Laço para selecionar cada nó que será engastado
-            for dof in dofs:                                        #Laço para selecionar quais graus de liberdade serão fixados
-                index = node * self.num_dofs_per_node + dof         #Identificação da entrada da matriz que precisa ser restringida pelo engaste        
+        for node in nodes:                                          # Laço para selecionar cada nó que será engastado
+            for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
+                index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
                 self.K_global[index, index] = 10**10                # Um valor suficientemente grande para simular um engaste 
-                   
+
     def matrizes_global(self):
         """
         Assembles the global stiffness and mass matrices.
@@ -212,11 +246,9 @@ class Estrutura:
             - K_global: global stiffness matrix.
             - M_global: global mass matrix.
         """
-        #Calculando as matrizes de rigidez e massa de cada elemento
-        for index in range(self.num_elements):
-
-            k_e, m_e= self.element(index)
-            node1 , node2 = int(self.elements["Node a"][index]-1) , int(self.elements["Node b"][index]-1)
+        for element in self.elements:
+            node1, node2, tube_type = element
+            k_e, m_e = self.element(element)
             # DOFs associados ao elemento            
             dofs = [6 * node1, 6 * node1 + 1, 6 * node1 + 2, 6 * node1 + 3, 6 * node1 + 4, 6 * node1 + 5,
                     6 * node2, 6 * node2 + 1, 6 * node2 + 2, 6 * node2 + 3, 6 * node2 + 4, 6 * node2 + 5]
@@ -225,30 +257,32 @@ class Estrutura:
             self.K_global[np.ix_(dofs, dofs)] += k_e
             self.M_global[np.ix_(dofs, dofs)] += m_e
 
-        #self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
+        # self.aplicar_engastes([0, 2, 4, 5], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
         pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
         pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
 
-        plt.figure(figsize=(6, 6))
-        plt.spy(self.K_global, markersize=10)  # Adjust markersize for visibility
-        plt.title("Spy Plot of the Kg")
-        plt.xlabel("Columns")
-        plt.ylabel("Rows")
-        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-        plt.show()
+        # print (self.K_global)
+        # print (self.M_global)
 
-        plt.figure(figsize=(6, 6))
-        plt.spy(self.M_global, markersize=10)  # Adjust markersize for visibility
-        plt.title("Spy Plot of the Mg")
-        plt.xlabel("Columns")
-        plt.ylabel("Rows")
-        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-        plt.show()
+        #plt.figure(figsize=(6, 6))
+        #plt.spy(self.K_global, markersize=10)  # Adjust markersize for visibility
+        #plt.title("Spy Plot of the Kg")
+        #plt.xlabel("Columns")
+        #plt.ylabel("Rows")
+        #plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        #plt.show()
 
+        #plt.figure(figsize=(6, 6))
+        #plt.spy(self.M_global, markersize=10)  # Adjust markersize for visibility
+        #plt.title("Spy Plot of the Mg")
+        #plt.xlabel("Columns")
+        #plt.ylabel("Rows")
+        #plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        #plt.show()
 
         return self.K_global,self.M_global
 
-    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao):
+    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
         """
         Calculates deformations and stiffness of elements under loads.
         Inputs:
@@ -259,18 +293,25 @@ class Estrutura:
         Outputs:
             - Arrays of torsion, deformations, and stiffness (bending and torsional).
         """
+        #E = 2.1e11  	#Modulo de Young (Pa)
+        #I = 1.6667e-5 	#Momento de inercia (m^4)
+        #G = 81.2e9  	#Modulo de Cisalhamento (Pa)
+        #A= 0.0125	    #Área da seção do elemento (m^2)	
+        #J = I/2     	#Momento polar de inércia (m^4)
         KF_total = 0
         KT_total = 0
         KF_elements = []
         KT_elements = [] 
         torcao, deformacao, flexao1, flexao2, flexao3 = [], [], [], [], []
-        for index in range(len(self.elements)):
-            E = self.element_properties['E'][index]
-            A = self.element_properties['A'][index]
-            I = self.element_properties['I'][index]
-            J = self.element_properties['J'][index]
-            G = self.element_properties['G'][index]
-            L_e = self.calcular_comprimento(index)
+        for element in self.elements:
+            d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
+            E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
+            G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
+            A = self.area_seccao_transversal(d)                #Área da seção do elemento (m^2)
+            I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
+            J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
+            L_e = self.calcular_comprimento(element)
             # Equação de torsão
             torcao_val = (F_torcao * L_e) / (G * J)         #Fonte[1]
             torcao.append(torcao_val)
@@ -298,7 +339,7 @@ class Estrutura:
             
         return (np.array(torcao), np.array(deformacao), np.array(flexao1), 
             np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
-    
+
     def modal_analysis(self):
         """
         Performs modal analysis to compute natural frequencies and mode shapes.
@@ -323,8 +364,8 @@ class Estrutura:
         frequencies = np.array(unsorted_frequencies)[top_indices]  # Filtra as primeiras n frequências
 
         return eigenvalues, eigenvectors, frequencies
-
-    def static_analysis(self,K_global, F_global, fixed_dofs):
+    
+    def static_analysis(self, K_global, F_global, fixed_dofs):
         """
         Perform static analysis by solving Ku = F with boundary conditions.
 
@@ -360,40 +401,86 @@ class Estrutura:
 
         # Construct full displacement vector
         displacements = np.zeros(n_dofs)
-
         displacements[free_dofs] = u_reduced
-
+        
         return displacements
+
+    # def calcular_B_Elementar(self, displacements, element):
+    #     """
+    #     Calcula a matriz B de um elemento individual.
+    #     """
+    #     L_e = self.calcular_comprimento(element)
+    #     node1, node2, tube_type = element
+
+    #     # Extract displacements for the nodes of the element
+    #     dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
+    #     dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
+
+    #     # Construct the B matrix (simplified for axial and bending)
+    #     B = np.array([
+    #         [-(dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0],
+    #         [0, -(dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0],
+    #         [0, 0, -(dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0],
+    #         [0, 0, 0, -(dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0],
+    #         [-(dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0],
+    #         [0, 0, 0, 0, -(dofs_node2[5] - dofs_node1[5]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[5] - dofs_node1[5]) / L_e, 0]
+    #     ])
+
+    #     return B
+
+    def calcular_B_Elementar(self, displacements, element):
+        """
+        Calcula a matriz B de um elemento individual.
+        """
+        L_e = self.calcular_comprimento(element)
+        node1,node2,_= element
+        # Extract displacements for the nodes of the element
+        dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
+        dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
+
+        #Construct the B matrix
+        B = np.array([
+            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+
+            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+
+            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+
+            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+
+            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-1+dofs_node1[5]/L_e,1/L_e,  0   ,  0  ,   0  ,   0  , -dofs_node2[5]/L_e],
+            
+            [  0   ,   0  ,-1/L_e, 1-dofs_node1[3]/L_e,   0  ,   0  ,  0  ,  0   ,1/L_e, dofs_node2[3]/L_e,  0   ,   0    ],
+        ])
+        return B
 
     def compute_strain(self, displacements):
         """
-        Compute strains for all elements.
+        Compute strains for all elements. The B_matrices (Strain-displacement 
+        matrices for each element are computed here, locally, by the will of
+        Newton.
 
         Parameters:
             displacements (ndarray): Displacement vector for all nodes.
-            B_matrices (list of ndarray): Strain-displacement matrices for each element.
 
         Returns:
             strains (list of ndarray): Strain tensors for all elements.
         """
-        strains = []        
-        for index in range(self.num_elements):
-            B = self.B_matrix(index)  # Certifique-se de que o nome da função está correto
-            node1, node2 = int(self.elements["Node a"][index] - 1), int(self.elements["Node b"][index] - 1)
-            
-            # DOFs associados ao elemento            
-            dofs = [6 * node1, 6 * node1 + 1, 6 * node1 + 2, 6 * node1 + 3, 6 * node1 + 4, 6 * node1 + 5,
-                    6 * node2, 6 * node2 + 1, 6 * node2 + 2, 6 * node2 + 3, 6 * node2 + 4, 6 * node2 + 5]
-            
-            u_reduced = displacements[dofs]  # Seleciona os deslocamentos associados aos DOFs
 
-            strain = np.dot(B, u_reduced)  # B-matrix vezes o vetor de deslocamento
-
+        strains = []
+        for element in self.elements:
+            B = self.calcular_B_Elementar(displacements, element)
+            node1, node2, tube_type = element
+            element_dofs = []
+            for node in [node1, node2]:
+                for dof in range(self.num_dofs_per_node):
+                    element_dofs.append(node * self.num_dofs_per_node + dof)
+            element_displacements = displacements[element_dofs]
+            strain = np.dot(B, element_displacements)  # B-matrix times element's displacement vector
             strains.append(strain)
-        
-        return np.array(strains)
+        return strains
     
-    def compute_stress(self,strains, E, nu):
+    def compute_stress(self, strains, E, nu):
         """
         Compute stresses for all elements using Hooke's law.
 
@@ -421,9 +508,9 @@ class Estrutura:
         for strain in strains:
             stress = np.dot(C, strain)  # Hooke's law: C times strain
             stresses.append(stress)
-        return np.array(stresses)
+        return stresses
 
-    def compute_von_mises(self,stresses):
+    def compute_von_mises(self, stresses):
         """
         Compute von Mises stress for all elements.
 
@@ -433,7 +520,6 @@ class Estrutura:
         Returns:
             von_mises_stresses (list of float): Von Mises stress for each element.
         """
-
         von_mises_stresses = []
         for stress in stresses:
             sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
@@ -445,7 +531,7 @@ class Estrutura:
                     6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
                 )
             )
-            von_mises_stresses.append(von_mises)
+            von_mises_stresses.append(von_mises/10**6)
         return np.array(von_mises_stresses)
 
     def Mesh(self):
@@ -454,7 +540,7 @@ class Estrutura:
         Inputs: None (uses class attributes and user-provided file name).
         Outputs: None.
         """
-
+        
         filename = input("Insira o nome do arquivo: ") + ".geo"
         diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
 
@@ -481,43 +567,7 @@ class Estrutura:
 
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
 
-    def structure_plot(self):
-        """
-        Plots a 3D wireframe of the structure.
-        
-        Parameters:
-            coordinates (array): Array of node coordinates (N x 3).
-            connections (list): List of tuples defining connections between nodes.
-        """
-
-        # Plotando o gráfico 3D da estrutura
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-
-        # Adicionando os pontos (nós)
-        for i, (x, y, z) in enumerate(self.coordinates):
-            ax.scatter(x, y, z, color='b', s=50)
-            ax.text(x, y, z, f' {i+1}', color='black', fontsize=8)
-
-        # Adicionando as linhas de ligação entre os nós
-        for node1, node2 in self.connections:
-            x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
-            y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
-            z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
-            ax.plot(x_coords, y_coords, z_coords, 'r-', marker='o')
-
-        # Configurações adicionais do gráfico
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_xlim([-0.5,2.0])
-        ax.set_ylim([-0.5,2.0])
-        ax.set_zlim([-0.5,1.5])
-        ax.set_title('Estrutura 3D do Chassi')
-
-        plt.show()
-
-    def plot_colored_wireframe(self,scalar_values, colormap='jet'):
+    def plot_colored_wireframe(nodes, elements, scalar_values, graphtitle='Wireframe plot', scalelabel='Your variable here', colormap='jet'):
         """
         Plots a 3D wireframe of the structure with color mapping based on scalar values.
         
@@ -525,6 +575,8 @@ class Estrutura:
             nodes (array): Array of node coordinates (N x 3).
             elements (list): List of tuples defining connections between nodes.
             scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            graphtitle (str): Graph title.
+            scalelabel (str): LColormap scale label description.
             colormap (str): Colormap name for visualization.
         """
         # Normalize scalar values to [0, 1] for colormap
@@ -535,41 +587,39 @@ class Estrutura:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
 
-        # Adicionando os pontos (nós)
-        for i, (x, y, z) in enumerate(self.coordinates):
-            ax.scatter(x, y, z, color='b', s=50)
-            ax.text(x, y, z, f' {i+1}', color='black', fontsize=8)
-
-        # Adicionando as linhas de ligação entre os nós
-        for node1, node2 in self.connections:
-            x_coords = [self.coordinates[node1 - 1][0], self.coordinates[node2 - 1][0]]
-            y_coords = [self.coordinates[node1 - 1][1], self.coordinates[node2 - 1][1]]
-            z_coords = [self.coordinates[node1 - 1][2], self.coordinates[node2 - 1][2]]
-            ax.plot(x_coords, y_coords, z_coords, 'r-', marker='o')
+        # Plot each element with color based on scalar values
+        for node1, node2, tube_type in elements:
+            # Get coordinates for the two nodes
+            x = [nodes[node1][0], nodes[node2][0]]
+            y = [nodes[node1][1], nodes[node2][1]]
+            z = [nodes[node1][2], nodes[node2][2]]
+            
             # Get the scalar value for the midpoint of the element
-            scalar_midpoint = (scalar_values[node1-1] + scalar_values[node2-1]) / 2
+            scalar_midpoint = (scalar_values[node1] + scalar_values[node2]) / 2
             
             # Map scalar value to color
             color = cmap(norm(scalar_midpoint))
             
             # Plot the line segment with the corresponding color
-            ax.plot(x_coords, y_coords, z_coords, color=color, linewidth=2)
+            ax.plot(x, y, z, color=color, linewidth=2)
 
         # Add a colorbar
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         mappable.set_array(scalar_values)
         cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
-        cbar.set_label("Strain (or other variable)", fontsize=12)
+        cbar.set_label(scalelabel, fontsize=12)
 
         # Set axis labels and title
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_title('Wireframe with Scalar Color Mapping')
-        ax.set_ylim([-0.5,1.5])
+        ax.set_title(graphtitle)
+        ax.set_box_aspect([3,1,2])
+        #plt.xlim([min(nodes)*1.1,max(nodes)*1.1])
+        #plt.ylim([min(nodes)*1.1,max(nodes)*1.1])
         plt.tight_layout()
         plt.show()
-           
+
     def modal_analysis_plot(self):
         """
         Plots the modal shapes of the structure in 3D, showing the deformed and original configurations.
@@ -590,34 +640,34 @@ class Estrutura:
 
         for mode_idx in range(len(autovalores)):
             mode_shape = autovetores[:, mode_idx]
-            displacements = np.zeros((len(self.coordinates), 3))  # Assuming we want to visualize x, y, z displacements only
+            displacements = np.zeros((len(self.nodes), 3))  # Assuming we want to visualize x, y, z displacements only
 
             # Loop through nodes to extract the translations
-            for j, (x, y, z) in enumerate(self.coordinates):
+            for j, (x, y, z) in enumerate(self.nodes):
                 # 6 DOFs per node: [u_x, u_y, u_z, theta_x, theta_y, theta_z]
                 dof_start = 6 * j  # Start index of DOFs for node j
                 displacements[j, 0] = mode_shape[dof_start]     # u_x
-                displacements[j, 1] = mode_shape[dof_start + 1] # u_y
-                displacements[j, 2] = mode_shape[dof_start + 2] # u_z
+                displacements[j, 1] = mode_shape[dof_start+1] # u_y
+                displacements[j, 2] = mode_shape[dof_start+1] # u_z
 
             # Scale displacements for plots
             scale_factor = 1  # Adjust as needed
-            deformed_nodes = np.array(self.coordinates) + displacements * scale_factor
+            deformed_nodes = np.array(self.nodes) + displacements * scale_factor
 
             # Plot deformed
             fig = plt.figure(figsize=(10, 8))
             ax = fig.add_subplot(111, projection='3d')
 
             # Plot deformed structure
-            for i, (node1, node2) in enumerate(self.connections):
-                x = [deformed_nodes[node1-1][0], deformed_nodes[node2-1][0]]
-                y = [deformed_nodes[node1-1][1], deformed_nodes[node2-1][1]]
-                z = [deformed_nodes[node1-1][2], deformed_nodes[node2-1][2]]
+            for i, (node1, node2,_) in enumerate(self.elements):
+                x = [deformed_nodes[node1][0], deformed_nodes[node2][0]]
+                y = [deformed_nodes[node1][1], deformed_nodes[node2][1]]
+                z = [deformed_nodes[node1][2], deformed_nodes[node2][2]]
                 ax.plot(x, y, z, 'r-', label="Deformed" if i == 0 else "")  # Add label only once
 
             #Colocando a legenda dos nós no gráfico
-            for i, (x, y, z) in enumerate(self.coordinates):
-                ax.scatter(x, y, z, color='b', s=50)
+            for i, (x, y, z) in enumerate(self.nodes):
+                ax.scatter(x, y, z, color='b', s=20)
                 ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
 
             #Colocando a legenda dos nós após a deformação no gráfico
@@ -626,10 +676,10 @@ class Estrutura:
             #    ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
 
             # Plot original structure
-            for i, (node1, node2) in enumerate(self.connections):
-                x = [self.coordinates[node1-1][0], self.coordinates[node2-1][0]]
-                y = [self.coordinates[node1-1][1], self.coordinates[node2-1][1]]
-                z = [self.coordinates[node1-1][2], self.coordinates[node2-1][2]]
+            for i, (node1, node2,_) in enumerate(self.elements):
+                x = [self.nodes[node1][0], self.nodes[node2][0]]
+                y = [self.nodes[node1][1], self.nodes[node2][1]]
+                z = [self.nodes[node1][2], self.nodes[node2][2]]
                 ax.plot(x, y, z, 'k--', label="Original" if i == 0 else "")  # Add label only once
 
             # Add labels and title
@@ -724,90 +774,139 @@ class Estrutura:
         plt.show()
         print(f'KF Total: {KF_total:.2e} N/m \nKT Total: {KT_total:.2e} N/m')
 
-    def run(self,F_flexao1, F_flexao2, F_axial,F_torcao):
-        """
-        Executes the complete structural analysis workflow, including mass matrix generation, 
-        node and connectivity matrices, deformation visualization, modal analysis, and static analysis.
-        
-        Parameters:
-            F_flexao1 (array): Forces due to bending in one direction, applied to the structure.
-            F_flexao2 (array): Forces due to bending in a perpendicular direction, applied to the structure.
-            F_axial (array): Axial forces applied to the structure.
-            F_torcao (array): Torsional forces applied to the structure.
-        """
-        self.mass()
-        #Gerar as matrizes de localização dos nós e de conectividade
-        self.node_loc_matrix()
-        self.connect_matrix()
-        # Plotando o gráfico 3D da estrutura
-        self.structure_plot()
-        self.matrizes_global()
 
-        #Plotando os resultados das deformações
-        self.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
+# THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
 
-        #Gerar autovalores, autovetores e frequências naturais
-        autovalores, autovetores, frequencias = self.modal_analysis()
-        self.modal_analysis_plot()
-        #Exibindo as frequências naturais e modos de vibração da estrutura
-        print("\\n Frequências Naturais (ω) da estrutura:")
-        print(frequencias)
-        F_global = np.zeros(self.K_global.size)  # Force vector
-        F_global[2+5*6] = 100
-        F_global[2+5*9] = -50
-        fixed_dofs = [0, 1, 2, 3, 4, 5]
+nodes = np.array([
+    [1.92, 0.0, 0.0],    # 64*i, 0*j, 0*k
+    [1.92, 0.64, 0.0],   # 64*i, 16*j, 0*k
+    [1.92, 0.0, 0.48],   # 64*i, 0*j, 16*k
+    [1.92, 0.64, 0.48],  # 64*i, 16*j, 16*k
+    [1.77, 0.0, 0.21],   # 59*i, 0*j, 7*k
+    [1.77, 0.64, 0.21],  # 59*i, 16*j, 7*k
+    [1.92, 0.0, 0.09],   # 64*i, 0*j, 3*k
+    [1.92, 0.64, 0.09],  # 64*i, 16*j, 3*k
+    [1.5, 0.0, 0.03],    # 50*i, 0*j, 1*k
+    [1.5, 0.64, 0.03],   # 50*i, 16*j, 1*k
+    [1.14, 0.08, 0.03],  # 38*i, 2*j, 1*k
+    [1.14, 0.56, 0.03],  # 38*i, 14*j, 1*k
+    [1.14, 0.0, 0.09],   # 38*i, 0*j, 3*k
+    [1.14, 0.64, 0.09],  # 38*i, 16*j, 3*k
+    [1.23, 0.0, 0.36],   # 41*i, 0*j, 12*k
+    [1.23, 0.64, 0.36],  # 41*i, 16*j, 12*k
+    [1.14, 0.03, 0.72],  # 38*i, 1*j, 24*k
+    [1.14, 0.6, 0.72],   # 38*i, 15*j, 24*k
+    [0.63, 0.0, 0.54],   # 21*i, 0*j, 18*k
+    [0.63, 0.64, 0.54],  # 21*i, 16*j, 18*k
+    [0.69, 0.0, 0.24],   # 23*i, 0*j, 8*k
+    [0.69, 0.64, 0.24],  # 23*i, 16*j, 8*k
+    [0.69, 0.0, 0.0],    # 23*i, 0*j, 0*k
+    [0.69, 0.64, 0.0],   # 23*i, 16*j, 0*k
+    [0.45, 0.0, 0.21],   # 15*i, 0*j, 7*k
+    [0.45, 0.64, 0.21],  # 15*i, 16*j, 7*k
+    [0.24, 0.0, 0.09],   # 8*i, 0*j, 3*k
+    [0.24, 0.64, 0.09],  # 8*i, 16*j, 3*k
+    [0.0, 0.16, 0.21],   # 0*i, 4*j, 7*k
+    [0.0, 0.48, 0.21],   # 0*i, 12*j, 7*k
+    [0.0, 0.16, 0.09],   # 0*i, 4*j, 3*k
+    [0.0, 0.48, 0.09],   # 0*i, 12*j, 3*k
+    [0.0, 0.16, 0.42],    # 0*i, 4*j, 14*k
+    [0.0, 0.48, 0.42],    # 0*i, 12*j, 14*k
+    [0.33, 0.03, 0.66],   # 11*i, 1*j, 22*k
+    [0.33, 0.6, 0.66],    # 11*i, 15*j, 22*k
+    [0.57, 0.03, 1.2],    # 19*i, 1*j, 40*k
+    [0.57, 0.6, 1.2],     # 19*i, 15*j, 40*k
+    [0.54, 0.32, 1.35],   # 18*i, 8*j, 45*k
+    [1.14, 0.32, 0.78]    # 38*i, 8*j, 26*k
+])
+ 
+#nodes = np.array ([    [0,     0,      0],    [0,     375,    0],    [0,     700,    0],    [1500,  375,    0],    [1500,  0,      0],    [1500,  700,    0]])
+#elements = [    (0,     1, 'Tubo A'),    (1,     2, 'Tubo C'),    (4,     3, 'Tubo D'),    (3,     5, 'Tubo C'),    (1,     3, 'Tubo B') ]
 
-        # Perform analysis
-        displacements = estrutura.static_analysis(self.K_global,F_global, fixed_dofs)
-        print("Displacement Vector:", displacements)
+elements = [(0, 1, 'Tubo A'), (0, 6, 'Tubo A'), (6, 2, 'Tubo A'), (1, 7, 'Tubo A'), (7, 3, 'Tubo A'),
+ (2, 3, 'Tubo A'), (4, 0, 'Tubo A'), (4, 2, 'Tubo A'), (5, 1, 'Tubo A'), (5, 3, 'Tubo A'),
+ (4, 5, 'Tubo A'), (6, 7, 'Tubo A'), (0, 8, 'Tubo A'), (1, 9, 'Tubo A'), (4, 8, 'Tubo A'),
+ (5, 9, 'Tubo A'), (8, 9, 'Tubo A'), (10, 8, 'Tubo A'), (10, 4, 'Tubo A'), (11, 9, 'Tubo A'),
+ (11, 5, 'Tubo A'), (10, 11, 'Tubo A'), (12, 10, 'Tubo A'), (12, 4, 'Tubo A'), (13, 11, 'Tubo A'),
+ (13, 5, 'Tubo A'), (14, 12, 'Tubo A'), (14, 4, 'Tubo A'), (15, 13, 'Tubo A'), (15, 5, 'Tubo A'),
+ (16, 14, 'Tubo A'), (16, 4, 'Tubo A'), (17, 15, 'Tubo A'), (17, 5, 'Tubo A'), (2, 16, 'Tubo A'),
+ (3, 17, 'Tubo A'), (16, 18, 'Tubo A'), (17, 19, 'Tubo A'), (20, 18, 'Tubo A'), (20, 16, 'Tubo A'),
+ (20, 14, 'Tubo A'), (20, 10, 'Tubo A'), (21, 19, 'Tubo A'), (21, 17, 'Tubo A'), (21, 15, 'Tubo A'),
+ (21, 11, 'Tubo A'), (22, 10, 'Tubo A'), (22, 20, 'Tubo A'), (23, 11, 'Tubo A'), (23, 21, 'Tubo A'),
+ (22, 23, 'Tubo A'), (24, 18, 'Tubo A'), (24, 20, 'Tubo A'), (24, 22, 'Tubo A'), (25, 19, 'Tubo A'),
+ (25, 21, 'Tubo A'), (25, 23, 'Tubo A'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
+ (27, 25, 'Tubo A'), (26, 27, 'Tubo A'), (28, 30, 'Tubo A'), (28, 32, 'Tubo A'), (29, 31, 'Tubo A'),
+ (29, 33, 'Tubo A'), (30, 26, 'Tubo A'), (31, 27, 'Tubo A'), (30, 31, 'Tubo A'), (28, 24, 'Tubo A'),
+ (29, 25, 'Tubo A'), (32, 24, 'Tubo A'), (32, 18, 'Tubo A'), (33, 25, 'Tubo A'), (33, 19, 'Tubo A'),
+ (32, 33, 'Tubo A'), (34, 18, 'Tubo A'), (34, 32, 'Tubo A'), (35, 19, 'Tubo A'), (35, 33, 'Tubo A'),
+ (34, 35, 'Tubo A'), (36, 34, 'Tubo A'), (36, 18, 'Tubo A'), (37, 35, 'Tubo A'), (37, 19, 'Tubo A'),
+ (36, 38, 'Tubo A'), (37, 38, 'Tubo A'), (16, 39, 'Tubo A'), (17, 39, 'Tubo A')]
 
-        estrutura.plot_colored_wireframe(displacements)
-        strain=self.compute_strain(displacements)
-        print("Strain:",strain)
-        #print(strain.size)
-
-        stress = self.compute_stress(strain,210e9,0.3)
-        print("Stresses",stress)
-
-        von_misses = self.compute_von_mises(stress)
-        print("Von misses stress",von_misses)
-        estrutura.plot_colored_wireframe(von_misses)  
-
-#nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Nodes.csv"
-#elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\EduardoChassi\\Nós e Elementos modelo de chassi básico - Elements.csv"
-
-nodes_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\XangoER\\Nós e Elementos modelo de chassi completo - nodes.csv"
-elements_file_path = "C:\\Users\\dudua\\OneDrive\\Documentos\\GitHub\\XangoER\\Nós e Elementos modelo de chassi completo - Elements.csv"
-
-# Carregar o arquivo para inspecionar seu conteúdo
-nodes = pd.read_csv(nodes_file_path)
-element_data = pd.read_csv(elements_file_path)
-
-# Selecionando as colunas de conectividades e propriedades dos elementos
-
-elements = element_data[['Element ID','Node a', 'Node b']]
-element_properties = element_data[['Element ID','A', 'I', 'J', 'E', 'G','X']]
-
-
-
-#Atribuir forças
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
-F_flexao2 = np.array([1000, 2000, 3000, 4000, 5000])
-F_axial   = np.array([1000, 2000, 3000, 4000, 5000])
-F_torcao  = np.array([1000, 2000, 3000, 4000, 5000])
+F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
+F_axial = np.array([1000, 2000, 3000, 4000, 5000])
+F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
 
-#Inicializando a Estrutura
-estrutura = Estrutura(elements, element_properties, nodes, 8.33e-6, 8.33e-6)
-estrutura.run(F_flexao1, F_flexao2, F_axial, F_torcao)
+estrutura = Estrutura(elements, nodes, 180, 4.18e-6, 8.33e-6)
 
+K_global, M_global = estrutura.matrizes_global()
+
+#Gera as matrizes de localização dos nós e de conectividade
+node_tags = list(range(len(nodes)))
+estrutura.node_loc_matrix(node_tags, nodes)
+estrutura.connect_matrix()
+print(estrutura.mass())
+#Plotando os resultados das deformações
+#estrutura.shape_fun_plot(F_flexao1, F_flexao2, F_axial,F_torcao)
+
+#Gerar autovalores, autovetores e frequências naturais
+autovalores, autovetores, frequencias = estrutura.modal_analysis()
+estrutura.modal_analysis_plot()
+
+#Exibindo as frequências naturais e modos de vibração da estrutura
+print("\\n Frequências Naturais (ω) da estrutura:")
+print(frequencias)
+
+# estrutura.Mesh()
+F_global = np.zeros(K_global.size)  # Force vector
+F_global[2+1*6] = 100
+fixed_dofs = []
+
+# Perform deformation analysis
+displacements = estrutura.static_analysis(K_global, F_global, fixed_dofs)
+print("Displacement Vector:", displacements)
+
+
+Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements', 'Displacements [m]')
+
+# Perform equivalent von mises stress determination
+strains = estrutura.compute_strain(displacements)
+stresses = estrutura.compute_stress(strains, 2.1e11, 0.27)
+eq_von_mises = estrutura.compute_von_mises(stresses)
+
+print("Equivalent Von-Mises Stress:", eq_von_mises)
+Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [MPa]')
 
 
 """
+Referências
+[1] FERREIRA, L. C. M.; SILVA, M. C. F.; GOMES, L. A. Análise da Rigidez Torsional do Chassi de um Protótipo de Competição Formula SAE. Anais do Congresso Brasileiro de Engenharia Mecânica (COBEM), 2021. Disponível em: https://www.scielo.br. Acesso em: 7 jul. 2024.
 
-Estrutura.plot_colored_wireframe(nodes, elements, torcao/(np.max(np.max(torcao))))
-Estrutura.plot_colored_wireframe(nodes, elements, deformacao_axial)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao1)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao2)
-Estrutura.plot_colored_wireframe(nodes, elements, flexao3)
+[2] ZAVATTI, A.; JARDIM, A.; BALTHAZAR, J. M. Estudo Experimental e Numérico da Rigidez Torsional de um Chassi Tubular de Competição. Revista Brasileira de Engenharia Mecânica, v. 22, n. 2, p. 89-101, 2022. Disponível em: https://doi.org. Acesso em: 7 jul. 2024.
 
+[3] KRZIKALLA, F.; et al. Analysis of Torsional Stiffness of the Frame of a Formula Student Vehicle. Journal of Applied Mechanical Engineering, v. 8, n. 1, p. 1-6, 2019. Disponível em: https://www.walshmedicalmedia.com. Acesso em: 7 jul. 2024.
+
+[4] MONTEIRO, R. B.; CORREIA, M. D.; SANTOS, T. A. Determinação Experimental da Rigidez Torsional em Estruturas Tubulares. Anais do Simpósio de Engenharia Automotiva, 2020. Disponível em: https://www.researchgate.net. Acesso em: 7 jul. 2024.
+
+[5] AZEVEDO CANUT, Felipe; MALCHER, Lucival; HENRIQUES, Antonio Manuel Dias. Structural Analysis of a Formula SAE Chassis Under Rollover Loads. In: Proceedings of the 23rd ABCM International Congress of Mechanical Engineering. ABCM, 2015. Disponível em: ABCM Proceedings. Acesso em: 7 jul. 2024.
+
+[6] SETHUPATHI, P. Baskara et al. Design and Optimization of FSAE Chassis Using FEA. IOP Conference Series: Materials Science and Engineering, vol. 402, 2018. Disponível em: IOPscience. Acesso em: 7 jul. 2024.
+
+[7] PATEL, Vijaykumar V.; PATEL, Vibhu. Finite Element Analysis of Truck Chassis Frame. World Journal of Science and Technology, vol. 2, n. 4, p. 5-8, 2012. Disponível em: ResearchGate. Acesso em: 7 jul. 2024.
+
+[8] CALLISTER, William D.; RETHWISCH, David G. Ciência e Engenharia de Materiais: Uma Introdução. 9. ed. Rio de Janeiro: LTC, 2016.
+
+[9] ZIENKIEWICZ, O. C.; TAYLOR, R. L.; ZHU, J. Z. The Finite Element Method for Solid and Structural Mechanics. 6. ed. Oxford: Butterworth-Heinemann, 2005.
+
+[10] EER, Ferdinand P.; JOHNSTON Jr., E. Russell; DEWOLF, John T.; MAZUREK, David F. Resistência dos Materiais. 7. ed. São Paulo: McGraw-Hill Brasil, 2016.
 """
