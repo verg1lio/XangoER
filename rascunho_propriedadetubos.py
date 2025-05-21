@@ -77,6 +77,33 @@ class Estrutura:
         inner_radius = (diameter - 2 * espessura) / 2
         A = (outer_radius ** 2 - inner_radius ** 2) * np.pi
         return A 
+    
+
+    def mass(self):
+        """
+        Calculate the mass of the entire structure.
+
+        Parameters:
+        None (uses class attributes):
+            - K_global (array): Global stiffness matrix of the structure.
+            - M_global (array): Global mass matrix of the structure.
+            - num_modes (int): Number of modes to retain in the analysis.
+
+        outputs:
+            - self.car_mass (float): Mass of the entire structure
+        """
+        for element in self.elements:
+            L_e = self.calcular_comprimento(element)
+            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+            A = self.area_seccao_transversal(d)
+            rho = self.obter_propriedades(element[2])[4]
+            raio_externo = np.sqrt(A/np.pi)
+            raio_interno = raio_externo - e
+            volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
+            self.car_mass+= volume*rho
+
+        return self.car_mass
 
 
     def obter_propriedades(self, tube_nome):                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
@@ -88,15 +115,13 @@ class Estrutura:
     
        
         propriedades = tubo.iloc[0]
-        A = propriedades['A']
-        I = propriedades['I']
-        J = propriedades['J']
         E = propriedades['E']
         G = propriedades['G']
         diametro = propriedades['Diametro(m)']
         espessura = propriedades['Espessura(m)']
+        densidade = propriedades['Densidade(kg/m^3)']
 
-        return float(A), float(I), float(J), float(E), float(G), float(diametro), float(espessura)
+        return float(E), float(G), float(diametro), float(espessura), float(densidade)
 
 
     def node_loc_matrix(self, node_tags, node_coord): 
@@ -140,6 +165,9 @@ class Estrutura:
         # print(connections_matrix)
 
 
+    
+
+
     def element(self, element):
         """
         Computes the element stiffness and mass matrices.
@@ -150,11 +178,11 @@ class Estrutura:
             - m_e: element mass matrix.
         """
         # Variáveis e constantes físicas do modelo
-        d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
-        e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
-        E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
-        G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
-        A = self.area_seccao_transversal(d, e)                #Área da seção do elemento (m^2)
+        d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+        e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+        E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
+        G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
+        A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
         I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
         J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
         kappa=0.9       #Fator de correção para cisalhamento 
@@ -288,11 +316,11 @@ class Estrutura:
         KT_elements = [] 
         torcao, deformacao, flexao1, flexao2, flexao3 = [], [], [], [], []
         for element in self.elements:
-            d = self.obter_propriedades(element[2])[5]         #Diâmetro do Tubo (m)
-            e = self.obter_propriedades(element[2])[6]         #Espessura do Tubo (m)
-            E = self.obter_propriedades(element[2])[3]         #Modulo de Young (Pa)      
-            G = self.obter_propriedades(element[2])[4]         #Modulo de Cisalhamento (Pa)
-            A = self.area_seccao_transversal(d, e)                #Área da seção do elemento (m^2)
+            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+            E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
+            G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
+            A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
             I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
             J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
             L_e = self.calcular_comprimento(element)
@@ -401,15 +429,31 @@ class Estrutura:
         dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
         dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
 
-        # Construct the B matrix (simplified for axial and bending)
         B = np.array([
-            [-(dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0],
-            [0, -(dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0],
-            [0, 0, -(dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0],
-            [0, 0, 0, -(dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0],
-            [-(dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, -(dofs_node2[5] - dofs_node1[5]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[5] - dofs_node1[5]) / L_e, 0]
+            [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+
+            [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+
+            [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+
+            [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+
+            [-1/L_e,   0  ,   0  ,    0 ,    0 ,-1+dofs_node1[5]/L_e,1/L_e,  0   ,  0  ,   0  ,   0  , -dofs_node2[5]/L_e],
+            
+            [  0   ,   0  ,-1/L_e, 1-dofs_node1[3]/L_e,   0  ,   0  ,  0  ,  0   ,1/L_e, dofs_node2[3]/L_e,  0   ,   0    ],
         ])
+
+
+
+        # Construct the B matrix (simplified for axial and bending)
+        #B = np.array([
+        #    [-(dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0],
+        #    [0, -(dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0],
+        #    [0, 0, -(dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0],
+        #    [0, 0, 0, -(dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0],
+        #    [-(dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0],
+        #    [0, 0, 0, 0, -(dofs_node2[5] - dofs_node1[5]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[5] - dofs_node1[5]) / L_e, 0]
+        #])
 
         return B
 
@@ -630,24 +674,24 @@ k = 0.03
 #elements = [    (0,     1, 'Tubo A'),    (1,     2, 'Tubo C'),    (4,     3, 'Tubo D'),    (3,     5, 'Tubo C'),    (1,     3, 'Tubo B') ]
 
 nodes = np.array ([[64*i, 0*j, 0*k] , [64*i, 16*j, 0*k] ,[64*i, 0*j, 16*k] , [64*i, 16*j, 16*k] ,[59*i, 0*j, 7*k] , [59*i, 16*j, 7*k] , [64*i, 0*j, 3*k] , [64*i, 16*j, 3*k] , [50*i, 0*j, 1*k] , [50*i, 16*j, 1*k] , [38*i, 2*j, 1*k] , [38*i, 14*j, 1*k] , [38*i, 0*j, 3*k] , [38*i, 16*j, 3*k] , [38*i, 0*j, 12*k] , [38*i, 16*j, 12*k] , [38*i, 1*j, 24*k] , [38*i, 15*j, 24*k] , [21*i, 0*j, 18*k] , [21*i, 16*j, 18*k] , [23*i, 0*j, 8*k] , [23*i, 16*j, 8*k] , [23*i, 0*j, 0*k] , [23*i, 16*j, 0*k] , [15*i, 0*j, 7*k] , [15*i, 16*j, 7*k] , [8*i, 0*j, 3*k] , [8*i, 16*j, 3*k] , [0*i, 4*j, 7*k] , [0*i, 12*j, 7*k] , [0*i, 4*j, 3*k] , [0*i, 12*j, 3*k] , [0*i, 4*j, 14*k],[0*i, 12*j, 14*k] , [11*i, 1*j, 22*k] , [11*i, 15*j, 22*k] , [19*i, 1*j, 40*k] , [19*i, 15*j, 40*k] , [18*i, 8*j, 45*k] , [38*i, 8*j, 26*k]])  
-elements = [(0, 1, 'Tubo D'), (0, 6, 'Tubo A'), (6, 2, 'Tubo C'), (1, 7, 'Tubo D'), (7, 3, 'Tubo B'),
- (2, 3, 'Tubo C'), (4, 0, 'Tubo A'), (4, 2, 'Tubo B'), (5, 1, 'Tubo B'), (5, 3, 'Tubo C'),
- (4, 5, 'Tubo D'), (6, 7, 'Tubo D'), (0, 8, 'Tubo A'), (1, 9, 'Tubo B'), (4, 8, 'Tubo A'),
- (5, 9, 'Tubo D'), (8, 9, 'Tubo A'), (10, 8, 'Tubo B'), (10, 4, 'Tubo C'), (11, 9, 'Tubo C'),
- (11, 5, 'Tubo A'), (10, 11, 'Tubo B'), (12, 10, 'Tubo C'), (12, 4, 'Tubo A'), (13, 11, 'Tubo D'),
- (13, 5, 'Tubo A'), (14, 12, 'Tubo B'), (14, 4, 'Tubo C'), (15, 13, 'Tubo D'), (15, 5, 'Tubo B'),
- (16, 14, 'Tubo D'), (16, 4, 'Tubo B'), (17, 15, 'Tubo D'), (17, 5, 'Tubo A'), (2, 16, 'Tubo C'),
- (3, 17, 'Tubo A'), (16, 18, 'Tubo D'), (17, 19, 'Tubo C'), (20, 18, 'Tubo B'), (20, 16, 'Tubo A'),
- (20, 14, 'Tubo B'), (20, 10, 'Tubo D'), (21, 19, 'Tubo B'), (21, 17, 'Tubo C'), (21, 15, 'Tubo C'),
- (21, 11, 'Tubo A'), (22, 10, 'Tubo B'), (22, 20, 'Tubo D'), (23, 11, 'Tubo C'), (23, 21, 'Tubo A'),
- (22, 23, 'Tubo B'), (24, 18, 'Tubo D'), (24, 20, 'Tubo C'), (24, 22, 'Tubo B'), (25, 19, 'Tubo D'),
- (25, 21, 'Tubo D'), (25, 23, 'Tubo C'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
- (27, 25, 'Tubo B'), (26, 27, 'Tubo C'), (28, 30, 'Tubo C'), (28, 32, 'Tubo C'), (29, 31, 'Tubo A'),
- (29, 33, 'Tubo B'), (30, 26, 'Tubo A'), (31, 27, 'Tubo C'), (30, 31, 'Tubo B'), (28, 24, 'Tubo D'),
- (29, 25, 'Tubo A'), (32, 24, 'Tubo C'), (32, 18, 'Tubo B'), (33, 25, 'Tubo C'), (33, 19, 'Tubo A'),
- (32, 33, 'Tubo C'), (34, 18, 'Tubo B'), (34, 32, 'Tubo C'), (35, 19, 'Tubo A'), (35, 33, 'Tubo B'),
- (34, 35, 'Tubo D'), (36, 34, 'Tubo D'), (36, 18, 'Tubo A'), (37, 35, 'Tubo B'), (37, 19, 'Tubo A'),
- (36, 38, 'Tubo C'), (37, 38, 'Tubo C'), (16, 39, 'Tubo B'), (17, 39, 'Tubo D')]
+elements = [(0, 1, 'Tubo A'), (0, 6, 'Tubo A'), (6, 2, 'Tubo A'), (1, 7, 'Tubo A'), (7, 3, 'Tubo A'),
+ (2, 3, 'Tubo A'), (4, 0, 'Tubo A'), (4, 2, 'Tubo A'), (5, 1, 'Tubo A'), (5, 3, 'Tubo A'),
+ (4, 5, 'Tubo A'), (6, 7, 'Tubo A'), (0, 8, 'Tubo A'), (1, 9, 'Tubo A'), (4, 8, 'Tubo A'),
+ (5, 9, 'Tubo A'), (8, 9, 'Tubo A'), (10, 8, 'Tubo A'), (10, 4, 'Tubo A'), (11, 9, 'Tubo A'),
+ (11, 5, 'Tubo A'), (10, 11, 'Tubo A'), (12, 10, 'Tubo A'), (12, 4, 'Tubo A'), (13, 11, 'Tubo A'),
+ (13, 5, 'Tubo A'), (14, 12, 'Tubo A'), (14, 4, 'Tubo A'), (15, 13, 'Tubo A'), (15, 5, 'Tubo A'),
+ (16, 14, 'Tubo A'), (16, 4, 'Tubo A'), (17, 15, 'Tubo A'), (17, 5, 'Tubo A'), (2, 16, 'Tubo A'),
+ (3, 17, 'Tubo A'), (16, 18, 'Tubo A'), (17, 19, 'Tubo A'), (20, 18, 'Tubo A'), (20, 16, 'Tubo A'),
+ (20, 14, 'Tubo A'), (20, 10, 'Tubo A'), (21, 19, 'Tubo A'), (21, 17, 'Tubo A'), (21, 15, 'Tubo A'),
+ (21, 11, 'Tubo A'), (22, 10, 'Tubo A'), (22, 20, 'Tubo A'), (23, 11, 'Tubo A'), (23, 21, 'Tubo A'),
+ (22, 23, 'Tubo A'), (24, 18, 'Tubo A'), (24, 20, 'Tubo A'), (24, 22, 'Tubo A'), (25, 19, 'Tubo A'),
+ (25, 21, 'Tubo A'), (25, 23, 'Tubo A'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
+ (27, 25, 'Tubo A'), (26, 27, 'Tubo A'), (28, 30, 'Tubo A'), (28, 32, 'Tubo A'), (29, 31, 'Tubo A'),
+ (29, 33, 'Tubo A'), (30, 26, 'Tubo A'), (31, 27, 'Tubo A'), (30, 31, 'Tubo A'), (28, 24, 'Tubo A'),
+ (29, 25, 'Tubo A'), (32, 24, 'Tubo A'), (32, 18, 'Tubo A'), (33, 25, 'Tubo A'), (33, 19, 'Tubo A'),
+ (32, 33, 'Tubo A'), (34, 18, 'Tubo A'), (34, 32, 'Tubo A'), (35, 19, 'Tubo A'), (35, 33, 'Tubo A'),
+ (34, 35, 'Tubo A'), (36, 34, 'Tubo A'), (36, 18, 'Tubo A'), (37, 35, 'Tubo A'), (37, 19, 'Tubo A'),
+ (36, 38, 'Tubo A'), (37, 38, 'Tubo A'), (16, 39, 'Tubo A'), (17, 39, 'Tubo A')]
 
 
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
