@@ -13,7 +13,7 @@ np.set_printoptions(linewidth=200, suppress=True)
 
 class Estrutura:
 
-    def __init__(self, elements, nodes, m, Id, Ip):
+    def __init__(self, elements, nodes):
         """
         Initializes the structure with elements, nodes, and physical properties.
         
@@ -39,9 +39,6 @@ class Estrutura:
         self.num_elements = len(elements)                                    #Número de elementos
         self.nodes = nodes                                                   #Matriz de nós com suas posições
         self.num_nodes = len(nodes)                                          #Número total de nós
-        self.massa = 30                                                      #Massa do carro (Kg)
-        self.momento_inercia_direcao = Id                                    #Momento de inércia em relação à direção (kg.m^2)
-        self.momento_inercia_plano = Ip                                      #Momento de inércia em relação ao plano (kg.m^2)
         self.num_dofs_per_node = 6                                           #6 graus de liberdade por nó
         self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
         self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
@@ -282,7 +279,7 @@ class Estrutura:
 
         return self.K_global,self.M_global
 
-    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
+    def shape_fun(self, F_flexao1=1000, F_flexao2=1000, F_axial=1000,F_torcao=1000): 
         """
         Calculates deformations and stiffness of elements under loads.
         Inputs:
@@ -365,7 +362,7 @@ class Estrutura:
 
         return eigenvalues, eigenvectors, frequencies
     
-    def static_analysis(self, K_global, F_global, fixed_dofs):
+    def static_analysis(self, F_global, fixed_dofs):
         """
         Perform static analysis by solving Ku = F with boundary conditions.
 
@@ -386,13 +383,13 @@ class Estrutura:
             - displacements: vetor de deslocamentos nos DOFs.
         """
         # Total number of DOFs
-        n_dofs = K_global.shape[0]
+        n_dofs = self.K_global.shape[0]
 
         # Create a mask for free DOFs (DOFs not constrained)
         free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
 
         # Reduce the stiffness matrix and force vector
-        K_reduced = K_global[np.ix_(free_dofs, free_dofs)]
+        K_reduced = self.K_global[np.ix_(free_dofs, free_dofs)]
         F_reduced = F_global[free_dofs]
 
         # Solve for displacements at free DOFs
@@ -776,7 +773,7 @@ class Estrutura:
 
 
 # THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
-
+"""
 nodes = np.array([
     [1.92, 0.0, 0.0],    # 64*i, 0*j, 0*k
     [1.92, 0.64, 0.0],   # 64*i, 16*j, 0*k
@@ -847,7 +844,7 @@ F_flexao2 = np.array([1000, 1000, 1000, 1000, 1000])
 F_axial = np.array([1000, 2000, 3000, 4000, 5000])
 F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
 
-estrutura = Estrutura(elements, nodes, 180, 4.18e-6, 8.33e-6)
+estrutura = Estrutura(elements, nodes)
 
 K_global, M_global = estrutura.matrizes_global()
 
@@ -873,7 +870,7 @@ F_global[2+1*6] = 100
 fixed_dofs = []
 
 # Perform deformation analysis
-displacements = estrutura.static_analysis(K_global, F_global, fixed_dofs)
+displacements = estrutura.static_analysis(F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
 
 
@@ -886,7 +883,7 @@ eq_von_mises = estrutura.compute_von_mises(stresses)
 
 print("Equivalent Von-Mises Stress:", eq_von_mises)
 Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [MPa]')
-
+"""
 
 """
 Referências
