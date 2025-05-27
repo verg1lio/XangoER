@@ -96,9 +96,9 @@ class Estrutura:
             L_e = self.calcular_comprimento(element)
             d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
             e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
-            A = self.area_seccao_transversal(d)
-            rho = self.obter_propriedades(element[2])[4]
-            raio_externo = np.sqrt(A/np.pi)
+            A = self.area_seccao_transversal(d)                #Área da secção transversal (m^2)
+            rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
+            raio_externo = d / 2
             raio_interno = raio_externo - e
             volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
             self.car_mass+= volume*rho
@@ -185,10 +185,11 @@ class Estrutura:
         A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
         I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
         J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
-        kappa=0.9       #Fator de correção para cisalhamento 
+        rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
+        kappa=0.9                                          #Fator de correção para cisalhamento 
         L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
-        rho = 7850  # kg/m^3
+        
 
         c1 = E * A / L_e
         c2 = G * J / L_e
@@ -199,7 +200,6 @@ class Estrutura:
         d1 = rho*A*L_e
         d2 = (I*L_e)/6
         d3 = (rho*A*L_e)/420
-        print(A, I, J, d, e)
         # Matriz de Rigidez Elementar (Euler-Bernoulli)
         # Para converter para timoshenko basta trocar c3 por c4,onde tem (4 * L_e**2 * c3) substitui por (t1* L_e**2 * c4) e onde tiver (2 * L_e**2 * c3) por (t2* L_e**2 * c4))
         k_e= np.array([
