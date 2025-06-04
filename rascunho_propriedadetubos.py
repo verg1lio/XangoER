@@ -120,8 +120,9 @@ class Estrutura:
         diametro = propriedades['Diametro(m)']
         espessura = propriedades['Espessura(m)']
         densidade = propriedades['Densidade(kg/m^3)']
+        poisson = propriedades['Poisson']
 
-        return float(E), float(G), float(diametro), float(espessura), float(densidade)
+        return float(E), float(G), float(diametro), float(espessura), float(densidade), float(poisson)
 
 
     def node_loc_matrix(self, node_tags, node_coord): 
@@ -853,7 +854,7 @@ Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements'
 
 # Perform equivalent von mises stress determination
 strains = estrutura.compute_strain(displacements)
-stresses = estrutura.compute_stress(strains, 2.1e11, 0.27)
+stresses = estrutura.compute_stress(strains, estrutura.obter_propriedades(element[2])[0], estrutura.obter_propriedades(element[2])[5])
 eq_von_mises = estrutura.compute_von_mises(stresses)
 # print("Equivalent Von-Mises Stress:", eq_von_mises)
 Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
