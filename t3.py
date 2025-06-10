@@ -36,6 +36,8 @@ class Motor:
         if self.hp < self.h:
             self.hp = self.h
 
+        self.torque_carga_externa = None
+
         # Initial conditions
         self.reset_initial_conditions()
         
@@ -65,6 +67,8 @@ class Motor:
         self.conjcarga = []  # Load torque (N*m)
         self.correnteo = []  # Zero-sequence current (A)
         self.torque_mecanico = []  # Mechanical torque (N*m)
+
+        
 
     def reset_initial_conditions(self):
         # Initialize conditions
@@ -99,10 +103,20 @@ class Motor:
         vs3 = self.Vs * np.cos(self.tete + self.pi23)
         return vs1, vs2, vs3
 
-    def load_torque(self,):
-        if self.t >= self.tmax / 2:
-            self.cl = 10        
-    
+    def load_torque(self):
+        if self.torque_carga_externa is None:
+            raise ValueError("Torque de carga externo não fornecido. Defina motor.torque_carga_externa antes da simulação.")
+
+        idx = int(self.t / self.h)
+        if idx < len(self.torque_carga_externa):
+            self.cl = self.torque_carga_externa[idx]
+        else:
+            self.cl = self.torque_carga_externa[-1]
+         # Debug
+        if idx % int(0.01 / self.h) == 0:
+            print(f"[DEBUG] t = {self.t:.6f}s, idx = {idx}, torque carga = {self.cl}")  
+            
+              
     def direct_voltage_and_quadrature(self, vs1, vs2, vs3):
         vsd = self.rq23 * (vs1 - vs2 / 2 - vs3 / 2)
         vsq = self.rq23 * (vs2 * self.rq3 / 2 - vs3 * self.rq3 / 2)
@@ -383,7 +397,7 @@ class Drivetrain:
         self.cgy = cgy
         self.massa = massa
         self.massa_roda = massa_roda
-        self.entre_eixos =entre_eixos
+        self.entre_eixos = entre_eixos
         self.raio_pneu = raio_pneu
         self.reducao_primaria = reducao_primaria
         self.reducao_final = reducao_final
@@ -391,54 +405,61 @@ class Drivetrain:
         self.tempo_i = tempo_i
         self.tempo_f = 0
 
-    def Reduções(self, eficiencia_corrente=0.96):
+        # Inércias rotacionais (motor e transmissão)
+        self.I_motor = 0.12
+        self.I_secundario = 0.03
+        self.I_final = 0.02
 
+    def Reduções(self, eficiencia_corrente=0.96):
         motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        motor.simulate()
-        
+        self.motor_simulado = motor
+
         # Dados do motor
         rpm_motor = np.array(motor.velocidade) * 60 / (2 * np.pi)
         torque_motor = np.array(motor.torque_mecanico)
         potencia_motor = 11
 
-        # Etapa 1: Redução primária (Redutor)
+        # Redução primária
         rpm_pos_redutor = rpm_motor / self.reducao_primaria
         torque_pos_redutor = torque_motor * self.reducao_primaria
-        potencia_pos_redutor = potencia_motor  # desprezando perdas aqui
+        potencia_pos_redutor = potencia_motor
 
-        # Etapa 2: Perdas por corrente de rolos (efeito poligonal e atrito)
-        rpm_pos_corrente = rpm_pos_redutor  # corrente não altera rotação, só transmite
+        # Perdas na corrente
+        rpm_pos_corrente = rpm_pos_redutor
         torque_pos_corrente = torque_pos_redutor * eficiencia_corrente
         potencia_pos_corrente = potencia_pos_redutor * eficiencia_corrente
-        
-        # Etapa 3: Redução final (Diferencial)
+
+        # Redução final
         rpm_rodas = rpm_pos_corrente / self.reducao_final
         torque_rodas = torque_pos_corrente * self.reducao_final
-        potencia_rodas = potencia_pos_corrente  # perdas desprezadas nesta etapa
+        potencia_rodas = potencia_pos_corrente
 
-        rendimento_transmissao = (potencia_rodas / potencia_motor)
+        rendimento_transmissao = potencia_rodas / potencia_motor
 
-        return  [torque_rodas, potencia_rodas, rpm_rodas,rendimento_transmissao]
-    
+        omega_motor = 2 * np.pi * rpm_motor / 60
+        dt = 0.01
+        alpha_motor = np.gradient(omega_motor, dt)
+
+        return [torque_rodas, potencia_rodas, rpm_rodas, rendimento_transmissao, alpha_motor]
+
     def CarPerformance(self):
-        # Parâmetros do veículo
         peso = self.massa * 9.81
         coeficiente_arrasto = 0.54
         densidade_ar = 1.162
         area_frontal = 1.06
         c_r = 0.012
+        raio_m = self.raio_pneu * 0.001
 
-        # Dados já reduzidos pelo sistema de transmissão
-        torque_reduzido_raw, potencia_reduzida_raw, rpm_reduzido_raw, rendimento_transmissao = self.Reduções()
+        I_roda = 0.5 * self.massa * raio_m ** 2
+
+        torque_reduzido_raw, potencia_reduzida_raw, rpm_reduzido_raw, rendimento_transmissao, alpha_motor_raw = self.Reduções()
 
         if self.tempo_f == 0:
             raise ValueError("Defina o tempo final manualmente: dt_model.tempo_f = <valor_em_segundos>")
 
-        # Gerar vetor de tempo com resolução de 0.01s (100 Hz)
         variacao_tempo = np.arange(self.tempo_i, self.tempo_f, 0.01)
         n_amostras = len(variacao_tempo)
 
-        # Expandir sinais do motor para cobrir todo o tempo
         def expandir(vetor):
             if len(vetor) >= n_amostras:
                 return vetor[:n_amostras]
@@ -448,89 +469,84 @@ class Drivetrain:
                 return np.concatenate((vetor, np.full(repeticoes, ultima)))
 
         torque_reduzido = expandir(torque_reduzido_raw)
+        
         rpm_reduzido = expandir(rpm_reduzido_raw)
+        alpha_motor = expandir(alpha_motor_raw)  
 
         parametros = []
-        velocidade_linear_ms = 0  # m/s inicial
+        velocidade_linear_ms = 0
+        velocidade_angular = 0
 
-        for rpm, torque, tempo in zip(rpm_reduzido, torque_reduzido, variacao_tempo):
-            
-            # Velocidade angular da roda (rad/s)
-            velocidade_angular = (rpm * 2 * np.pi) / 60
+        for i, (rpm, torque_motor, tempo) in enumerate(zip(rpm_reduzido, torque_reduzido, variacao_tempo)):
+            dt = tempo - parametros[-1]["tempo"] if parametros else 0
 
-            # Força trativa 
-            forca_trativa = torque / (self.raio_pneu * 0.001) * rendimento_transmissao
+            torque_trativo = torque_motor * rendimento_transmissao
+            alpha = alpha_motor[i]
+            carga_inercial = (
+                self.I_motor * alpha +
+                self.I_secundario * alpha / self.reducao_primaria**2 +
+                self.I_final * alpha / (self.reducao_primaria * self.reducao_final)**2
+            )
+            torque_disponivel = max(torque_trativo - carga_inercial, 0)
 
-            # Resistência ao rolamento
-            resistencia_rolamento = c_r * peso
+            F_trativa = torque_disponivel / raio_m
+            F_rolamento = c_r * peso
+            F_arrasto = 0.5 * densidade_ar * coeficiente_arrasto * area_frontal * velocidade_linear_ms ** 2
+            F_resistiva = F_rolamento + F_arrasto
 
-            # Força de arrasto
-            forca_arrasto = (densidade_ar * velocidade_linear_ms ** 2 * coeficiente_arrasto * area_frontal) / 2
-            
-            # Força líquida resultante
-            forca_final = np.maximum(forca_trativa - forca_arrasto - resistencia_rolamento, 0)
+            F_final = max(F_trativa - F_resistiva, 0)
+            a_linear = F_final / self.massa
+            velocidade_linear_ms += a_linear * dt
+            velocidade_linear_kmh = velocidade_linear_ms * 3.6
 
-            # Aceleração (F = ma)
-            aceleracao = forca_final / self.massa
+            torque_resistivo = F_resistiva * raio_m
+            torque_liquido = max(torque_disponivel - torque_resistivo, 0)
+            a_angular = torque_liquido / I_roda
+            velocidade_angular += a_angular * dt
 
-            # Integração da velocidade com método de Euler
-            if len(parametros) == 0:
-                dt = 0
-            else:
-                dt = tempo - parametros[-1]["tempo"]
-
-            velocidade_linear_ms += aceleracao * dt  # m/s
-            velocidade_linear_kmh = velocidade_linear_ms * 3.6  # km/h
+            torque_carga = carga_inercial + torque_resistivo  
 
             parametro = {
-                "ft": forca_trativa,
+                "ft": F_trativa,
                 "va": velocidade_angular,
                 "vlm": velocidade_linear_ms,
                 "vlk": velocidade_linear_kmh,
-                "fa": forca_arrasto,
-                "rr": resistencia_rolamento,
-                "ff": forca_final,
+                "fa": F_arrasto,
+                "rr": F_rolamento,
+                "ff": F_final,
+                "tc": torque_carga,  
                 "tempo": tempo
             }
-
             parametros.append(parametro)
 
         return parametros, rpm_reduzido, variacao_tempo
 
-
-
     def printCarPerformance(self, performance):
         
         print("Força Trativa [N]\tVelocidade Angular [rad/s]\tVelocidade Linear do Carro [km/h]")
-        for i in range(0, len(performance), 10):  
+        for i in range(0, len(performance), 10):
             param = performance[i]
             print(f"{param['ft']:.2f}\t\t\t{param['va']:.2f}\t\t\t\t{param['vlk']:.2f}")
 
         print("\nForça de Arrasto [N]\tResistência de Rolamento [N]\tForça Final [N]")
-        for i in range(0, len(performance), 10): 
+        for i in range(0, len(performance), 10):
             param = performance[i]
             print(f"{param['fa']:.2f}\t\t\t{param['rr']:.2f}\t\t\t{param['ff']:.2f}")
 
-        # Corrigir tamanho do rpm_motor para bater com o tempo
         tempo = [param["tempo"] for param in performance]
         n_amostras = len(tempo)
 
-        motor = Motor(0.39, 1.41, 0.094, 0.094, 0.091, 0.04, 0.01)
-        motor.simulate()
+        motor = self.motor_simulado
 
         rpm_motor_raw = np.array(motor.velocidade) * 60 / (2 * np.pi)
         if len(rpm_motor_raw) >= n_amostras:
             rpm_motor = rpm_motor_raw[:n_amostras]
         else:
-            rpm_motor = np.concatenate([
-                rpm_motor_raw,
-                np.full(n_amostras - len(rpm_motor_raw), rpm_motor_raw[-1])
-            ])
+            rpm_motor = np.concatenate([rpm_motor_raw, np.full(n_amostras - len(rpm_motor_raw), rpm_motor_raw[-1])])
 
         velocidade_angular = [param["va"] for param in performance]
         velocidade_linear = [param["vlk"] for param in performance]
 
-        # --- Figura 1: RPM x Tempo ---
         plt.figure(figsize=(8, 4))
         plt.plot(tempo, rpm_motor, color='tab:pink')
         plt.xlabel("Tempo [s]")
@@ -540,9 +556,7 @@ class Drivetrain:
         plt.tight_layout()
         plt.show()
 
-        # --- Figura 2: Velocidade Angular e Linear x Tempo ---
         plt.figure(figsize=(12, 5))
-
         plt.subplot(1, 2, 1)
         plt.plot(tempo, velocidade_angular, color='tab:red')
         plt.xlabel("Tempo [s]")
@@ -556,14 +570,10 @@ class Drivetrain:
         plt.ylabel("Velocidade Linear [km/h]")
         plt.title("Velocidade Linear x Tempo")
         plt.grid(True)
-
         plt.tight_layout()
         plt.show()
 
-        # Plot dos gráficos
         plt.figure(figsize=(12, 6))
-
-        # Plot Velocidade Angular (rad/s) x RPM
         plt.subplot(1, 2, 1)
         plt.plot(rpm_motor, velocidade_angular, color='tab:red')
         plt.xlabel("RPM Motor")
@@ -571,14 +581,12 @@ class Drivetrain:
         plt.title("Velocidade Angular x RPM")
         plt.grid(True)
 
-        # Plot Velocidade Linear (km/h) x RPM
         plt.subplot(1, 2, 2)
         plt.plot(rpm_motor, velocidade_linear, color='tab:purple')
         plt.xlabel("RPM Motor")
         plt.ylabel("Velocidade Linear [km/h]")
         plt.title("Velocidade Linear x RPM")
         plt.grid(True)
-
         plt.tight_layout()
         plt.show()
 
@@ -725,6 +733,14 @@ def Instancias():
 
     # Cálculo da performance do veículo com os valores reduzidos
     performance_veiculo, variacao_rpm, variacao_tempo = dt_model.CarPerformance()
+
+    # Extrai os torques de carga da performance
+    torques_de_carga = [p["tc"] for p in performance_veiculo]
+
+    # Injeta os torques no motor simulado
+    dt_model.motor_simulado.torque_carga_externa = torques_de_carga
+    dt_model.motor_simulado.reset_initial_conditions()
+    dt_model.motor_simulado.simulate()
 
     # Impressão dos resultados
     dt_model.printCarPerformance(performance_veiculo)
