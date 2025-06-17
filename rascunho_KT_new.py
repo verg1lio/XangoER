@@ -102,7 +102,7 @@ class Estrutura:
         return self.car_mass
 
     def obter_propriedades(self, tube_nome):                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
-        df = pd.read_csv('xango/codes/tubos.csv')  
+        df = pd.read_csv('tubos.csv')  
         tubo = df[df['Tube'] == tube_nome]
     
         if tubo.empty:
@@ -281,7 +281,7 @@ class Estrutura:
 
         return self.K_global,self.M_global
 
-#def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
+    def shape_fun(self, F_flexao1, F_flexao2, F_axial,F_torcao): 
         """
         Calculates deformations and stiffness of elements under loads.
         Inputs:
@@ -289,7 +289,7 @@ class Estrutura:
             - F_flex2: array of distributed bending forces.
             - F_axial: array of axial forces.
             - F_torsion: array of torsion forces.
-        Outputs:
+         Outputs:
             - Arrays of torsion, deformations, and stiffness (bending and torsional).
         """
         #E = 2.1e11  	#Modulo de Young (Pa)
@@ -324,15 +324,12 @@ class Estrutura:
             flexao1.append(flexao_val1)
             flexao2.append(flexao_val2)
             flexao3.append(flexao_val3)
-
             # Rigidez flexional
             KF = E * I / L_e
             # Rigidez torsional
             KT = G * J / L_e
-
             KF_total += KF
             KT_total += KT
-
             KF_elements.append(KF)
             KT_elements.append(KT)
             
@@ -346,30 +343,40 @@ class Estrutura:
         - K_global: Global stiffness matrix
         Outputs:
         - Kt: Torsional stiffness of the chassis
+        - Kf: Beaming stiffness of the chassis
         """
+        #Start Kt simulation
         F_global = np.zeros(K_global.size)
         F_global[2+9*6] = 250  #Forças aplicadas nos nós onde estaria a suspensão dianteira (nodes 8 e 9)
         F_global[2+8*6] = -250  #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
         
-        fixed_elements=[26, 27]  #Fixação dos nós onde estaria a suspensão traseira
-        fixed_dofs=[]
-        for element in fixed_elements:  #loop para fixar todos os dofs de um elemento
-            for i in range(6):
-                fixed_dofs.append(element*6+i)
+        fixed_nodes=[26, 27]  #Fixação dos nós onde estaria a suspensão traseira
+        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
         
         displacements = self.static_analysis(K_global, F_global, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
         mi1=np.abs(displacements[9*6+2])  #displacement do nó 9 em módulo
         mi2=np.abs(displacements[8*6+2])  #displacement do nó 8 em módulo
-        print(f'Displacement node 9 = {mi1}')
-        print(f'Displacement node 8 = {mi2}')
-        L = np.abs(self.nodes[9][1] - self.nodes[8][1])  #distancia entre o nó 8 e 9
-        print(f'L = {L}')
-        anguloTorcao=np.arctan((mi1+mi2)/(L))
-        print(f'Angulo de torção = {anguloTorcao}')
-        torque = (np.abs(F_global[2+9*6])+np.abs(F_global[2+8*6]))*(L/2)
-        Kt = torque/anguloTorcao
-        return Kt
+        L = np.abs(self.nodes[9][1] - self.nodes[8][1])  #Distancia entre o nó 8 e 9
+        alpha= np.degrees(np.atan((mi1+mi2)/(L)))  #Ângulo de torção do chassi após aplicação do torque
+        tau = (np.abs(F_global[2+8*6]))*(L)  #Cálculo do torque aplicado
+        
+        Kt = tau/alpha
 
+        #Start Kf simulation
+        F_global = np.zeros(K_global.size)
+        F = 5000  #Módulo da força que vai gerar a flexão
+        F_global[2+22*6] = -F/2  #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
+        F_global[2+23*6] = -F/2  #Sinal negativo por conta da direção de aplicação da força
+        
+        fixed_nodes=[8, 9, 26, 27]  #Fixação dos nós onde estaria a suspensão dianteira e traseira
+        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
+        
+        displacements = self.static_analysis(K_global, F_global, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
+        dY=np.abs(displacements[2+22*6])  #Deslocamento em Y de um dos nós onde foi aplicado a força
+
+        Kf=F/dY
+
+        return Kt, Kf
 
     def modal_analysis(self):
         """
@@ -816,11 +823,8 @@ for mode_idx in range(len(autovalores)):
 F_global = np.zeros(K_global.size)  # Force vector
 F_global[2+9*6] = 1000
 F_global[2+8*6] = -1000
-fixed_elements=[26, 27]
-fixed_dofs=[]
-for element in fixed_elements:
-    for i in range(6):
-        fixed_dofs.append(element*6+i)
+fixed_nodes=[26, 27]
+fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
 
 # Perform deformation analysis
 displacements = estrutura.static_analysis(K_global, F_global, fixed_dofs)
@@ -835,8 +839,9 @@ eq_von_mises = estrutura.compute_von_mises(stresses)
 Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [Pa]')
 
 # Perform torsional and flexional stiffness analysis
-Kt= estrutura.compute_Kf_Kt(K_global)
+Kt,Kf= estrutura.compute_Kf_Kt(K_global)
 print(f'Rigidez Torcional do chassi atual: {Kt}')
+print(f'Rigidez Flexional do chassi atual: {Kf:.2e}')
 
 """
 Referências
