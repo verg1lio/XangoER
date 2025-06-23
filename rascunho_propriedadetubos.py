@@ -96,11 +96,9 @@ class Estrutura:
             L_e = self.calcular_comprimento(element)
             d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
             e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
-            A = self.area_seccao_transversal(d)                #Área da secção transversal (m^2)
+            A = self.area_seccao_transversal(d, e)                #Área da secção transversal (m^2)
             rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
-            raio_externo = d / 2
-            raio_interno = raio_externo - e
-            volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
+            volume = L_e * A
             self.car_mass+= volume*rho
 
         return self.car_mass
