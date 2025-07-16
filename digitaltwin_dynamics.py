@@ -1746,6 +1746,64 @@ class Drivetrain:
         print("Fator de segurança ideal:", fsi)
         print("Fator de segurança obtido:", fator_seguranca_obtido)
         print("Fator de segurança para 1 polegada:", fs1p)
+        
+        def momento_polar_inercia(d):
+            return (math.pi * d**4) / 32
+        
+        def tensao_cisalhante(T, r, J):
+            return (T * r) / J
+        
+        def fator_de_seguranca(tau_adm, tau_calc):
+            return tau_adm / tau_calc
+        
+        def analisar_materiais(materials, d_m, T_Nm):
+            r = d_m / 2
+            J = momento_polar_inercia(d_m)
+            tau_calc = tensao_cisalhante(T_Nm, r, J) / 1e6  # em MPa
+            
+            nomes = []
+            fatores = []
+            tensoes_adm = []
+        
+        print(f"Tensão calculada (fixa para todos): {tau_calc:.2f} MPa\n")
+        
+        for mat, resistencia_tracao in materials.items():
+        tau_adm = 0.5 * resistencia_tracao  # 50% da resistência à tração
+        FS = fator_de_seguranca(tau_adm, tau_calc)
+        nomes.append(mat)
+        fatores.append(FS)
+        tensoes_adm.append(tau_adm)
+        print(f"Material: {mat}")
+        print(f" - Resistência à tração: {resistencia_tracao} MPa")
+        print(f" - Tensão admissível: {tau_adm:.2f} MPa")
+        print(f" - Fator de segurança: {FS:.2f}\n") 
+
+        # Gráfico
+        plt.figure(figsize=(10,6))
+        plt.bar(nomes, fatores, color='skyblue')
+        plt.axhline(y=1.5, color='r', linestyle='--', label='FS mínimo recomendado (1.5)')
+        plt.title('Fator de Segurança para diferentes materiais')
+        plt.ylabel('Fator de Segurança')
+        plt.xlabel('Material')
+        plt.ylim(0, max(fatores) + 1)
+        plt.legend()
+        plt.grid(axis='y')
+        plt.show()
+
+    # Materiais e suas resistências à tração (MPa)
+    materiais = {
+    "Aço SAE 1045": 570,
+    "Aço AISI 4340": 745,
+    "Alumínio 6061": 310,
+    "Titanium Ti-6Al-4V": 900,
+    "Inox 304": 520
+    }
+    
+    # Parâmetros do semi-eixo:
+    diametro_m = 0.03  # 30 mm
+    torque_Nm = 250    # Torque aplicado
+
+analisar_materiais(materiais, diametro_m, torque_Nm)
 
 class BrakeSystem:
     '''
