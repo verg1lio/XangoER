@@ -1,3 +1,5 @@
+#Rework do find new index para nós centrais
+
 import numpy as np
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -726,6 +728,26 @@ def evaluate(nodes,elements) -> float:
         theta_mh_mhb = np.degrees(np.acos(cos_theta_mh_mhb))                                                                                                    #valor do ângulo formado pelos dois vetores
         if theta_mh_mhb < 30:                                                                                                                                   #condição retirada do regulamento
             penalty += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                         #aplicação da penalidade
+        
+        # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
+        x_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][0] - nodes[ChassisDEOptimizer.find_new_index(4)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][1] - nodes[ChassisDEOptimizer.find_new_index(4)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][2] - nodes[ChassisDEOptimizer.find_new_index(4)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                                              #vetor formado pelos nós que formam a porção do front hoop analisada
+        modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                                           #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
+        produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                                              #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
+        cos_theta_fh_porcao_vertical = produto_escalar_porcao_fh_e_vertical / modulo_vetor_porcao_fh                                                           #cosseno ângulo formado entre a porção do front hoop analisada e a vertical
+        theta_fh_porcao_vertical = np.degrees(np.acos(cos_theta_fh_porcao_vertical))                                                                           #cálculo do ângulo através do cosseno
+        if theta_fh_porcao_vertical > 20:                                                                                                                      #condição retirada do regulamento
+            penalty += ((theta_fh_porcao_vertical - 20) ** 2) * 1e6                                                                                            #aplicação da penalidade
+
+        # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
+        produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                                              #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
+        cos_theta_mh_porcao_vertical = produto_escalar_porcao_mh_e_vertical / modulo_vetor_porcao_mh                                                           #cosseno do ângulo formado entre este vetor mencionado e a vertical
+        theta_mh_porcao_vertical = np.degrees(np.acos(cos_theta_mh_porcao_vertical))                                                                           #ângulo formado entre este vetor mencionado e a vertical
+        if theta_mh_porcao_vertical > 10:                                                                                                                      #condição retirada do regulamento
+            penalty += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                                             #aplicação da penalidade
+
         
 
         # Instanciamento da estrutura
