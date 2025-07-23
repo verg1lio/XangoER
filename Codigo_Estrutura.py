@@ -1,6 +1,10 @@
 import numpy as np
 from scipy.linalg import eigh
+import cadquery as cq
+from cadquery import exporters
 import matplotlib.pyplot as plt
+from scipy.sparse.linalg import eigsh
+from scipy.sparse import csr_matrix
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.collections import LineCollection
 from scipy.sparse import lil_matrix
@@ -8,6 +12,7 @@ from scipy.sparse.linalg import spsolve
 import pandas as pd
 import sys
 import os
+
 np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(linewidth=200, suppress=True)
 
@@ -43,7 +48,7 @@ class Estrutura:
         self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
         self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
         self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
-        self.num_modes = 1                                                  #Número de modos de vibração a serem retornados
+        self.num_modes = 12                                                  #Número de modos de vibração a serem retornados
         self.car_mass = 0
 
     def calcular_comprimento(self, element):    
@@ -59,18 +64,37 @@ class Estrutura:
         x2, y2, z2 = self.nodes[node2]
         return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
-    def momento_inercia_area_e_polar(self, diametro, espessura):                            #Função para calculo dos momentos de inércia de área e polar
-            outer_radius = (diametro / 2)
+    def momento_inercia_area_e_polar(self, dimension, espessura, shape):
+        if shape == 'Circular':
+            outer_radius = (dimension / 2)
             inner_radius = (outer_radius - espessura)
             I = (np.pi * 0.25) * (outer_radius ** 4 - inner_radius ** 4)
             J = (np.pi * 0.5) * (outer_radius ** 4 - inner_radius ** 4)
-            return I, J
+        elif shape == 'Square':
+            outer_side = dimension
+            inner_side = dimension - 2 * espessura
+            if inner_side <= 0:
+                raise ValueError("Inner side of square tube is zero or negative. Check dimensions and thickness.")
+            I = (outer_side**4 - inner_side**4) / 12
+            J = 2 * I # Approximation for polar moment of inertia of a square section
+        else:
+            raise ValueError(f"Shape '{shape}' not supported for inertia calculation.")
+        return I, J
 
-    def area_seccao_transversal(self, diameter, espessura):                                 #Função para calcular a área da secção transversal do tubo (diâmetro externo)
-        outer_radius = diameter / 2
-        inner_radius = (outer_radius - espessura) 
-        A = (outer_radius ** 2 - inner_radius ** 2) * np.pi
-        return A 
+    def area_seccao_transversal(self, dimension, espessura, shape):
+        if shape == 'Circular':
+            outer_radius = dimension / 2
+            inner_radius = (outer_radius - espessura)
+            A = (outer_radius ** 2 - inner_radius ** 2) * np.pi
+        elif shape == 'Square':
+            outer_side = dimension
+            inner_side = dimension - 2 * espessura
+            if inner_side <= 0:
+                raise ValueError("Inner side of square tube is zero or negative. Check dimensions and thickness.")
+            A = outer_side**2 - inner_side**2
+        else:
+            raise ValueError(f"Shape '{shape}' not supported for area calculation.")
+        return A
     
     def mass(self):
         """
@@ -85,34 +109,39 @@ class Estrutura:
         """
         for element in self.elements:
             L_e = self.calcular_comprimento(element)
-            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
-            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
-            A = self.area_seccao_transversal(d,e)                #Área da secção transversal (m^2)
-            rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
-            raio_externo = d / 2
-            raio_interno = raio_externo - e
-            volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
-            self.car_mass+= volume*rho
-
+            # Unpack all properties including 'shape'
+            E, G, dimension, e, rho, poisson, shape = self.obter_propriedades(element[2])
+            
+            A = self.area_seccao_transversal(dimension, e, shape)
+            
+            volume = L_e * A
+            self.car_mass += volume * rho
         return self.car_mass
     
-    def obter_propriedades(self, tube_nome):                                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
-        df = pd.read_csv('tubos.csv')  
+    def obter_propriedades(self, tube_nome):
+        df = pd.read_csv('tubos_atualizado.csv')
         tubo = df[df['Tube'] == tube_nome]
-    
+
         if tubo.empty:
             raise ValueError(f"Tubo '{tube_nome}' não encontrado.")
-    
-       
+
         propriedades = tubo.iloc[0]
         E = propriedades['E']
         G = propriedades['G']
-        diametro = propriedades['Diametro(m)']
-        espessura = propriedades['Espessura(m)']
         densidade = propriedades['Densidade(kg/m^3)']
         poisson = propriedades['Poisson']
+        espessura = propriedades['Espessura(m)']
+        shape = propriedades['Shape']
 
-        return float(E), float(G), float(diametro), float(espessura), float(densidade), float(poisson)
+        # Get the relevant dimension based on shape
+        if shape == 'Circular':
+            dimension = propriedades['Diametro(m)']
+        elif shape == 'Square':
+            dimension = propriedades['Side(m)']
+        else:
+            raise ValueError(f"Shape '{shape}' not supported for tube '{tube_nome}'.")
+
+        return float(E), float(G), float(dimension), float(espessura), float(densidade), float(poisson), shape
 
     def node_loc_matrix(self, node_tags, node_coord): 
         """
@@ -163,14 +192,10 @@ class Estrutura:
             - m_e: element mass matrix.
         """
         # Variáveis e constantes físicas do modelo
-        d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
-        e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
-        E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
-        G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
-        A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
-        I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
-        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
-        rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
+        E, G, dimension, e, rho, poisson, shape = self.obter_propriedades(element[2])
+
+        A = self.area_seccao_transversal(dimension, e, shape)
+        I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
         kappa=0.9                                          #Fator de correção para cisalhamento 
         L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
@@ -219,6 +244,41 @@ class Estrutura:
             ])
         return k_e,m_e
 
+    def construir_T(self,coord1, coord2):
+        """
+        Constrói a matriz de transformação T (12x12) para um elemento de viga 3D
+        com o eixo axial no eixo Y local (compatível com a montagem de k_e).
+
+        coord1, coord2: np.ndarray com as coordenadas dos dois nós do elemento (x, y, z)
+        """
+
+        # 1) Vetor do elemento = eixo axial → Y local
+        v = np.array(coord2) - np.array(coord1)
+        ey = v / np.linalg.norm(v)
+
+        # 2) Vetor auxiliar não colinear com ey
+        aux = np.array([1.0, 0.0, 0.0])
+        if np.allclose(np.abs(np.dot(ey, aux)), 1.0, atol=1e-3):
+            aux = np.array([0.0, 0.0, 1.0])
+
+        # 3) ez = ey × aux → depois normalizado
+        ez = np.cross(ey, aux)
+        ez /= np.linalg.norm(ez)
+
+        # 4) ex = ez × ey → garante base de mão-direita
+        ex = np.cross(ez, ey)
+        ex /= np.linalg.norm(ex)
+
+        # 5) Matriz de rotação 3x3 (colunas = ex, ey, ez)
+        R = np.column_stack((ex, ey, ez))
+
+        # 6) Construção da T (12x12)
+        T = np.zeros((12, 12))
+        for i in range(4):
+            T[3*i : 3*i+3, 3*i : 3*i+3] = R
+
+        return T
+
     def aplicar_engastes(self, nodes, dofs):
         """
         Applies constraints (fixed DOFs) on specific nodes.
@@ -242,19 +302,31 @@ class Estrutura:
         """
         for element in self.elements:
             node1, node2, tube_type = element
-            k_e, m_e = self.element(element)
+            ke, me = self.element(element)
+            # Coordenadas dos nós
+            coord1 = self.nodes[node1]
+            coord2 = self.nodes[node2]
+
+            # Matriz de rotação (12x12)
+            T = self.construir_T(coord1, coord2)
+
+            # Transformação para o sistema global
+            k_e = T.T @ ke @ T
+            m_e = T.T @ me @ T
+
             # DOFs associados ao elemento            
             dofs = [6 * node1, 6 * node1 + 1, 6 * node1 + 2, 6 * node1 + 3, 6 * node1 + 4, 6 * node1 + 5,
                     6 * node2, 6 * node2 + 1, 6 * node2 + 2, 6 * node2 + 3, 6 * node2 + 4, 6 * node2 + 5]
-
+            
             # Atualizando as matrizes globais
             self.K_global[np.ix_(dofs, dofs)] += k_e
             self.M_global[np.ix_(dofs, dofs)] += m_e
 
-        #self.aplicar_engastes([30,31,32,33], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
-        pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
-        pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
-
+        #pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
+        #pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
+        #self.K_global = self.K_global.tocsr()
+        #self.M_global = self.M_global.tocsr()
+        
         # print (self.K_global)
         # print (self.M_global)
 
@@ -358,7 +430,54 @@ class Estrutura:
         frequencies = np.array(unsorted_frequencies)[top_indices]  # Filtra as primeiras n frequências
 
         return eigenvalues, eigenvectors, frequencies
-    
+
+    def compute_Kf_Kt(self, lfNode, lrNode, rfNode, rrNode, lcNode, rcNode):
+            """
+            Calculates
+            Inputs:
+            - lfNode: Left front suspension node index
+            - lrNode: Left rear suspension node index
+            - rfNode: Right front suspension node index
+            - rrNode: Right rear suspension node index
+            - lcNode: Left central node index
+            - rcNode: Right central node index
+            Outputs:
+            - Kt: Torsional stiffness of the chassis
+            - Kf: Beaming stiffness of the chassis
+            """
+            #Start Kt simulation
+            F_global_1 = np.zeros(self.K_global.shape[0])
+            F_global_1[2+lfNode*6] = 250                                                                  #Forças aplicadas nos nós onde estaria a suspensão dianteira (nodes 8 e 9)
+            F_global_1[2+rfNode*6] = -250                                                                #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
+            
+            fixed_nodes_1=[lrNode, rrNode]                                                                #Fixação dos nós onde estaria a suspensão traseira
+            fixed_dofs_1=[(node*6+i) for node in fixed_nodes_1 for i in range(6)]                           #Lista com os dofs fixados
+            
+            displacements = self.static_analysis( F_global_1, fixed_dofs_1)                                 #Calcula os displacements com as condições de contorno aplicadas acima
+            mi1=np.abs(displacements[lfNode*6+2])                                                       #displacement do nó 9 em módulo
+            mi2=np.abs(displacements[lrNode*6+2])                                                            #displacement do nó 8 em módulo
+            L = np.abs(self.nodes[lfNode][0] - self.nodes[rfNode][0])                                   #Distancia entre o nó 8 e 9
+            alpha= np.degrees(np.atan((mi1+mi2)/(L)))                                                   #Ângulo de torção do chassi após aplicação do torque
+            tau = (np.abs(F_global_1[2+rfNode*6]))*(L)                                                    #Cálculo do torque aplicado
+            
+            Kt = tau/alpha
+
+            #Start Kf simulation
+            F_global = np.zeros(self.K_global.shape[0])
+            F = 5000                                                                                #Módulo da força que vai gerar a flexão
+            F_global[2+lcNode*6] = -F/2                                                             #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
+            F_global[2+rcNode*6] = -F/2                                                             #Sinal negativo por conta da direção de aplicação da força
+            
+            fixed_nodes=[rfNode, lfNode, rrNode, lrNode]                                            #Fixação dos nós onde estaria a suspensão dianteira e traseira
+            fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]                       #Lista com os dofs fixados
+            
+            displacements = self.static_analysis(F_global, fixed_dofs)               #Calcula os displacements com as condições de contorno aplicadas acima
+            dY=np.abs(displacements[2+lcNode*6])                                                    #Deslocamento em Y de um dos nós onde foi aplicado a força
+
+            Kf=F/dY
+
+            return Kt, Kf
+       
     def static_analysis(self, F_global, fixed_dofs):
         """
         Perform static analysis by solving Ku = F with boundary conditions.
@@ -450,12 +569,13 @@ class Estrutura:
         com o eixo longitudinal no eixo Y.
         """
         L = self.calcular_comprimento(element)
-        B =  [  [0,       -1/L,     0,       0,     0,       0,       0,       1/L,     0,       0,     0,       0     ],  # ε_yy (axial)
-                [0,        0,       0,    -1/L,     0,       0,       0,        0,      0,     1/L,     0,       0     ],  # κ_x (curvatura sobre X)
-                [0,        0,       0,       0,     0,   -1/L,        0,        0,      0,       0,     0,     1/L     ],  # κ_z (curvatura sobre Z)
-                [-1/L,     0,       0,       0,     0,   -0.5,     1/L,        0,      0,       0,     0,    -0.5      ],  # γ_xy (cisalhamento XY)
-                [0,        0,   -1/L,     0.5,      0,     0,        0,        0,    1/L,     0.5,     0,       0      ],  # γ_zy (cisalhamento ZY)
-                [0,        0,       0,       0,   -1/L,     0,        0,        0,      0,       0,   1/L,       0     ]]   # φ_y (torção)
+
+        B = [[0,       -1/L,     0,       0,     0,       0,       0,       1/L,     0,       0,     0,       0     ], # ε_yy (axial)
+             [0,        0,       0,    -1/L,     0,       0,       0,        0,      0,     1/L,     0,       0     ],  # κ_x (curvatura sobre X)
+             [0,        0,       0,       0,     0,   -1/L,        0,        0,      0,       0,     0,     1/L     ],  # κ_z (curvatura sobre Z)
+             [-1/L,     0,       0,       0,     0,   -0.5,     1/L,        0,      0,        0,     0,    -0.5     ],  # γ_xy (cisalhamento XY)
+             [0,        0,   -1/L,      0.5,      0,     0,        0,        0,    1/L,      0.5,     0,       0    ],  # γ_zy (cisalhamento ZY)
+             [0,        0,       0,       0,   -1/L,     0,        0,        0,      0,       0,   1/L,       0     ]]  # φ_y (torção)
 
         return B
 
@@ -476,114 +596,61 @@ class Estrutura:
         for element in self.elements:
             B = self.calcular_B_Elementar(element)
             node1, node2, tube_type = element
-            element_dofs = []
-            for node in [node1, node2]:
-                for dof in range(self.num_dofs_per_node):
-                    element_dofs.append(node * self.num_dofs_per_node + dof)
-            element_displacements = displacements[element_dofs]
+
+            dofs = [6 * node1 + i for i in range(6)] + [6 * node2 + i for i in range(6)]
+            element_displacements = displacements[dofs]
+
             strain = np.dot(B, element_displacements)  # B-matrix times element's displacement vector
+
             strains.append(strain)
         return strains
     
-#    def compute_stress(self, strains):
-#        """
-#        Compute stresses for all elements using Hooke's law.
-#
-#        Parameters:
-#            strains (list of ndarray): Strain tensors for all elements.
-#            E (float): Young's modulus.
-#            nu (float): Poisson's ratio.
-#
-#        Returns:
-#            stresses (list of ndarray): Stress tensors for all elements.
-#        """
-#        stresses = [] 
-#        # Construct constitutive matrix (isotropic 3D elasticity)
-#        for i in range(len(self.elements)):
-#            element=self.elements[i]
-#            E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
-#            G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
-#            nu = self.obter_propriedades(element[2])[5]
-#            lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
-#            C = np.array([
-#                [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
-#                [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
-#                [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
-#                [              0,              0,              0,   G,  0,  0],
-#                [              0,              0,              0,   0,  G,  0],
-#                [              0,              0,              0,   0,  0,  G]
-#            ])
-#
-#            strain=strains[i]
-#            stress = np.dot(C, strain)  # Hooke's law: C times strain
-#            stresses.append(stress)
-#        return stresses
-
     def compute_stress(self, strains):
         """
-        Compute stresses for all elements using a Timoshenko-beam diagonal constitutive matrix.
-        """
-        stresses = []
-        for i, element in enumerate(self.elements):
-            # extrai propriedades
-            E, G, d, e, rho, nu = self.obter_propriedades(element[2])
+        Compute stresses for all elements using Hooke's law.
 
-            # matriz constitutiva diagonal (6×6)
+        Parameters:
+            strains (list of ndarray): Strain tensors for all elements.
+            E (float): Young's modulus.
+            nu (float): Poisson's ratio.
+
+        Returns:
+            stresses (list of ndarray): Stress tensors for all elements.
+        """
+        stresses = [] 
+        # Construct constitutive matrix (isotropic 3D elasticity)
+        for i in range(len(self.elements)):
+            element=self.elements[i]
+            # Variáveis e constantes físicas do modelo
+            E, G, dimension, e, rho, nu, shape = self.obter_propriedades(element[2])
+
+            A = self.area_seccao_transversal(dimension, e, shape)
+            I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
+
+            lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
             C = np.array([
-                [E,    0.0,  0.0,  0.0,  0.0,  0.0],  # axial ε_yy → σ_yy = E * ε_yy
-                [0.0,  E,    0.0,  0.0,  0.0,  0.0],  # curvatura κ_x → M_x/E (não usado para tensão direta)
-                [0.0,  0.0,  E,    0.0,  0.0,  0.0],  # curvatura κ_z → M_z/E
-                [0.0,  0.0,  0.0,  G,    0.0,  0.0],  # cisalhamento γ_xy → τ_xy = G * γ_xy
-                [0.0,  0.0,  0.0,  0.0,  G,    0.0],  # cisalhamento γ_zy → τ_zy = G * γ_zy
-                [0.0,  0.0,  0.0,  0.0,  0.0,  G   ]   # torção φ_y → τ_y = G * φ_y
+                [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
+                [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
+                [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
+                [              0,              0,              0,   G,  0,  0],
+                [              0,              0,              0,   0,  G,  0],
+                [              0,              0,              0,   0,  0,  G]
             ])
 
-            stress = C @ strains[i]
+            D = np.array([
+            [E * A, 0, 0, 0, 0, 0],          # Força axial (N)
+            [0, E * I, 0, 0, 0, 0],         # Momento fletor (M_x)
+            [0, 0, E * I, 0, 0, 0],         # Momento fletor (M_z)
+            [0, 0, 0, G * A, 0, 0],           # Força cortante (V_x)
+            [0, 0, 0, 0, G * A, 0],           # Força cortante (V_z)
+            [0, 0, 0, 0, 0, G * J]])            # Momento torsor (T)
+
+
+            strain=strains[i]
+            stress = np.dot(C, strain)  # Hooke's law: C times strain
             stresses.append(stress)
         return stresses
-        
-    def compute_Kf_Kt(self, K_global):
-        """
-        Calculates
-        Inputs:
-        - K_global: Global stiffness matrix
-        Outputs:
-        - Kt: Torsional stiffness of the chassis
-        - Kf: Beaming stiffness of the chassis
-        """
-        #Start Kt simulation
-        F_global = np.zeros(K_global.size)
-        F_global[2+9*6] = 250  #Forças aplicadas nos nós onde estaria a suspensão dianteira (nodes 8 e 9)
-        F_global[2+8*6] = -250  #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
-        
-        fixed_nodes=[26, 27]  #Fixação dos nós onde estaria a suspensão traseira
-        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
-        
-        displacements = self.static_analysis(F_global, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
-        mi1=np.abs(displacements[9*6+2])                            #displacement do nó 9 em módulo
-        mi2=np.abs(displacements[8*6+2])                            #displacement do nó 8 em módulo
-        L = np.abs(self.nodes[9][1] - self.nodes[8][1])             #Distancia entre o nó 8 e 9
-        alpha= np.degrees(np.atan((mi1+mi2)/(L)))                   #Ângulo de torção do chassi após aplicação do torque
-        tau = (np.abs(F_global[2+8*6]))*(L)                         #Cálculo do torque aplicado
-        
-        Kt = tau/alpha
-
-        #Start Kf simulation
-        F_global_2 = np.zeros(K_global.size)
-        F = 5000  #Módulo da força que vai gerar a flexão
-        F_global_2[2+22*6] = -F/2  #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
-        F_global_2[2+23*6] = -F/2  #Sinal negativo por conta da direção de aplicação da força
-        
-        fixed_nodes=[8, 9, 26, 27]  #Fixação dos nós onde estaria a suspensão dianteira e traseira
-        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
-        
-        displacements_f = self.static_analysis(F_global_2, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
-        dY=np.abs(displacements_f[2+22*6])  #Deslocamento em Y de um dos nós onde foi aplicado a força
-
-        Kf=F/dY
-
-        return Kt, Kf
-
+    
     def compute_von_mises(self, stresses):
         """
         Compute von Mises stress for all elements.
@@ -847,84 +914,213 @@ class Estrutura:
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
         print(f'KF Total: {KF_total:.2e} N/m \nKT Total: {KT_total:.2e} N/m')
+
+    def tubo_oco(self,p1, p2,tube_type):
+        """
+        Cria um tubo oco entre dois pontos (p1 e p2) com base no tipo de tubo.
+        """
+        vec = p2 - p1
+        length = np.linalg.norm(vec)
+        if length == 0:
+            print(f"AVISO: Tubo entre {p1} e {p2} tem comprimento zero. Será ignorado.")
+            return None
+        E, G, d, e, rho, poisson, shape = self.obter_propriedades(tube_type)
+
+        # DEBUG PRINTS CRUCIAIS:
+        print(f"\n--- DEBUG TUBO_OCO ---")
+        print(f"  Processando: Elemento {tube_type}")
+        print(f"  Nós: P1={p1}, P2={p2}")
+        print(f"  Comprimento (length): {length:.6f} m") # Imprima com alta precisão
+        print(f"  Forma: {shape}, Espessura: {e}")
+
+
+        if shape == "Circular":
+            outer_radius = d/2
+            # Encadeie a criação do perfil e a extrusão
+            outer_solid = cq.Workplane("XY").circle(outer_radius).extrude(length)
+            inner_solid = cq.Workplane("XY").circle(outer_radius - e).extrude(length)
+        elif shape == 'Square':
+            # Para criar um quadrado com centro na origem, use rect(largura, altura)
+            # Encadeie a criação do perfil e a extrusão
+            outer_solid = cq.Workplane("XY").rect(d, d).extrude(length)
+            inner_solid = cq.Workplane("XY").rect(d - 2*e, d - 2*e).extrude(length)
+        else:
+            print(f"Erro: Forma de tubo '{shape}' não suportada.")
+            return None
+            
+
+        tubo = outer_solid.cut(inner_solid)
+
+        z_axis = np.array([0, 0, 1])
+        vec_normalized = vec / length
+
+        axis = np.cross(z_axis, vec_normalized)
+        axis_length = np.linalg.norm(axis)
+
+
+        if axis_length < 1e-6:
+            # Vetor alinhado com eixo Z, sem rotação necessária
+            tubo = tubo.translate(tuple(p1))
+        else:
+            axis = axis / axis_length
+            angle = np.degrees(np.arccos(np.dot(z_axis, vec_normalized)))
+            tubo = tubo.rotate((0, 0, 0), tuple(axis), angle).translate(tuple(p1))
+
+        return tubo
+    
+    def create_step(self):
+        """
+        Constrói a estrutura completa unindo todos os tubos e exporta para um arquivo STEP.
+        Também gera uma visualização 3D.
+        """
+        estrutura = None # Inicializa como None, será o primeiro tubo válido
+        first_tube_added = False
+
+        total_elements = len(self.elements)
+        for i, element in enumerate(self.elements):
+            node_a, node_b, tube_type = element
+            p1 = self.nodes[node_a]
+            p2 = self.nodes[node_b]
+
+            print(f"\n--- Processando Elemento {i+1}/{total_elements}: {tube_type} entre Nó {node_a} e Nó {node_b} ---")
+            tubo = self.tubo_oco(p1, p2, tube_type)
+
+            if tubo:
+                try:
+                    if not first_tube_added:
+                        estrutura = tubo # O primeiro tubo válido inicia a estrutura
+                        first_tube_added = True
+                        print(f"  Primeiro tubo ({tube_type}) adicionado para iniciar a estrutura.")
+                    else:
+                        # Tenta unir o tubo atual à estrutura existente
+                        estrutura = estrutura.union(tubo)
+                        print(f"  Tubo {tube_type} unido à estrutura com sucesso.")
+                except Exception as ex:
+                    print(f"❌ ERRO GRAVE ao unir tubo {tube_type} (Elemento {i+1}, de {p1} a {p2}) à estrutura: {ex}")
+                    # Você pode adicionar lógica aqui para tentar continuar
+                    # ou para parar o processo, dependendo da necessidade.
+                    # Por enquanto, ele apenas reporta e tenta continuar.
+            else:
+                print(f"  AVISO: Tubo {tube_type} (Elemento {i+1}, de {p1} a {p2}) não foi criado ou é inválido e será ignorado na união.")
+
+        if not first_tube_added or estrutura is None:
+            print("\n❌ ERRO FINAL: Nenhuma estrutura válida pôde ser criada (possivelmente nenhum tubo foi adicionado com sucesso).")
+            return # Sai da função se nenhuma estrutura foi criada
+
+        # Rotação da estrutura para alinhar corretamente os planos do SolidWorks
+        # (Essa rotação é aplicada à estrutura final, não a cada tubo individualmente)
+        print("\nAplicando rotação final à estrutura para alinhamento com SolidWorks.")
+        estrutura = estrutura.rotate((0, 0, 0), (1, 0, 0), -90) 
+
+        # Exportar para STEP
+        try:
+            exporters.export(estrutura, "chassi.step")
+            print("\n✅ STEP file 'chassi.step' generated!")
+        except Exception as ex:
+            print(f"\n❌ ERRO ao exportar arquivo STEP 'chassi.step': {ex}")
+
+        # Visualização 3D 
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Mostrar nós 
+        for idx, (x, y, z) in enumerate(self.nodes):
+            ax.scatter(x, y, z, c='red', s=60)
+            ax.text(x, y, z, f'{idx}', color='black', fontsize=10,
+                    verticalalignment='bottom', horizontalalignment='right')
+
+        # Mostrar vigas 
+        for start_idx, end_idx, tube_type in self.elements:
+            p1 = self.nodes[start_idx]
+            p2 = self.nodes[end_idx]
+            xs, ys, zs = zip(p1, p2)
+            ax.plot(xs, ys, zs, color='blue', linewidth=5, alpha=0.7)
+
+        ax.set_xlabel("X [m]")
+        ax.set_ylabel("Y [m]")
+        ax.set_zlabel("Z [m]")
+        ax.set_title("Frame")
+        ax.set_box_aspect([1, 2, 1])
+
+        plt.tight_layout()
+        plt.show()
+
 """
-
-
 # THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
 
-#nodes = np.array([
-#    [1.92, 0.0, 0.0],    # 64*i, 0*j, 0*k
-#    [1.92, 0.64, 0.0],   # 64*i, 16*j, 0*k
-#    [1.92, 0.0, 0.48],   # 64*i, 0*j, 16*k
-#    [1.92, 0.64, 0.48],  # 64*i, 16*j, 16*k
-#    [1.77, 0.0, 0.21],   # 59*i, 0*j, 7*k
-#    [1.77, 0.64, 0.21],  # 59*i, 16*j, 7*k
-#    [1.92, 0.0, 0.09],   # 64*i, 0*j, 3*k
-#    [1.92, 0.64, 0.09],  # 64*i, 16*j, 3*k
-#    [1.5, 0.0, 0.03],    # 50*i, 0*j, 1*k
-#    [1.5, 0.64, 0.03],   # 50*i, 16*j, 1*k
-#    [1.14, 0.08, 0.03],  # 38*i, 2*j, 1*k
-#    [1.14, 0.56, 0.03],  # 38*i, 14*j, 1*k
-#    [1.14, 0.0, 0.09],   # 38*i, 0*j, 3*k
-#    [1.14, 0.64, 0.09],  # 38*i, 16*j, 3*k
-#    [1.23, 0.0, 0.36],   # 41*i, 0*j, 12*k
-#    [1.23, 0.64, 0.36],  # 41*i, 16*j, 12*k
-#    [1.14, 0.03, 0.72],  # 38*i, 1*j, 24*k
-#    [1.14, 0.6, 0.72],   # 38*i, 15*j, 24*k
-#    [0.63, 0.0, 0.54],   # 21*i, 0*j, 18*k
-#    [0.63, 0.64, 0.54],  # 21*i, 16*j, 18*k
-#    [0.69, 0.0, 0.24],   # 23*i, 0*j, 8*k
-#    [0.69, 0.64, 0.24],  # 23*i, 16*j, 8*k
-#    [0.69, 0.0, 0.0],    # 23*i, 0*j, 0*k
-#    [0.69, 0.64, 0.0],   # 23*i, 16*j, 0*k
-#    [0.45, 0.0, 0.21],   # 15*i, 0*j, 7*k
-#    [0.45, 0.64, 0.21],  # 15*i, 16*j, 7*k
-#    [0.24, 0.0, 0.09],   # 8*i, 0*j, 3*k
-#    [0.24, 0.64, 0.09],  # 8*i, 16*j, 3*k
-#    [0.0, 0.16, 0.21],   # 0*i, 4*j, 7*k
-#    [0.0, 0.48, 0.21],   # 0*i, 12*j, 7*k
-#    [0.0, 0.16, 0.09],   # 0*i, 4*j, 3*k
-#    [0.0, 0.48, 0.09],   # 0*i, 12*j, 3*k
-#    [0.0, 0.16, 0.42],    # 0*i, 4*j, 14*k
-#    [0.0, 0.48, 0.42],    # 0*i, 12*j, 14*k
-#    [0.33, 0.03, 0.66],   # 11*i, 1*j, 22*k
-#    [0.33, 0.6, 0.66],    # 11*i, 15*j, 22*k
-#    [0.57, 0.03, 1.2],    # 19*i, 1*j, 40*k
-#    [0.57, 0.6, 1.2],     # 19*i, 15*j, 40*k
-#    [0.54, 0.32, 1.35],   # 18*i, 8*j, 45*k
-#    [1.14, 0.32, 0.78]    # 38*i, 8*j, 26*k
-#])
+nodes = np.array([
+    [1.92, 0.0, 0.0],    # 64*i, 0*j, 0*k
+    [1.92, 0.64, 0.0],   # 64*i, 16*j, 0*k
+    [1.92, 0.0, 0.48],   # 64*i, 0*j, 16*k
+    [1.92, 0.64, 0.48],  # 64*i, 16*j, 16*k
+    [1.77, 0.0, 0.21],   # 59*i, 0*j, 7*k
+    [1.77, 0.64, 0.21],  # 59*i, 16*j, 7*k
+    [1.92, 0.0, 0.09],   # 64*i, 0*j, 3*k
+    [1.92, 0.64, 0.09],  # 64*i, 16*j, 3*k
+    [1.5, 0.0, 0.03],    # 50*i, 0*j, 1*k
+    [1.5, 0.64, 0.03],   # 50*i, 16*j, 1*k
+    [1.14, 0.08, 0.03],  # 38*i, 2*j, 1*k
+    [1.14, 0.56, 0.03],  # 38*i, 14*j, 1*k
+    [1.14, 0.0, 0.09],   # 38*i, 0*j, 3*k
+    [1.14, 0.64, 0.09],  # 38*i, 16*j, 3*k
+    [1.23, 0.0, 0.36],   # 41*i, 0*j, 12*k
+    [1.23, 0.64, 0.36],  # 41*i, 16*j, 12*k
+    [1.14, 0.03, 0.72],  # 38*i, 1*j, 24*k
+    [1.14, 0.6, 0.72],   # 38*i, 15*j, 24*k
+    [0.63, 0.0, 0.54],   # 21*i, 0*j, 18*k
+    [0.63, 0.64, 0.54],  # 21*i, 16*j, 18*k
+    [0.69, 0.0, 0.24],   # 23*i, 0*j, 8*k
+    [0.69, 0.64, 0.24],  # 23*i, 16*j, 8*k
+    [0.69, 0.0, 0.0],    # 23*i, 0*j, 0*k
+    [0.69, 0.64, 0.0],   # 23*i, 16*j, 0*k
+    [0.45, 0.0, 0.21],   # 15*i, 0*j, 7*k
+    [0.45, 0.64, 0.21],  # 15*i, 16*j, 7*k
+    [0.24, 0.0, 0.09],   # 8*i, 0*j, 3*k
+    [0.24, 0.64, 0.09],  # 8*i, 16*j, 3*k
+    [0.0, 0.16, 0.21],   # 0*i, 4*j, 7*k
+    [0.0, 0.48, 0.21],   # 0*i, 12*j, 7*k
+    [0.0, 0.16, 0.09],   # 0*i, 4*j, 3*k
+    [0.0, 0.48, 0.09],   # 0*i, 12*j, 3*k
+    [0.0, 0.16, 0.42],    # 0*i, 4*j, 14*k
+    [0.0, 0.48, 0.42],    # 0*i, 12*j, 14*k
+    [0.33, 0.03, 0.66],   # 11*i, 1*j, 22*k
+    [0.33, 0.6, 0.66],    # 11*i, 15*j, 22*k
+    [0.57, 0.03, 1.2],    # 19*i, 1*j, 40*k
+    [0.57, 0.6, 1.2],     # 19*i, 15*j, 40*k
+    [0.54, 0.32, 1.35],   # 18*i, 8*j, 45*k
+    [1.14, 0.32, 0.78]    # 38*i, 8*j, 26*k
+])
  
-#nodes = np.array ([    [0,     0,      0],    [0,   2,    0]])
+#nodes = np.array ([    [0,     0,      0],    [0,   0,    2]])
 #elements = [    (0,     1, 'Tubo A')]
 
-#elements = [(0, 1, 'Tubo A'), (0, 6, 'Tubo A'), (6, 2, 'Tubo A'), (1, 7, 'Tubo A'), (7, 3, 'Tubo A'),
-# (2, 3, 'Tubo A'), (4, 0, 'Tubo A'), (4, 2, 'Tubo A'), (5, 1, 'Tubo A'), (5, 3, 'Tubo A'),
-# (4, 5, 'Tubo A'), (6, 7, 'Tubo A'), (0, 8, 'Tubo A'), (1, 9, 'Tubo A'), (4, 8, 'Tubo A'),
-# (5, 9, 'Tubo A'), (8, 9, 'Tubo A'), (10, 8, 'Tubo A'), (10, 4, 'Tubo A'), (11, 9, 'Tubo A'),
-# (11, 5, 'Tubo A'), (10, 11, 'Tubo A'), (12, 10, 'Tubo A'), (12, 4, 'Tubo A'), (13, 11, 'Tubo A'),
-# (13, 5, 'Tubo A'), (14, 12, 'Tubo A'), (14, 4, 'Tubo A'), (15, 13, 'Tubo A'), (15, 5, 'Tubo A'),
-# (16, 14, 'Tubo A'), (16, 4, 'Tubo A'), (17, 15, 'Tubo A'), (17, 5, 'Tubo A'), (2, 16, 'Tubo A'),
-# (3, 17, 'Tubo A'), (16, 18, 'Tubo A'), (17, 19, 'Tubo A'), (20, 18, 'Tubo A'), (20, 16, 'Tubo A'),
-# (20, 14, 'Tubo A'), (20, 10, 'Tubo A'), (21, 19, 'Tubo A'), (21, 17, 'Tubo A'), (21, 15, 'Tubo A'),
-# (21, 11, 'Tubo A'), (22, 10, 'Tubo A'), (22, 20, 'Tubo A'), (23, 11, 'Tubo A'), (23, 21, 'Tubo A'),
-# (22, 23, 'Tubo A'), (24, 18, 'Tubo A'), (24, 20, 'Tubo A'), (24, 22, 'Tubo A'), (25, 19, 'Tubo A'),
-# (25, 21, 'Tubo A'), (25, 23, 'Tubo A'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
-# (27, 25, 'Tubo A'), (26, 27, 'Tubo A'), (28, 30, 'Tubo A'), (28, 32, 'Tubo A'), (29, 31, 'Tubo A'),
-# (29, 33, 'Tubo A'), (30, 26, 'Tubo A'), (31, 27, 'Tubo A'), (30, 31, 'Tubo A'), (28, 24, 'Tubo A'),
-# (29, 25, 'Tubo A'), (32, 24, 'Tubo A'), (32, 18, 'Tubo A'), (33, 25, 'Tubo A'), (33, 19, 'Tubo A'),
-# (32, 33, 'Tubo A'), (34, 18, 'Tubo A'), (34, 32, 'Tubo A'), (35, 19, 'Tubo A'), (35, 33, 'Tubo A'),
-# (34, 35, 'Tubo A'), (36, 34, 'Tubo A'), (36, 18, 'Tubo A'), (37, 35, 'Tubo A'), (37, 19, 'Tubo A'),
-# (36, 38, 'Tubo A'), (37, 38, 'Tubo A'), (16, 39, 'Tubo A'), (17, 39, 'Tubo A')]
+elements = [(0, 1, 'Tubo A'), (0, 6, 'Tubo A'), (6, 2, 'Tubo A'), (1, 7, 'Tubo A'), (7, 3, 'Tubo A'),
+ (2, 3, 'Tubo A'), (4, 0, 'Tubo A'), (4, 2, 'Tubo A'), (5, 1, 'Tubo A'), (5, 3, 'Tubo A'),
+ (4, 5, 'Tubo A'), (6, 7, 'Tubo A'), (0, 8, 'Tubo A'), (1, 9, 'Tubo A'), (4, 8, 'Tubo A'),
+ (5, 9, 'Tubo A'), (8, 9, 'Tubo A'), (10, 8, 'Tubo A'), (10, 4, 'Tubo A'), (11, 9, 'Tubo A'),
+ (11, 5, 'Tubo A'), (10, 11, 'Tubo A'), (12, 10, 'Tubo A'), (12, 4, 'Tubo A'), (13, 11, 'Tubo A'),
+ (13, 5, 'Tubo A'), (14, 12, 'Tubo A'), (14, 4, 'Tubo A'), (15, 13, 'Tubo A'), (15, 5, 'Tubo A'),
+ (16, 14, 'Tubo A'), (16, 4, 'Tubo A'), (17, 15, 'Tubo A'), (17, 5, 'Tubo A'), (2, 16, 'Tubo A'),
+ (3, 17, 'Tubo A'), (16, 18, 'Tubo A'), (17, 19, 'Tubo A'), (20, 18, 'Tubo A'), (20, 16, 'Tubo A'),
+ (20, 14, 'Tubo A'), (20, 10, 'Tubo A'), (21, 19, 'Tubo A'), (21, 17, 'Tubo A'), (21, 15, 'Tubo A'),
+ (21, 11, 'Tubo A'), (22, 10, 'Tubo A'), (22, 20, 'Tubo A'), (23, 11, 'Tubo A'), (23, 21, 'Tubo A'),
+ (22, 23, 'Tubo A'), (24, 18, 'Tubo A'), (24, 20, 'Tubo A'), (24, 22, 'Tubo A'), (25, 19, 'Tubo A'),
+ (25, 21, 'Tubo A'), (25, 23, 'Tubo A'), (26, 22, 'Tubo A'), (26, 24, 'Tubo A'), (27, 23, 'Tubo A'),
+ (27, 25, 'Tubo A'), (26, 27, 'Tubo A'), (28, 30, 'Tubo A'), (28, 32, 'Tubo A'), (29, 31, 'Tubo A'),
+ (29, 33, 'Tubo A'), (30, 26, 'Tubo A'), (31, 27, 'Tubo A'), (30, 31, 'Tubo A'), (28, 24, 'Tubo A'),
+ (29, 25, 'Tubo A'), (32, 24, 'Tubo A'), (32, 18, 'Tubo A'), (33, 25, 'Tubo A'), (33, 19, 'Tubo A'),
+ (32, 33, 'Tubo A'), (34, 18, 'Tubo A'), (34, 32, 'Tubo A'), (35, 19, 'Tubo A'), (35, 33, 'Tubo A'),
+ (34, 35, 'Tubo A'), (36, 34, 'Tubo A'), (36, 18, 'Tubo A'), (37, 35, 'Tubo A'), (37, 19, 'Tubo A'),
+ (36, 38, 'Tubo A'), (37, 38, 'Tubo A'), (16, 39, 'Tubo A'), (17, 39, 'Tubo A')]
 
  
 # Carregar nós
-df_nodes = pd.read_csv("resultados_otimizacao_20250624_171306\solucao_otimizada_nodes.csv")
-nodes = df_nodes[['x', 'y', 'z']].to_numpy()
+#df_nodes = pd.read_csv("resultados_otimizacao_20250624_171306\solucao_otimizada_nodes.csv")
+#nodes = df_nodes[['x', 'y', 'z']].to_numpy()
 
 # Carregar elementos
-df_elements = pd.read_csv("resultados_otimizacao_20250624_171306\solucao_otimizada_elements.csv")
-elements = [(row.node_i, row.node_j, row.perfil) for row in df_elements.itertuples()]
+#df_elements = pd.read_csv("resultados_otimizacao_20250624_171306\solucao_otimizada_elements.csv")
+#elements = [(row.node_i, row.node_j, row.perfil) for row in df_elements.itertuples()]
 
 
 F_flexao1 = np.array([1000, 2000, 3000, 4000, 5000])
@@ -934,7 +1130,7 @@ F_torcao = np.array([1000, 2000, 3000, 4000, 5000])
 
 estrutura = Estrutura(elements, nodes)
 K_global, M_global = estrutura.matrizes_global()
-estrutura.aplicar_engastes([30,31,32,33],[0,1,2,3,4,5])
+#estrutura.aplicar_engastes([30,31,32,33],[0,1,2,3,4,5])
 #Gera as matrizes de localização dos nós e de conectividade
 node_tags = list(range(len(nodes)))
 estrutura.node_loc_matrix(node_tags, nodes)
@@ -945,25 +1141,26 @@ print(estrutura.mass())
 
 #Gerar autovalores, autovetores e frequências naturais
 autovalores, autovetores, frequencias = estrutura.modal_analysis()
-#estrutura.modal_analysis_plot()
+estrutura.modal_analysis_plot()
 
 #Exibindo as frequências naturais e modos de vibração da estrutura
 print("\\n Frequências Naturais (ω) da estrutura:")
-print(frequencias)
+#print(frequencias)
 
 # estrutura.Mesh()
 F_global = np.zeros(K_global.size)  # Force vector
-F_global[2+8*6] = -100
-F_global[2+9*6] = 100
-fixed_dofs = []
-
+#F_global[2+8*6] = -100
+#F_global[2+9*6] = 100
+#fixed_dofs = []
+F_global[1*6+2] = 100
+fixed_dofs = [0,1,2,3,4,5]
 # Perform deformation analysis
 displacements = estrutura.static_analysis(F_global, fixed_dofs)
 print("Displacement Vector:", displacements)
 
 
 # Perform torsional and flexional stiffness analysis
-Kt,Kf= estrutura.compute_Kf_Kt(K_global)
+Kt,Kf= estrutura.compute_Kf_Kt(8,27,9,26)
 print(f'Rigidez Torcional do chassi atual: {Kt}')
 print(f'Rigidez Flexional do chassi atual: {Kf:.2e}')
 
@@ -971,13 +1168,13 @@ Estrutura.plot_colored_wireframe(nodes, elements, displacements, 'Displacements'
 
 # Perform equivalent von mises stress determination
 strains = estrutura.compute_strain(displacements)
-#print("strain:", strains)
+print("strain:", strains)
 stresses = estrutura.compute_stress(strains)
-#print("Stress:", stresses)
+print("Stress:", stresses)
 eq_von_mises = estrutura.compute_von_mises(stresses)
 
 print("Equivalent Von-Mises Stress:", eq_von_mises)
-Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [MPa]')
+#Estrutura.plot_colored_wireframe(nodes, elements, eq_von_mises, 'Stress', 'Equivalent Von-Mises Stress [MPa]')
 """
 
 """
