@@ -33,8 +33,8 @@ class SimulacaoBateria:
         self.h_air_sides = 25
 
         # --- Tempo e Convergência ---
-        self.dt = 3
-        self.max_iter = 3000
+        self.dt = 2
+        self.max_iter = 1000
         self.convergence_limit = 1e-4
 
         # --- Inicializa Temperatura ---
@@ -48,30 +48,26 @@ class SimulacaoBateria:
         self.temp_profiles = []
 
     def q_dot(self, t):
-        """
-        Simula a geração volumétrica de calor da bateria (W/m³) ao longo do tempo,
-        durante uma volta de 2 minutos (120 segundos), com aceleração, frenagens etc.
-        """
-        t = t % 120  # repete a cada volta
 
-        # Picos de calor típicos por situação (em W/m³)
-        base = 3000  # base constante mínima
+        t = t % 120  
+
+        base = 3000
         pico_aceleracao = 15000
         medio = 5000
         recuperacao = 2000
         parado = 500
 
         if t < 10:
-            # Largada — pico rápido
+            # Largada 
             return base + (pico_aceleracao - base) * np.exp(-((t - 5) ** 2) / 4)
         elif 10 <= t < 30 or 60 <= t < 80 or 100 <= t < 115:
-            # Retas — geração média-alta com oscilações rápidas
+            # Retas 
             return medio + 1500 * np.sin(2 * np.pi * t / 5)
         elif 30 <= t < 60 or 80 <= t < 100:
-            # Curvas / frenagens — geração baixa, com variação leve
+            # Curvas / frenagens
             return recuperacao + 500 * np.cos(2 * np.pi * t / 15)
         elif 115 <= t < 120:
-            # Resfriamento — quase nada gerado
+            # Resfriamento
             return parado
         else:
             return base
@@ -119,7 +115,6 @@ class SimulacaoBateria:
         print(f"Simulação finalizada em {time.time() - start_time:.2f} segundos.")
 
     def plot1(self):
-        print(self.temp_profiles)
         plt.figure(figsize=(10, 6))
         tempo = np.arange(len(self.temp_max_time)) * self.dt
         plt.plot(tempo, self.temp_max_time, label="Temperatura Máxima (K)", color='r')
@@ -153,7 +148,7 @@ class SimulacaoBateria:
 
             ax.voxels(voxels, facecolors=colors, edgecolor='k')
 
-            ax.set_xlabel('Comprimento (x) [cm]')
+            ax.set_xlabel('Largura (x) [cm]')
             ax.set_ylabel('Altura (y) [cm]')
             ax.set_zlabel('Profundidade (z) [cm]')
             plt.title(f'Distribuição de Temperatura por Célula (Iteração {self.time_steps_to_plot[idx]})')
@@ -164,25 +159,43 @@ class SimulacaoBateria:
 
             plt.show()
 
-    def plot_plano_central(self, step_idx=-1):
+    def plot_planos_centrais(self, step_idx=-1):
 
         T_profile = self.temp_profiles[step_idx]
         temp_celsius = T_profile - 273.15
-
+        i = self.nx // 2
+        j = self.ny // 2
         k = self.nz // 2
-        plano = temp_celsius[:, :, k]
+        plano_x = temp_celsius[i, :, :]
+        plano_y = temp_celsius[:, j, :]
+        plano_z = temp_celsius[:, :, k]
 
         plt.figure(figsize=(8, 6))
-        cp = plt.contourf(self.x, self.y, plano.T, 20, cmap='hot_r')
+        cp = plt.contourf(self.y, self.z, plano_x.T, 20, cmap='hot_r')
         plt.colorbar(cp, label='Temperatura (°C)')
-        plt.xlabel('Comprimento (cm)')
-        plt.ylabel('Altura (cm)')
-        plt.title(f'Distribuição de Temperatura - Plano central (z) - Iteração {self.time_steps_to_plot[step_idx]}')
-        plt.gca().invert_yaxis()
+        plt.ylabel('Altura (m)')
+        plt.xlabel('Profundidade (m)')
+        plt.title(f'Distribuição de Temperatura - Plano central (x fixo) - Iteração {self.time_steps_to_plot[step_idx]}')
+        plt.show()
+
+        plt.figure(figsize=(8, 6))
+        cp = plt.contourf(self.x, self.z, plano_y.T, 20, cmap='hot_r')
+        plt.colorbar(cp, label='Temperatura (°C)')
+        plt.xlabel('Largura (m)')
+        plt.ylabel('Profundidade (m)')
+        plt.title(f'Distribuição de Temperatura - Plano central (y fixo) - Iteração {self.time_steps_to_plot[step_idx]}')
+        plt.show()
+
+        plt.figure(figsize=(8, 6))
+        cp = plt.contourf(self.x, self.y, plano_z.T, 20, cmap='hot_r')
+        plt.colorbar(cp, label='Temperatura (°C)')
+        plt.xlabel('Largura (m)')
+        plt.ylabel('Altura (m)')
+        plt.title(f'Distribuição de Temperatura - Plano central (z fixo) - Iteração {self.time_steps_to_plot[step_idx]}')
         plt.show()
 
 simulacao = SimulacaoBateria()
 simulacao.simular()
 simulacao.plot1()
 simulacao.plot3D()        
-simulacao.plot_plano_central() 
+simulacao.plot_planos_centrais() 
