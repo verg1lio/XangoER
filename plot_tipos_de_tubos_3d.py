@@ -1,11 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
+import pandas as pd 
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.lines import Line2D
 
-# ----------------------
 # Funções principais
-# ----------------------
 
 def calcular_comprimento(node1, node2):
     return np.linalg.norm(node2 - node1)
@@ -26,7 +25,7 @@ def calcular_comprimentos_e_quantidades_por_tipo(nodes, elements):
     return resultados
 
 def set_axes_equal(ax):
-    """Deixa a escala dos eixos x, y e z iguais"""
+    # Deixa a escala dos eixos x, y e z iguais
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()
@@ -86,11 +85,9 @@ def plotar_chassi_3d(nodes, elements):
     plt.tight_layout()
     plt.show()
 
-# ----------------------
 # Dados dos nodes e elements
-# ----------------------
 
-nodes = np.array([
+"""nodes = np.array([
     [1.92, 0.0, 0.0], [1.92, 0.64, 0.0], [1.92, 0.0, 0.48], [1.92, 0.64, 0.48],
     [1.77, 0.0, 0.21], [1.77, 0.64, 0.21], [1.92, 0.0, 0.09], [1.92, 0.64, 0.09],
     [1.5, 0.0, 0.03], [1.5, 0.64, 0.03], [1.14, 0.08, 0.03], [1.14, 0.56, 0.03],
@@ -123,10 +120,16 @@ elements = [
     (34, 35, 'Tubo A'), (36, 34, 'Tubo A'), (36, 18, 'Tubo A'), (37, 35, 'Tubo A'), (37, 19, 'Tubo A'),
     (36, 38, 'Tubo A'), (37, 38, 'Tubo A'), (16, 39, 'Tubo A'), (17, 39, 'Tubo A')
 ]
+""" 
+df_nodes = pd.read_csv("solucao_otimizada_nodes.csv")
+nodes = df_nodes[['x', 'y', 'z']].to_numpy()
 
-# ----------------------
-# Executar
-# ----------------------
+ #Carregar elementos
+df_elements = pd.read_csv("solucao_otimizada_elements.csv")
+elements = [(row.node_i, row.node_j, row.perfil) for row in df_elements.itertuples()]
+
+# Executando
+
 
 resultados = calcular_comprimentos_e_quantidades_por_tipo(nodes, elements)
 
