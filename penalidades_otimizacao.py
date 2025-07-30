@@ -675,6 +675,73 @@ class ChassisDEOptimizer:
         print(f" - Nodes: {nodes_path}")
         print(f" - Elements: {elements_path}")
 
+def penalidades_geometricas(nodes, elements):
+
+    penalidade = 0
+    # Penalidade em relação ao FH e FHB
+    fronthoop_node = nodes[ChassisDEOptimizer.find_new_index(20)]       #declara o nó do fronthoop com indice novo
+    fhb_node = nodes[ChassisDEOptimizer.find_new_index(5)[0]]           #declara o nó de um front hoop bracing com indice novo
+    dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                       #declara a distância no eixo z entre esses dois nós 
+    if dist_fh_fhb > 0.05:                                              #condição retirada do regulamento
+        penalidade += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                       #aplicação de penalidade
+    # Penalidade em relação ao MH e o MHB
+    mainhoop_node = nodes[ChassisDEOptimizer.find_new_index(15)]                            #declara o nó do main hoop com indice novo
+    mhb_node = nodes[ChassisDEOptimizer.find_new_index(14)[0]]                              #declara o nó do main hoop bracing com indice novo não espelhado
+    deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
+    deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
+    deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "x" em ambos os nós
+    dist_mh_mhb = np.sqrt(deltax_mh_mhb ** 2 + deltay_mh_mhb ** 2 + deltaz_mh_mhb ** 2)     #declara a distância entre os dois nós      
+    if dist_mh_mhb > 0.16:                                                                  #condição retirada do regulamento
+        penalidade += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                        #aplicação de penalidade
+    
+    # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
+    x_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(6)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    y_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(6)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    z_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(6)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    x_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(16)][0]                                               #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
+    y_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(16)][1]                                               #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
+    z_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(16)][2]                                               #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
+    vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
+    vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
+    modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    modulo_vetor_mhb = np.sqrt(vetor_mhb[0] ** 2 + vetor_mhb[1] ** 2 + vetor_mhb[2] ** 2 )                                                                  #módulo do vetor formado pelos nós do elemento do Main Hoop Bracing
+    produto_escalar_mh_porcao_e_mhb = (vetor_porcao_mh[0] * vetor_mhb[0]) + (vetor_porcao_mh[1] * vetor_mhb[1]) + (vetor_porcao_mh[2] * vetor_mhb[2])       #produto escalar entre os dois vetores criados
+    cos_theta_mh_mhb = produto_escalar_mh_porcao_e_mhb / (modulo_vetor_porcao_mh * modulo_vetor_mhb)                                                        #valor do cosseno do ângulo formado pelos dois vetores
+    theta_mh_mhb = np.degrees(np.acos(cos_theta_mh_mhb))                                                                                                    #valor do ângulo formado pelos dois vetores
+    if theta_mh_mhb < 30:                                                                                                                                   #condição retirada do regulamento
+        penalidade += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                         #aplicação da penalidade
+    
+    # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
+    x_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][0] - nodes[ChassisDEOptimizer.find_new_index(4)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    y_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][1] - nodes[ChassisDEOptimizer.find_new_index(4)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    z_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][2] - nodes[ChassisDEOptimizer.find_new_index(4)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                                              #vetor formado pelos nós que formam a porção do front hoop analisada
+    modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                                           #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
+    produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                                              #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
+    cos_theta_fh_porcao_vertical = produto_escalar_porcao_fh_e_vertical / modulo_vetor_porcao_fh                                                           #cosseno ângulo formado entre a porção do front hoop analisada e a vertical
+    theta_fh_porcao_vertical = np.degrees(np.acos(cos_theta_fh_porcao_vertical))                                                                           #cálculo do ângulo através do cosseno
+    if theta_fh_porcao_vertical > 20:                                                                                                                      #condição retirada do regulamento
+        penalidade += ((theta_fh_porcao_vertical - 20) ** 2) * 1e6                                                                                            #aplicação da penalidade
+    
+    # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
+    produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                                              #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
+    cos_theta_mh_porcao_vertical = produto_escalar_porcao_mh_e_vertical / modulo_vetor_porcao_mh                                                           #cosseno do ângulo formado entre este vetor mencionado e a vertical
+    theta_mh_porcao_vertical = np.degrees(np.acos(cos_theta_mh_porcao_vertical))                                                                           #ângulo formado entre este vetor mencionado e a vertical
+    if theta_mh_porcao_vertical > 10:                                                                                                                      #condição retirada do regulamento
+        penalidade += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                                          #aplicação da penalidade
+
+    # Penalidade altura mínima da Side Impact Structure
+    z_zone_impact_bottom_back = nodes[ChassisDEOptimizer.find_new_index(7)][2]                                  #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
+    z_zone_impact_top_back = nodes[ChassisDEOptimizer.find_new_index(6)][2]                                     #coordenada vertical do ponto mais alto da parte posterior da side impact structure
+    z_zone_impact_bottom_front = nodes[ChassisDEOptimizer.find_new_index(3)][2]                                 #coordenada vertical do ponto mais baixo da parte frontal da side impact structure
+    z_zone_impact_top_front = nodes[ChassisDEOptimizer.find_new_index(4)][2]                                    #coordenada vertical do ponto mais alto da parte frontal da side impact structure
+    dist_bottom_top_back = z_zone_impact_top_back - z_zone_impact_bottom_back                                   #distância vertical entre os extremos da parte posterior desta estrutura
+    dist_bottom_top_front = z_zone_impact_top_front - z_zone_impact_bottom_front                                #distância vertical entre os extremos da parte frontal desta estrutura
+    if dist_bottom_top_back < 0.29 and dist_bottom_top_front < 0.29:                                            #condição retirada do regulamento
+        penalidade += ((dist_bottom_top_front - 0.29) ** 2 + (dist_bottom_top_back - 0.29) ** 2) * 1e6          #aplicação da penalidade
+
+    return penalidade
+
 def evaluate(nodes,elements) -> float:
     """
     Avalia o custo de um indivíduo.
@@ -695,61 +762,7 @@ def evaluate(nodes,elements) -> float:
         t0 = time.perf_counter()
 
         penalty = 0
-        # Penalidade em relação ao FH e FHB
-        fronthoop_node = nodes[ChassisDEOptimizer.find_new_index(20)]       #declara o nó do fronthoop com indice novo
-        fhb_node = nodes[ChassisDEOptimizer.find_new_index(5)[0]]           #declara o nó de um front hoop bracing com indice novo
-        dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                       #declara a distância no eixo z entre esses dois nós 
-        if dist_fh_fhb > 0.05:                                              #condição retirada do regulamento
-            penalty += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                       #aplicação de penalidade
-
-        # Penalidade em relação ao MH e o MHB
-        mainhoop_node = nodes[ChassisDEOptimizer.find_new_index(15)]                            #declara o nó do main hoop com indice novo
-        mhb_node = nodes[ChassisDEOptimizer.find_new_index(14)[0]]                              #declara o nó do main hoop bracing com indice novo não espelhado
-        deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
-        deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
-        deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "x" em ambos os nós
-        dist_mh_mhb = np.sqrt(deltax_mh_mhb ** 2 + deltay_mh_mhb ** 2 + deltaz_mh_mhb ** 2)     #declara a distância entre os dois nós      
-        if dist_mh_mhb > 0.16:                                                                  #condição retirada do regulamento
-            penalty += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                        #aplicação de penalidade
-        
-        # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
-        x_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(6)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(6)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(6)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        x_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(16)][0]                                               #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
-        y_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(16)][1]                                               #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
-        z_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(16)][2]                                               #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
-        vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
-        vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
-        modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        modulo_vetor_mhb = np.sqrt(vetor_mhb[0] ** 2 + vetor_mhb[1] ** 2 + vetor_mhb[2] ** 2 )                                                                  #módulo do vetor formado pelos nós do elemento do Main Hoop Bracing
-        produto_escalar_mh_porcao_e_mhb = (vetor_porcao_mh[0] * vetor_mhb[0]) + (vetor_porcao_mh[1] * vetor_mhb[1]) + (vetor_porcao_mh[2] * vetor_mhb[2])       #produto escalar entre os dois vetores criados
-        cos_theta_mh_mhb = produto_escalar_mh_porcao_e_mhb / (modulo_vetor_porcao_mh * modulo_vetor_mhb)                                                        #valor do cosseno do ângulo formado pelos dois vetores
-        theta_mh_mhb = np.degrees(np.acos(cos_theta_mh_mhb))                                                                                                    #valor do ângulo formado pelos dois vetores
-        if theta_mh_mhb < 30:                                                                                                                                   #condição retirada do regulamento
-            penalty += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                         #aplicação da penalidade
-        
-        # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
-        x_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][0] - nodes[ChassisDEOptimizer.find_new_index(4)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][1] - nodes[ChassisDEOptimizer.find_new_index(4)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][2] - nodes[ChassisDEOptimizer.find_new_index(4)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                                              #vetor formado pelos nós que formam a porção do front hoop analisada
-        modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                                           #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
-        produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                                              #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
-        cos_theta_fh_porcao_vertical = produto_escalar_porcao_fh_e_vertical / modulo_vetor_porcao_fh                                                           #cosseno ângulo formado entre a porção do front hoop analisada e a vertical
-        theta_fh_porcao_vertical = np.degrees(np.acos(cos_theta_fh_porcao_vertical))                                                                           #cálculo do ângulo através do cosseno
-        if theta_fh_porcao_vertical > 20:                                                                                                                      #condição retirada do regulamento
-            penalty += ((theta_fh_porcao_vertical - 20) ** 2) * 1e6                                                                                            #aplicação da penalidade
-
-        # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
-        produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                                              #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
-        cos_theta_mh_porcao_vertical = produto_escalar_porcao_mh_e_vertical / modulo_vetor_porcao_mh                                                           #cosseno do ângulo formado entre este vetor mencionado e a vertical
-        theta_mh_porcao_vertical = np.degrees(np.acos(cos_theta_mh_porcao_vertical))                                                                           #ângulo formado entre este vetor mencionado e a vertical
-        if theta_mh_porcao_vertical > 10:                                                                                                                      #condição retirada do regulamento
-            penalty += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                                             #aplicação da penalidade
-
-        
-
+        penalty += penalidades_geometricas(nodes, elements)
         # Instanciamento da estrutura
         estrutura = Estrutura(elements, nodes)
         t1 = time.perf_counter()
