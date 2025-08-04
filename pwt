@@ -1,0 +1,133 @@
+# pwt.py (CORRIGIDO)
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+class PIController:
+    """Controlador PI para FOC"""
+    def __init__(self, kp, ki, limit):
+        self.kp = kp
+        self.ki = ki
+        self.limit = limit
+        self.integral = 0
+        self.prev_error = 0
+        
+    def update(self, error, dt):
+        if dt <= 0:
+            return 0
+        self.integral += error * dt
+        output = self.kp * error + self.ki * self.integral
+        
+        # Anti-windup
+        if output > self.limit:
+            output = self.limit
+            self.integral -= error * dt
+        elif output < -self.limit:
+            output = -self.limit
+            self.integral -= error * dt
+            
+        return output
+
+class Motor:
+    """Classe que modela um motor síncrono de Ímã Permanente (PMSM) com FOC."""
+    
+    def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu):
+        # Parâmetros do motor
+        self.rs = rs
+        self.ld = ld
+        self.lq = lq
+        self.jm = jm
+        self.kf = kf
+        self.lambda_m = lambda_m
+        self.p = p
+        self.valor_mu = valor_mu # Parâmetro mantido conforme solicitado
+
+        # Controladores FOC
+        self.id_controller = PIController(kp=0.5, ki=100, limit=1000)
+        self.iq_controller = PIController(kp=0.5, ki=100, limit=1000)
+        self.speed_controller = PIController(kp=1.0, ki=0, limit=500)
+        
+        # Referências e estado inicial
+        self.speed_ref = 600  # Velocidade de referência (rad/s mecânico)
+        self.reset_initial_conditions()
+        self.initialize_storage()
+
+    def reset_initial_conditions(self):
+        self.cl = 0.0         # Torque de carga
+        self.wm = 0.0         # Velocidade mecânica
+        self.theta_e = 0.0    # Ângulo elétrico
+        self.isd = 0.0        # Corrente d-axis
+        self.isq = 0.0        # Corrente q-axis
+        self.ce = 0.0         # Torque eletromagnético
+
+    def initialize_storage(self):
+        # Listas para armazenar dados históricos
+        self.history = {
+            'tempo': [], 'velocidade': [], 'torque_eletrico': [], 'torque_carga': [],
+            'corrente_d': [], 'corrente_q': []
+        }
+
+    def set_load(self, torque):
+        """Define o torque de carga no eixo do motor."""
+        self.cl = torque
+
+    def field_oriented_control(self, dt):
+        """Executa um passo do controle FOC."""
+        speed_error = self.speed_ref - self.wm
+        torque_ref = self.speed_controller.update(speed_error, dt)
+        
+        # Evitar divisão por zero
+        iq_ref = torque_ref / (1.5 * self.p * self.lambda_m) if self.lambda_m != 0 else 0
+        id_ref = 0
+        
+        # Limitar corrente máxima
+        max_current = 311  # 220A RMS -> 311A pico
+        if abs(iq_ref) > max_current:
+            iq_ref = np.sign(iq_ref) * max_current
+            
+        error_d = id_ref - self.isd
+        error_q = iq_ref - self.isq
+        
+        we = self.p * self.wm
+        decoupling_d = -we * self.lq * self.isq
+        decoupling_q = we * (self.ld * self.isd + self.lambda_m)
+        
+        vd = self.id_controller.update(error_d, dt) + decoupling_d
+        vq = self.iq_controller.update(error_q, dt) + decoupling_q
+        
+        return vd, vq
+
+    def step(self, dt):
+        """Executa um passo de simulação do motor."""
+        if dt <= 0:
+            return self.ce
+
+        # 1. Controle
+        vd, vq = self.field_oriented_control(dt)
+
+        # 2. Modelo Elétrico (simplificado para controle)
+        we = self.p * self.wm
+        dervisd = (vd - self.rs * self.isd + we * self.lq * self.isq) / self.ld if self.ld != 0 else 0
+        dervisq = (vq - self.rs * self.isq - we * (self.ld * self.isd + self.lambda_m)) / self.lq if self.lq != 0 else 0
+        
+        self.isd += dervisd * dt
+        self.isq += dervisq * dt
+
+        # 3. Torque Eletromagnético
+        self.ce = 1.5 * self.p * (self.lambda_m * self.isq)
+
+        # 4. Modelo Mecânico
+        dwm = (self.ce - self.cl - self.kf * self.wm) / self.jm if self.jm != 0 else 0
+        self.wm += dwm * dt
+        self.theta_e += self.p * self.wm * dt
+        
+        return self.ce
+
+    def store_history(self, t):
+        """Armazena o estado atual nas listas de histórico."""
+        self.history['tempo'].append(t)
+        self.history['velocidade'].append(self.wm)
+        self.history['torque_eletrico'].append(self.ce)
+        self.history['torque_carga'].append(self.cl)
+        self.history['corrente_d'].append(self.isd)
+        self.history['corrente_q'].append(self.isq)
