@@ -8,14 +8,12 @@ Este código implementa:
 4. Modelo simplificado de pneu para slip ratio.
 5. Geração de gráficos de desempenho e slip ratio.
 
-Autor: Marco Affonso (com comentários adicionais organizados)
+Autor: Marco Affonso e Igor Maia
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal  # Importado mas não utilizado
-import control as clt     # Importado mas não utilizado
-from pwt1 import Motor     # Classe Motor definida em outro módulo
+from pwt1 import Motor                  # Classe Motor definida em outro módulo
 
 
 # ============================================================================
@@ -24,46 +22,36 @@ from pwt1 import Motor     # Classe Motor definida em outro módulo
 class Drivetrain:
 
     def __init__(self, cgx, cgy, massa, massa_roda, entre_eixos,
-                 raio_pneu, reducao_primaria, reducao_final, cp, tempo_i):
-        """
-        Inicializa os parâmetros do veículo e do motor.
+                 raio_pneu, reducao_primaria, reducao_final, tempo_i):
+        
+        #Inicializa os parâmetros do veículo
 
-        Parâmetros:
-        - cgx, cgy: coordenadas do centro de gravidade
-        - massa: massa total do veículo (kg)
-        - massa_roda: massa de cada roda (kg)
-        - entre_eixos: distância entre eixos (mm)
-        - raio_pneu: raio dinâmico do pneu (mm)
-        - reducao_primaria: relação de redução da corrente
-        - reducao_final: relação de redução do diferencial
-        - cp: coeficiente (não utilizado diretamente aqui)
-        - tempo_i: tempo inicial de simulação (s)
-        """
-        self.cgx = cgx
-        self.cgy = cgy
-        self.massa = massa
-        self.massa_roda = massa_roda
-        self.entre_eixos = entre_eixos
-        self.raio_pneu = raio_pneu
-        self.reducao_primaria = reducao_primaria
-        self.reducao_final = reducao_final
-        self.cp = cp
-        self.tempo_i = tempo_i
+        self.cgx = cgx                             # cgx, cgy: coordenadas do centro de gravidade                   
+        self.cgy = cgy                       
+        self.massa = massa                         # massa: massa total do veículo (kg)
+        self.massa_roda = massa_roda               # massa_roda: massa de cada roda (kg)
+        self.entre_eixos = entre_eixos             # entre_eixos: distância entre eixos (mm)
+        self.raio_pneu = raio_pneu                 # raio_pneu: raio dinâmico do pneu (mm)
+        self.reducao_primaria = reducao_primaria   # reducao_primaria: relação de redução da corrente
+        self.reducao_final = reducao_final         # reducao_final: relação de redução do diferencial
+        self.tempo_i = tempo_i                     # tempo_i: tempo inicial de simulação (s)
         self.tempo_f = 0
 
+       
         # Inicializa motor com parâmetros fixos
+        
         self.motor = Motor(
-            rs=0.04585,       # Resistência do estator
-            ld=0.00067,       # Indutância d
-            lq=0.00067,       # Indutância q
-            jm=0.05769,       # Inércia do rotor
-            kf=0.1,           # Coeficiente de atrito
-            lambda_m=0.13849, # Fluxo do ímã
-            p=10,             # Número de pares de polos
+            rs=0.04585,                            # Resistência do estator
+            ld=0.00067,                            # Indutância d
+            lq=0.00067,                            # Indutância q
+            jm=0.05769,                            # Inércia do rotor
+            kf=0.1,                                # Coeficiente de atrito
+            lambda_m=0.13849,                      # Fluxo do ímã
+            p=10,                                  # Número de pares de polos
             valor_mu=0.9
         )
 
-    # ------------------------------------------------------------------------
+  
     def CarPerformance(self):
         """
         Simula o desempenho do veículo ao longo do tempo.
@@ -71,14 +59,15 @@ class Drivetrain:
         - performance: lista de dicionários com resultados
         - variacao_tempo: vetor de tempo
         """
+
         # Parâmetros físicos do veículo
         peso = self.massa * 9.81
         coeficiente_arrasto = 0.54
         densidade_ar = 1.162
         area_frontal = 1.06
         raio = self.raio_pneu * 0.001  # mm → m
-        c_r = 0.012  # Coef. de rolamento
-        b = 0.01     # Atrito mecânico
+        c_r = 0.012                    # Coef. de rolamento
+        b = 0.01                       # Atrito mecânico
         eficiencia_transmissao = 0.95
 
         if self.tempo_f == 0:
@@ -96,20 +85,25 @@ class Drivetrain:
      
         for tempo in variacao_tempo:
           
+
+            # Relação de Transmissão total
+            i_total = self.reducao_primaria * self.reducao_final
+
             # Forças resistivas
-            forca_inercia = self.massa * a_linear 
-            forca_rr = c_r * peso
+           
+            forca_rolamento = c_r * peso
             forca_arrasto = 0.5 * densidade_ar * v_linear_ms**2 * coeficiente_arrasto * area_frontal
-            forca_resistiva_total = forca_rr + forca_arrasto + forca_inercia
+            forca_inercia = self.massa * a_linear 
+            forca_resistiva_total = forca_rolamento + forca_arrasto + forca_inercia
 
             # Torque resistivo (convertido para motor)
             torque_i = forca_inercia * raio
-            torque_rr = forca_rr * raio
+            torque_rr = forca_rolamento * raio
             torque_fa = forca_arrasto * raio
             torque_atr_mec = b * (self.motor.wm)
 
             torque_carga = torque_rr + torque_fa + torque_atr_mec + torque_i
-            i_total = self.reducao_primaria * self.reducao_final
+          
             torque_carga_motor = torque_carga / (i_total * eficiencia_transmissao)
 
             # Simulação do motor
@@ -119,16 +113,12 @@ class Drivetrain:
             # Força trativa nas rodas
             torque_trativo_rodas = torque_motor_gerado * i_total * eficiencia_transmissao
             forca_trativa = torque_trativo_rodas / raio
-            #print(forca_arrasto, forca_inercia, forca_resistiva_total)
-       
             
             # Dinâmica do veículo
             forca_liquida = forca_trativa - forca_resistiva_total
             a_linear = np.abs(forca_liquida) / self.massa
             v_linear_ms += a_linear * dt
-            print(forca_liquida)
-
-
+            
             # Velocidade angular da roda
             velocidade_angular_roda = self.motor.wm / i_total
 
@@ -140,7 +130,7 @@ class Drivetrain:
                 "vlm": v_linear_ms,         # m/s
                 "va": velocidade_angular_roda,
                 "fa": forca_arrasto,
-                "rr": forca_rr,
+                "rr": forca_rolamento,
                 "ff": forca_trativa
             })
 
@@ -223,17 +213,7 @@ class Drivetrain:
         velocidade_angular = perf_dict["va"]
         velocidade_linear = perf_dict["vlk"]
 
-        # --- Figura 2: RPM x Tempo ---
-        plt.figure(figsize=(8, 4))
-        plt.plot(tempo, rpm_motor[:len(tempo)], color='tab:pink')
-        plt.xlabel("Tempo [s]")
-        plt.ylabel("RPM do Motor")
-        plt.title("RPM x Tempo")
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
-
-        # --- Figura 3: Velocidade Angular e Linear x Tempo ---
+        # --- Figura 2: Velocidade Angular e Linear x Tempo ---
         plt.figure(figsize=(12, 5))
 
         plt.subplot(1, 2, 1)
@@ -253,7 +233,7 @@ class Drivetrain:
         plt.tight_layout()
         plt.show()
 
-        # --- Figura 4: Velocidade Angular e Linear x RPM ---
+        # --- Figura 3: Velocidade Angular e Linear x RPM ---
         plt.figure(figsize=(12, 6))
 
         plt.subplot(1, 2, 1)
@@ -323,7 +303,7 @@ class Tire:
         self.track_y = track_y
         self.tire_k = tire_k
 
-    # ------------------------------------------------------------------------
+  
     def Tire_forces(self, params):
         """
         Calcula forças do pneu (laterais, longitudinais e momento de alinhamento)
@@ -346,7 +326,7 @@ class Tire:
                 (10 + (tire_auto_align_moment / 55)),
                 tire_longitudinal_force)
 
-    # ------------------------------------------------------------------------
+
     @staticmethod
     def SlipRatio(velocidade_angular, raio_pneu, velocidade_linear):
         """
@@ -355,7 +335,7 @@ class Tire:
         """
         return (velocidade_angular * raio_pneu / (velocidade_linear + 1e-6)) - 1
 
-    # ------------------------------------------------------------------------
+
     def printSlipRatio(self, tempo, slip_ratio, tire_longitudinal_forces):
         """
         Plota gráficos do slip ratio e imprime alguns valores no console.
@@ -409,8 +389,7 @@ def Instancias():
     dt_model = Drivetrain(
         cgx=853, cgy=294, massa=340, massa_roda=6,
         entre_eixos=1567, raio_pneu=220,
-        reducao_primaria=2.12, reducao_final=2.76,
-        cp=2.22, tempo_i=0
+        reducao_primaria=2.12, reducao_final=2.76, tempo_i=0
     )
     dt_model.tempo_f = 20
 
