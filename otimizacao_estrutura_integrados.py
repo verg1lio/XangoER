@@ -1,4 +1,4 @@
-#find_new_index + class Estrutura + penalidades_geometricas (nodes e def evaluate editadas)
+#find_new_index + class Estrutura
 
 import numpy as np
 from copy import deepcopy
@@ -1524,14 +1524,14 @@ def penalidades_geometricas(nodes, elements):
 
     penalidade = 0
     # Penalidade em relação ao FH e FHB
-    fronthoop_node = nodes[ChassisDEOptimizer.find_new_index(20)]       #declara o nó do fronthoop com indice novo
-    fhb_node = nodes[ChassisDEOptimizer.find_new_index(5)[0]]           #declara o nó de um front hoop bracing com indice novo
+    fronthoop_node = nodes[find_new_index(20, nodes)]       #declara o nó do fronthoop com indice novo
+    fhb_node = nodes[find_new_index(5, nodes)[0]]           #declara o nó de um front hoop bracing com indice novo
     dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                       #declara a distância no eixo z entre esses dois nós 
     if dist_fh_fhb > 0.05:                                              #condição retirada do regulamento
         penalidade += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                       #aplicação de penalidade
     # Penalidade em relação ao MH e o MHB
-    mainhoop_node = nodes[ChassisDEOptimizer.find_new_index(16)]                            #declara o nó do main hoop com indice novo
-    mhb_node = nodes[ChassisDEOptimizer.find_new_index(14)[0]]                              #declara o nó do main hoop bracing com indice novo não espelhado
+    mainhoop_node = nodes[find_new_index(16, nodes)]                            #declara o nó do main hoop com indice novo
+    mhb_node = nodes[find_new_index(14, nodes)[0]]                              #declara o nó do main hoop bracing com indice novo não espelhado
     deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
     deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
     deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "z" em ambos os nós
@@ -1540,12 +1540,12 @@ def penalidades_geometricas(nodes, elements):
         penalidade += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                        #aplicação de penalidade
     
     # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
-    x_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(6)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    y_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(6)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    z_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(6)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    x_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(15)][0]                                               #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
-    y_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(15)][1]                                               #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
-    z_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(15)][2]                                               #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
+    x_porcao_mh = nodes[find_new_index(14, nodes)][0] - nodes[find_new_index(6, nodes)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    y_porcao_mh = nodes[find_new_index(14, nodes)][1] - nodes[find_new_index(6, nodes)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    z_porcao_mh = nodes[find_new_index(14, nodes)][2] - nodes[find_new_index(6, nodes)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    x_mhb = nodes[find_new_index(14, nodes)][0] - nodes[find_new_index(15, nodes)][0]                                               #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
+    y_mhb = nodes[find_new_index(14, nodes)][1] - nodes[find_new_index(15, nodes)][1]                                               #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
+    z_mhb = nodes[find_new_index(14, nodes)][2] - nodes[find_new_index(15, nodes)][2]                                               #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
     vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
     vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
     modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
@@ -1557,9 +1557,9 @@ def penalidades_geometricas(nodes, elements):
         penalidade += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                         #aplicação da penalidade
     
     # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
-    x_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][0] - nodes[ChassisDEOptimizer.find_new_index(4)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    y_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][1] - nodes[ChassisDEOptimizer.find_new_index(4)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    z_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][2] - nodes[ChassisDEOptimizer.find_new_index(4)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    x_porcao_fh = nodes[find_new_index(5, nodes)][0] - nodes[find_new_index(4, nodes)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    y_porcao_fh = nodes[find_new_index(5, nodes)][1] - nodes[find_new_index(4, nodes)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+    z_porcao_fh = nodes[find_new_index(5, nodes)][2] - nodes[find_new_index(4, nodes)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
     vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                                              #vetor formado pelos nós que formam a porção do front hoop analisada
     modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                                           #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
     produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                                              #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
@@ -1576,10 +1576,10 @@ def penalidades_geometricas(nodes, elements):
         penalidade += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                                          #aplicação da penalidade
 
     # Penalidade altura mínima da Side Impact Structure
-    z_zone_impact_bottom_back = nodes[ChassisDEOptimizer.find_new_index(7)][2]                                  #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
-    z_zone_impact_top_back = nodes[ChassisDEOptimizer.find_new_index(6)][2]                                     #coordenada vertical do ponto mais alto da parte posterior da side impact structure
-    z_zone_impact_bottom_front = nodes[ChassisDEOptimizer.find_new_index(3)][2]                                 #coordenada vertical do ponto mais baixo da parte frontal da side impact structure
-    z_zone_impact_top_front = nodes[ChassisDEOptimizer.find_new_index(4)][2]                                    #coordenada vertical do ponto mais alto da parte frontal da side impact structure
+    z_zone_impact_bottom_back = nodes[find_new_index(7, nodes)][2]                                  #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
+    z_zone_impact_top_back = nodes[find_new_index(6, nodes)][2]                                     #coordenada vertical do ponto mais alto da parte posterior da side impact structure
+    z_zone_impact_bottom_front = nodes[find_new_index(3, nodes)][2]                                 #coordenada vertical do ponto mais baixo da parte frontal da side impact structure
+    z_zone_impact_top_front = nodes[find_new_index(4, nodes)][2]                                    #coordenada vertical do ponto mais alto da parte frontal da side impact structure
     dist_bottom_top_back = z_zone_impact_top_back - z_zone_impact_bottom_back                                   #distância vertical entre os extremos da parte posterior desta estrutura
     dist_bottom_top_front = z_zone_impact_top_front - z_zone_impact_bottom_front                                #distância vertical entre os extremos da parte frontal desta estrutura
     if dist_bottom_top_back < 0.29 and dist_bottom_top_front < 0.29:                                            #condição retirada do regulamento
@@ -1775,8 +1775,8 @@ if __name__ == "__main__":                                                      
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 5
-    pop_size = 5
+    max_gen = 10
+    pop_size = 10
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
