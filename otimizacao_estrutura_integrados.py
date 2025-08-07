@@ -1526,7 +1526,7 @@ def penalidades_geometricas(nodes, elements):
 
     # Penalidade em relação ao FH e FHB
     def penalidade_fh_fhb(nodes):
-    
+        pen = 0
         fronthoop_node = nodes[find_new_index(20, nodes)]                          #declara o nó do fronthoop com indice novo
         fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                              #declara a distância no eixo z entre esses dois nós 
@@ -1537,7 +1537,7 @@ def penalidades_geometricas(nodes, elements):
 
     # Penalidade em relação ao MH e o MHB
     def penalidade_mh_mhb(nodes):
-
+        pen = 0
         mainhoop_node = nodes[find_new_index(16, nodes)]                                        #declara o nó do main hoop com indice novo
         mhb_node = nodes[find_new_index(14, nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
         deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
@@ -1551,7 +1551,7 @@ def penalidades_geometricas(nodes, elements):
     
     # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
     def penalidade_angulo_mh_mhb(nodes):
-
+        pen = 0
         x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
         y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
         z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
@@ -1572,7 +1572,7 @@ def penalidades_geometricas(nodes, elements):
 
     # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
     def penalidade_angulo_vetical_fh(nodes):
-
+        pen = 0
         x_porcao_fh = nodes[find_new_index(5, nodes)[0]][0] - nodes[find_new_index(4, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
         y_porcao_fh = nodes[find_new_index(5, nodes)[0]][1] - nodes[find_new_index(4, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
         z_porcao_fh = nodes[find_new_index(5, nodes)[0]][2] - nodes[find_new_index(4, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
@@ -1588,7 +1588,7 @@ def penalidades_geometricas(nodes, elements):
 
     # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
     def penalidade_angulo_vertical_mh(nodes):
-    
+        pen = 0
         x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
         y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
         z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
@@ -1604,7 +1604,7 @@ def penalidades_geometricas(nodes, elements):
 
     # Penalidade altura mínima da Side Impact Structure
     def penalidade_altura_min_SIS(nodes):
-
+        pen = 0
         z_zone_impact_bottom_back = nodes[find_new_index(7, nodes)[0]][2]                                              #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
         z_zone_impact_top_back = nodes[find_new_index(6, nodes)[0]][2]                                                 #coordenada vertical do ponto mais alto da parte posterior da side impact structure
         z_zone_impact_bottom_front = nodes[find_new_index(3, nodes)[0]][2]                                             #coordenada vertical do ponto mais baixo da parte frontal da side impact structure
