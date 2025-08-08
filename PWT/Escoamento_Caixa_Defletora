@@ -1,0 +1,277 @@
+import sympy as sp
+import math
+import matplotlib.pyplot as plt
+import numpy as np
+
+class Arrefecimento():
+    def __init__(self):
+        self.x, self.y, self.z, self.t = sp.symbols('x y z t')
+        self.u, self.v, self.w = sp.symbols('u v w', cls=sp.Function)
+        self.p = sp.Function('p')(self.x, self.y, self.z)  # Pressão
+        self.rho = sp.Function('rho')(self.x, self.y, self.z, self.t)  # Densidade
+        self.mu = sp.symbols('mu')  # Viscosidade molecular
+        self.mu_eff = sp.symbols('mu_eff')  
+        self.U = sp.Function('U')(self.x, self.y, self.z, self.t)  # Velocidade absoluta
+        self.U_r = sp.Function('U_r')(self.x, self.y, self.z, self.t)  # Velocidade relativa
+        self.g = sp.symbols('g')  # Aceleração gravitacional
+        self.gx, self.gy, self.gz = sp.symbols('gx gy gz')  # Componentes de gravidade
+        self.Fx, self.Fy, self.Fz = sp.symbols('Fx Fy Fz')  # Forças externas
+        self.r = sp.Matrix([self.x, self.y, self.z])  # Vetor posição no plano de rotação
+        self.k = sp.Function('k')(self.x, self.y, self.z, self.t)  # Energia cinética turbulenta
+        self.epsilon = sp.Function('epsilon')(self.x, self.y, self.z, self.t)  # Dissipação de energia
+        self.alpha_k, self.alpha_e = sp.symbols('alpha_k alpha_e')  # Números de Prandtl efetivos
+        self.C1e, self.C2e = sp.symbols('C1e C2e')  # Constantes do modelo
+        self.S = sp.symbols('S')  # Módulo do tensor de taxa de deformação
+        self.n = sp.Symbol('n')  # Coordenada local normal a parede 
+        self.alpha_0 = sp.symbols('alpha_0') 
+        self.tau_w = sp.symbols('tau_w')  # Tensão de cisalhamento na parede
+        self.k_p = sp.symbols('k_p')  # Energia cinética turbulenta no ponto P
+        self.y_p = sp.symbols('y_p')  # Distância do ponto P à parede
+        self.eta = sp.symbols('eta')
+        self.phi = sp.Function('phi')(self.x, self.y, self.z, self.t)  # Propriedade de interesse
+        self.J_j = sp.Function('J_j')(self.x, self.y, self.z, self.t)  # Fluxo líquido
+        self.S_phi = sp.Function('S_phi')(self.x, self.y, self.z, self.t)  # Termo fonte
+        self.Gamma_phi = sp.Function('Gamma_phi')(self.x, self.y, self.z, self.t)  # Coeficiente de difusão
+        self.p_0 = sp.symbols('p_0')  # Pressão total
+        self.rho_ar = sp.symbols('rho_ar')  # Densidade do ar
+        self.rho_agua = sp.symbols('rho_agua')  # Densidade da agua
+        self.h = sp.symbols('h')  # Altura da coluna de água
+        self.A_c = sp.symbols('A_c')  # Área da seção transversal
+        self.V = sp.symbols('V')  # Velocidade do fluido
+        self.m_dot = sp.symbols('m_dot')  # Vazão mássica
+        self.G_k = sp.symbols('G_k')  # Produção de energia cinética turbulenta
+        self.epsilon_p = sp.symbols('epsilon_p')  # Dissipação de energia
+        self.f = sp.symbols('f')  # Frequência da rede (Hz)
+        self.n_p = sp.symbols('n_p')  # Número de polos do motor
+        self.eta_0 = 4.38
+        self.beta = 0.012
+        self.C_mu = 0.0845  # Constante específica do modelo R
+        self.kappa = 0.42  # Constante de von Kármán
+        self.E = 9.81  # Constante empírica
+
+        # Definir as funções de velocidade como funções das variáveis espaciais
+        self.u = (self.x, self.y, self.z)
+        self.v = (self.x, self.y, self.z)
+        self.w = (self.x, self.y, self.z)
+
+        self.grad_U = sp.Matrix([[sp.diff(self.U, var) for var in [self.x, self.y, self.z]]])
+        self.grad_U_r = sp.Matrix([[sp.diff(self.U_r, var) for var in [self.x, self.y, self.z]]])
+        self.Omega = sp.Matrix([sp.symbols('Omega_x'), sp.symbols('Omega_y'), sp.symbols('Omega_z')])
+
+    def derivadas(self):
+        self.drho_dt = sp.diff(self.rho, self.t)  # Derivada temporal de rho
+        self.div_rho_U = sp.diff(self.rho * self.U, self.x) + sp.diff(self.rho * self.v, self.y) + sp.diff(self.rho * self.w, self.z) # Gradiente escalar do termo (rho * U)
+        self.du_dx, self.du_dy, self.du_dz = sp.diff(self.u, self.x), sp.diff(self.u, self.y), sp.diff(self.u, self.z)
+        self.dv_dx, self.dv_dy, self.dv_dz = sp.diff(self.v, self.x), sp.diff(self.v, self.y), sp.diff(self.v, self.z)
+        self.dw_dx, self.dw_dy, self.dw_dz = sp.diff(self.w, self.x), sp.diff(self.w, self.y), sp.diff(self.w, self.z)
+
+    def derivadas_segundas(self):
+        self.d2u_dx2 = sp.diff(self.u, self.x, self.x)
+        self.d2u_dy2 = sp.diff(self.u, self.y, self.y)
+        self.d2u_dz2 = sp.diff(self.u, self.z, self.z)
+
+        self.d2v_dx2 = sp.diff(self.v, self.x, self.x)
+        self.d2v_dy2 = sp.diff(self.v, self.y, self.y)
+        self.d2v_dz2 = sp.diff(self.v, self.z, self.z)
+
+        self.d2w_dx2 = sp.diff(self.w, self.x, self.x)
+        self.d2w_dy2 = sp.diff(self.w, self.y, self.y)
+        self.d2w_dz2 = sp.diff(self.w, self.z, self.z)
+
+    def equação_continuidade(self):
+        self.continuidade = sp.Eq(self.drho_dt + self.div_rho_U, 0)
+        return self.continuidade
+    
+    def continuidade_com_considerações(self):
+        self.continuidade_cc = sp.Eq(self.du_dx + self.dv_dy + self.dw_dz, 0)
+        return self.continuidade_cc
+    
+    def tensor_tensão(self):
+        self.tau = self.mu * (self.grad_U + self.grad_U**self.t - (2 / 3) * self.grad_U * sp.eye(3))
+        return self.tau
+    
+    def qnt_movimento_ref_inercial(self):
+        # Gradiente do tensor tau
+        self.tau = self.tensor_tensão()
+        div_tau = sp.Matrix([
+            sp.diff(self.tau[0, 0], self.x) + sp.diff(self.tau[0, 1], self.y) + sp.diff(self.tau[0, 2], self.z),
+            sp.diff(self.tau[1, 0], self.x) + sp.diff(self.tau[1, 1], self.y) + sp.diff(self.tau[1, 2], self.z),
+            sp.diff(self.tau[2, 0], self.x) + sp.diff(self.tau[2, 1], self.y) + sp.diff(self.tau[2, 2], self.z)
+        ])
+        
+        # Gradiente de pressão
+        grad_p = sp.Matrix([sp.diff(self.p, self.x), sp.diff(self.p, self.y), sp.diff(self.p, self.z)])
+        
+        # Termos de forças externas e gravitacionais
+        self.F = sp.Matrix([self.rho * self.gx + self.Fx, self.rho * self.gy + self.Fy, self.rho * self.gz + self.Fz])
+        
+        # Equação de quantidade de movimento
+        self.momentum_eq = self.rho * sp.diff(self.U, self.t) + (self.rho * self.U.dot(self.U.jacobian([self.x, self.y, self.z]))) - grad_p + div_tau - self.F
+        return self.momentum_eq
+    
+    def conservação_qnt_mov_x(self):
+        self.conserv_qnt_mov_x = sp.Eq(self.rho * (self.u * self.du_dx + self.v * self.du_dy + self.w * self.du_dz), - sp.diff(self.p, self.x) + self.mu * (self.d2u_dx2 + self.d2u_dy2 + self.d2u_dz2) + self.rho * self.gx)
+    
+    def conservação_qnt_mov_y(self):
+        self.conserv_qnt_mov_x = sp.Eq(self.rho * (self.u * self.dv_dx + self.v * self.dv_dy + self.w * self.dv_dz), - sp.diff(self.p, self.x) + self.mu * (self.d2v_dx2 + self.d2v_dy2 + self.d2v_dz2) + self.rho * self.gy)
+    
+    def conservação_qnt_mov_z(self):
+        self.conserv_qnt_mov_x = sp.Eq(self.rho * (self.u * self.dw_dx + self.v * self.dw_dy + self.w * self.dw_dz), - sp.diff(self.p, self.x) + self.mu * (self.d2w_dx2 + self.d2w_dy2 + self.d2w_dz2) + self.rho * self.gz)
+
+    def relacao_velocidades(self):
+        # Equação (3.8): U_r = U - Omega x r
+        self.U_r_eq = sp.Eq(self.U_r, self.U - self.Omega.cross(self.r))
+        return self.U_r_eq    
+
+    def quantidade_movimento_absoluta(self):
+        # Equação (3.9): Eq. da quantidade de movimento usando U
+        self.termo_1 = sp.diff(self.rho * self.U, self.t)
+        self.termo_2 = sp.diff(self.rho * self.U.dot(self.grad_U), self.x)
+        self.termo_3 = self.rho * self.Omega.cross(self.U)
+        self.eq_qnt_mov_absoluta = sp.Eq(self.termo_1 + self.termo_2, self.termo_3)
+        return self.eq_qnt_mov_absoluta
+
+    def quantidade_movimento_relativa(self):
+        # Equação (3.10): Eq. da quantidade de movimento usando U_r
+        self.termo_1 = sp.diff(self.rho * self.U_r, self.t)
+        self.termo_2 = sp.diff(self.rho * self.U_r.dot(self.grad_U_r), self.x)
+        self.termo_3 = self.rho * (self.Omega.cross(self.U_r) + self.Omega.cross(self.Omega.cross(self.r)))
+        self.eq_qnt_mov_relativa = sp.Eq(self.termo_1 + self.termo_2, self.termo_3)
+        return self.eq_qnt_mov_relativa
+
+    def conservacao_massa(self):
+        # Equação (3.11): Conservação de massa
+        self.eq_conserv_massa = sp.Eq(sp.diff(self.rho, self.t) + sp.diff(self.rho * self.U_r, self.x) + sp.diff(self.rho * self.U_r, self.y) + sp.diff(self.rho * self.U_r, self.z))
+        return self.eq_conserv_massa
+
+    def energia_cinetica_turbulenta(self):
+        # Equação (3.12): Transporte de k
+        termo_1 = sp.diff(self.rho * self.k, self.t)
+        termo_2 = sp.diff(self.alpha_k * self.mu * sp.diff(self.k, self.x), self.x)
+        termo_3 = sp.diff(self.alpha_k * self.mu * sp.diff(self.k, self.y), self.y)
+        termo_4 = sp.diff(self.alpha_k * self.mu * sp.diff(self.k, self.z), self.z)
+        termo_5 = self.mu * self.S**2 - self.rho * self.epsilon
+        self.eq_transporte_k = sp.Eq(termo_1 + termo_2 + termo_3 + termo_4, termo_5)
+        return self.eq_transporte_k
+
+    def dissipacao_energia_turbulenta(self):
+        # Equação (3.13): Transporte de epsilon
+        termo_1 = sp.diff(self.rho * self.epsilon, self.t)
+        termo_2 = sp.diff(self.alpha_e * self.mu * sp.diff(self.epsilon, self.x), self.x)
+        termo_3 = sp.diff(self.alpha_e * self.mu * sp.diff(self.epsilon, self.y), self.y)
+        termo_4 = sp.diff(self.alpha_e * self.mu * sp.diff(self.epsilon, self.z), self.z)
+        termo_5 = (self.C1e * (self.epsilon / self.k) * self.mu * self.S**2 
+                   - self.C2e * self.rho * (self.epsilon**2 / self.k))
+        self.eq_transporte_epsilon = sp.Eq(termo_1 + termo_2 + termo_3 + termo_4, termo_5)
+        return self.eq_transporte_epsilon
+
+    def viscosidade_turbulenta(self):
+        # Equação (3.14): Cálculo da viscosidade turbulenta
+        self.mu_t = sp.Eq(self.mu, self.rho * self.C_mu * (self.k**2 / self.epsilon))
+        return self.mu_t
+
+    def ajuste_viscosidade_turbulenta(self):
+        # Equação (3.15): Ajuste com função alpha
+        self.alpha = sp.Function('alpha')(self.x, self.y, self.z, self.t)  # Função alpha ajustada
+        self.mu_t_ajustada = sp.Eq(self.mu, self.mu * self.alpha)
+        return self.mu_t_ajustada
+    
+    def inversa_prandtl(self):
+        # Equação (3.16): Calculo dos inversos dos numeros de Prandtl (padrão RNG) 
+        term1 = abs((self.alpha - 1.3929) / (self.alpha_0 - 1.3929))**0.6321
+        term2 = abs((self.alpha + 2.3929) / (self.alpha_0 + 2.3929))**0.3679
+        return sp.Eq(term1 * term2, (self.mu / self.mu_eff))
+
+    def compute_re_e(self):
+        # Equação (3.17): Calculo dos inversos dos numeros de Prandtl (k-e RNG) 
+        term1 = (1 - (self.eta / self.eta_0))
+        numerator = self.C_mu * self.rho * self.eta**3 * term1 * self.epsilon**2
+        denominator = (1 + self.beta * self.eta**3) * self.k
+        return numerator / denominator
+    
+    def calculate_U_plus(self):
+        # Equação 3.19
+        self.U_plus = (self.U_p * (self.C_mu**(1/4)) * (self.k_p**0.5)) / (self.tau_w / self.rho)
+        return self.U_plus
+
+    def calculate_y_plus(self):
+        # Equação 3.20
+        self.y_plus = (self.rho * (self.C_mu**(1/4)) * (self.k_p**0.5) * self.y_p) / self.mu
+        return self.y_plus
+
+    def adjust_U_plus(self):
+        # Equação 3.18: Campo médio da velocidade
+        self.U_plus = (1 / self.kappa) * math.log(self.E * self.y_plus)
+        return self.U_plus
+    
+    def condição_contorno_k(self):
+        # Equação 3.22
+        self.boundary_condition_k = sp.Eq(sp.Derivative(self.k(self.n), self.n), 0)
+        return self.boundary_condition_k
+    
+    def producao_cinetica(self):
+        # Equações (3.23) e (3.24): Produção de energia cinética turbulenta e taxa de dissipação
+        self.G_k = sp.Eq(sp.symbols('G_k'), self.tau_w * sp.diff(self.U, self.y))
+        self.epsilon_p = sp.Eq(sp.symbols('epsilon_p'), self.C_mu**(3/4) * self.k_p**(3/2) / (self.kappa * self.y_p))
+        return self.G_k, self.epsilon_p
+
+    def equacao_geral(self):
+        # Equação (3.25): Forma genérica das equações
+        self.eq_geral = sp.Eq(sp.diff(self.rho * self.phi, self.t), sp.diff(self.J_j, self.x) + self.S_phi)
+        return self.eq_geral
+
+    def fluxo_liquido(self):
+        # Equação (3.26): Fluxo líquido de propriedade
+        self.J_j = sp.Eq(sp.Function('J_j')(self.x, self.y, self.z, self.t), self.Gamma_phi * sp.diff(self.phi, self.x) - self.rho * self.U * self.phi)
+        return self.J_j
+
+    def velocidade_rotacao(self):
+        # Equação (3.27): Velocidade de rotação do ventilador
+        self.w = sp.Eq(sp.symbols('w'), 120 * self.f / self.n_p)  # Velocidade de rotação (rpm)
+        return self.w
+    
+    def bernoulli(self):
+        # Equações (3.28) à (3.32) que descrevem o princípio de Bernoulli
+        self.eq_3_28 = sp.Eq(self.p_0 - self.p, (self.rho_ar * self.V**2) / 2)
+        self.eq_3_29 = sp.Eq(self.V, sp.sqrt(2 * (self.p_0 - self.p) / self.rho_ar))
+        self.eq_3_30 = sp.Eq(self.p_0 - self.p, self.rho_agua * self.g * self.h)
+        self.eq_3_31 = sp.Eq(self.V, sp.sqrt(2 * self.rho_agua * self.g * self.h / self.rho_ar))        
+        self.eq_3_32 = sp.Eq(self.m_dot, self.A_c * self.rho_ar * sp.sqrt(2 * self.rho_ar * self.g * self.h / self.rho_ar))
+        return self.eq_3_28, self.eq_3_29, self.eq_3_30, self.eq_3_31, self.eq_3_32    
+    
+#TESTE DE PLOT (GRÁFICO CORRETO, PORÉM NÃO ESTÁ SENDO FEITO DA MANEIRA CORRETA)   
+    def plot_graficos(self):
+        """
+        Plota os gráficos com os valores fornecidos na tabela.
+        """
+        
+        # Valores da tabela
+        rotacoes = [1800, 1200, 900]  # Rotação em rpm
+        pressoes_saida = [101606, 101450, 101396]  # Pressão de Estagnação na saída (Pa)
+        velocidades_saida = [19.2, 12.8, 9.6]  # Velocidade na saída (m/s)
+
+        # Gráfico Pressão x Rotação
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.plot(rotacoes, pressoes_saida, marker='o', label='Pressão (Pa)')
+        plt.xlabel('Rotação (rpm)')
+        plt.ylabel('Pressão (Pa)')
+        plt.title('Variação de Pressão x Rotação')
+        plt.grid(True)
+        plt.legend()
+
+        # Gráfico Velocidade x Rotação
+        plt.subplot(1, 2, 2)
+        plt.plot(rotacoes, velocidades_saida, marker='o', label='Velocidade (m/s)', color='orange')
+        plt.xlabel('Rotação (rpm)')
+        plt.ylabel('Velocidade na Saída (m/s)')
+        plt.title('Velocidade na Saída x Rotação')
+        plt.grid(True)
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+sistema = Arrefecimento()
+
+sistema.plot_graficos()
