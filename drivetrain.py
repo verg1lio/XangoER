@@ -5,7 +5,7 @@ Autor: Marco Affonso e Igor Maia
 
 import numpy as np
 import matplotlib.pyplot as plt
-from pwt1 import Motor               
+from pwt import Motor               
 from tire2 import Tire
 
 class Drivetrain:
