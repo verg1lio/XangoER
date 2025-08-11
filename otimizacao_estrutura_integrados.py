@@ -1602,8 +1602,8 @@ def penalidades_geometricas(nodes, elements):
 
         return pen
 
-    # Penalidade altura mínima da Side Impact Structure
-    def penalidade_altura_min_SIS(nodes):
+    # Penalidade altura mínima da Side Impact Structure (aparentemente, essa regra é para monocoque)
+    '''def penalidade_altura_min_SIS(nodes):
         pen = 0
         z_zone_impact_bottom_back = nodes[find_new_index(7, nodes)[0]][2]                                              #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
         z_zone_impact_top_back = nodes[find_new_index(6, nodes)[0]][2]                                                 #coordenada vertical do ponto mais alto da parte posterior da side impact structure
@@ -1614,14 +1614,31 @@ def penalidades_geometricas(nodes, elements):
         if dist_bottom_top_back < 0.29 and dist_bottom_top_front < 0.29:                                            #condição retirada do regulamento
             pen += ((dist_bottom_top_front - 0.29) ** 2 + (dist_bottom_top_back - 0.29) ** 2) * 1e6                 #aplicação da penalidade
 
+        return pen'''
+    
+    # Penalidade para posição do Upper Side Impact Member
+    def penalidade_posicao_upper_SI_member(nodes):
+        pen = 0
+        upper_SI_node_front_z = nodes[find_new_index(4, nodes)[0]][2]
+        upper_SI_node_back_z = nodes[find_new_index(6, nodes)[0]][2]
+        lowest_point_SI_z =  nodes[find_new_index(7, nodes)[0]][2]
+        dist_lowestpoint_front_usim = upper_SI_node_front_z - lowest_point_SI_z
+        dist_lowestpoint_back_usim = upper_SI_node_back_z - lowest_point_SI_z
+
+        if dist_lowestpoint_front_usim * 1000 not in range(240, 321) and dist_lowestpoint_back_usim * 1000 not in range(240, 321):
+            pen += ((dist_lowestpoint_front_usim) ** 2 + (dist_lowestpoint_back_usim) ** 2) * 1e6
+
+
         return pen
     
+    # Controle das penalidades
     penalidade += penalidade_fh_fhb(nodes)
     penalidade += penalidade_mh_mhb(nodes)
     penalidade += penalidade_angulo_vetical_fh(nodes)
     penalidade += penalidade_angulo_vertical_mh(nodes)
     penalidade += penalidade_angulo_mh_mhb(nodes)
-    penalidade += penalidade_altura_min_SIS(nodes)
+    #penalidade += penalidade_altura_min_SIS(nodes)
+    penalidade += penalidade_posicao_upper_SI_member(nodes)
 
     return penalidade
 
@@ -1814,7 +1831,7 @@ if __name__ == "__main__":                                                      
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 10
+    max_gen = 40
     pop_size = 10
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
