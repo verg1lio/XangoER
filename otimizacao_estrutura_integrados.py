@@ -1530,7 +1530,7 @@ def penalidades_geometricas(nodes, elements):
         fronthoop_node = nodes[find_new_index(20, nodes)]                          #declara o nó do fronthoop com indice novo
         fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                              #declara a distância no eixo z entre esses dois nós 
-        if dist_fh_fhb > 0.05:                                                     #condição retirada do regulamento
+        if dist_fh_fhb > 0.05 or dist_fh_fhb < 0:                                  #condição retirada do regulamento
             pen += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                              #aplicação de penalidade
 
         return pen
@@ -1544,7 +1544,7 @@ def penalidades_geometricas(nodes, elements):
         deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
         deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "z" em ambos os nós
         dist_mh_mhb = np.sqrt(deltax_mh_mhb ** 2 + deltay_mh_mhb ** 2 + deltaz_mh_mhb ** 2)     #declara a distância entre os dois nós      
-        if dist_mh_mhb > 0.16:                                                                  #condição retirada do regulamento
+        if dist_mh_mhb > 0.16 or dist_mh_mhb < 0:                                                                  #condição retirada do regulamento
             pen += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                            #aplicação de penalidade
         
         return pen
@@ -1631,6 +1631,38 @@ def penalidades_geometricas(nodes, elements):
 
         return pen
     
+    # Penalidade ângulo com a vertical da parte do Front Bulkhead garantindo a retidão
+    def penalidade_angulo_vertical_frontbulkhead(nodes):
+        pen = 0
+        x_porcao_fb = nodes[find_new_index(0, nodes)[0]][0] - nodes[find_new_index(1, nodes)[0]][0]                                     #coordenada x do vetor formado pelos nós do elemento da porção do front bulkhead analisada
+        y_porcao_fb = nodes[find_new_index(0, nodes)[0]][1] - nodes[find_new_index(1, nodes)[0]][1]                                     #coordenada y do vetor formado pelos nós do elemento da porção do front bulkhead analisada
+        z_porcao_fb = nodes[find_new_index(0, nodes)[0]][2] - nodes[find_new_index(1, nodes)[0]][2]                                     #coordenada z do vetor formado pelos nós do elemento da porção do front bulkhead analisada
+        vetor_porcao_fb = (x_porcao_fb, y_porcao_fb, z_porcao_fb)                                                                       #vetor formado pelos nós do elemento da porção do front bulkhead analisada
+        modulo_vetor_porcao_fb = np.sqrt(vetor_porcao_fb[0] ** 2 + vetor_porcao_fb[1] ** 2 + vetor_porcao_fb[2] ** 2 )                  #módulo do vetor formado pelos nós do elemento da porção do front bulkhead analisada
+        produto_escalar_porcao_fb_e_vertical = vetor_porcao_fb[2]                                                                       #produto escalar do vetor formado pelo elemento da porção do front bulkhead trabalhada com o versor da vertical
+        cos_theta_fb_porcao_vertical = produto_escalar_porcao_fb_e_vertical / modulo_vetor_porcao_fb                                    #cosseno do ângulo formado entre este vetor mencionado e a vertical
+        theta_fb_porcao_vertical = np.degrees(np.acos(cos_theta_fb_porcao_vertical))                                                    #ângulo formado entre este vetor mencionado e a vertical
+        if theta_fb_porcao_vertical != 0:                                                                                               #condição retirada do regulamento
+            pen += ((theta_fb_porcao_vertical -0) ** 2) * 1e6                                                                           #aplicação da penalidade
+
+        return pen   
+
+    # Penalidade ângulo com a vertical da parte do Rear Bulkhead gaarantindo a retidão
+    def penalidade_angulo_vertical_rear(nodes):
+        pen = 0
+        x_porcao_rb = nodes[find_new_index(12, nodes)[0]][0] - nodes[find_new_index(13, nodes)[0]][0]                                   #coordenada x do vetor formado pelos nós do elemento da porção do rear bulkhead analisada
+        y_porcao_rb = nodes[find_new_index(12, nodes)[0]][1] - nodes[find_new_index(13, nodes)[0]][1]                                   #coordenada y do vetor formado pelos nós do elemento da porção do rear bulkhead analisada
+        z_porcao_rb = nodes[find_new_index(12, nodes)[0]][2] - nodes[find_new_index(13, nodes)[0]][2]                                   #coordenada z do vetor formado pelos nós do elemento da porção do rear bulkhead analisada
+        vetor_porcao_rb = (x_porcao_rb, y_porcao_rb, z_porcao_rb)                                                                       #vetor formado pelos nós do elemento da porção do rear bulkhead analisada
+        modulo_vetor_porcao_rb = np.sqrt(vetor_porcao_rb[0] ** 2 + vetor_porcao_rb[1] ** 2 + vetor_porcao_rb[2] ** 2 )                  #módulo do vetor formado pelos nós do elemento da porção do rear bulkhead analisada
+        produto_escalar_porcao_rb_e_vertical = vetor_porcao_rb[2]                                                                       #produto escalar do vetor formado pelo elemento da porção do rear bulkhead trabalhada com o versor da vertical
+        cos_theta_rb_porcao_vertical = produto_escalar_porcao_rb_e_vertical / modulo_vetor_porcao_rb                                    #cosseno do ângulo formado entre este vetor mencionado e a vertical
+        theta_rb_porcao_vertical = np.degrees(np.acos(cos_theta_rb_porcao_vertical))                                                    #ângulo formado entre este vetor mencionado e a vertical
+        if theta_rb_porcao_vertical != 0:                                                                                               #condição retirada do regulamento
+            pen += ((theta_rb_porcao_vertical -0) ** 2) * 1e6                                                                           #aplicação da penalidade
+
+        return pen  
+
     # Controle das penalidades
     penalidade += penalidade_fh_fhb(nodes)
     penalidade += penalidade_mh_mhb(nodes)
@@ -1639,6 +1671,8 @@ def penalidades_geometricas(nodes, elements):
     penalidade += penalidade_angulo_mh_mhb(nodes)
     #penalidade += penalidade_altura_min_SIS(nodes)
     penalidade += penalidade_posicao_upper_SI_member(nodes)
+    penalidade += penalidade_angulo_vertical_frontbulkhead(nodes)
+    penalidade += penalidade_angulo_vertical_rear(nodes)
 
     return penalidade
 
