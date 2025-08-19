@@ -1,7 +1,12 @@
+import dash
+from dash import dcc, html, dash_table
+from dash.dependencies import Input, Output, State
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy import signal
-import control as clt
+from scipy.integrate import solve_ivp
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import pandas as pd
+import plotly.express as px
 
 class PIController:
     """Controlador PI para FOC"""
@@ -9,65 +14,82 @@ class PIController:
         self.kp = kp
         self.ki = ki
         self.limit = limit
-        self.integral = 0
-        self.prev_error = 0
+        self.integral = 0.0
+        self.prev_error = 0.0
         
     def update(self, error, dt):
         self.integral += error * dt
-        derivative = (error - self.prev_error) / dt if dt > 0 else 0
         self.prev_error = error
         
-        # Ação PID
         output = self.kp * error + self.ki * self.integral
         
-        # Anti-windup
         if output > self.limit:
             output = self.limit
-            self.integral -= error * dt  # Anti-windup
+            self.integral -= error * dt
         elif output < -self.limit:
             output = -self.limit
-            self.integral -= error * dt  # Anti-windup
+            self.integral -= error * dt
             
         return output
 
+    def reset(self):
+        self.integral = 0.0
+        self.prev_error = 0.0
+
 class Motor:
-    """Classe que modela um motor síncrono de Ímã Permanente (PMSM) com FOC"""
-    
-    def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu):
-        # Constantes
+    """Motor PMSM com FOC usando solve_ivp"""
+    def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu, TL=False, torque=0.0):
         self.pi23 = 2 * np.pi / 3
         self.rq23 = np.sqrt(2 / 3)
         self.rq3 = np.sqrt(3)
-        
-        # Parâmetros do motor EMRAX 268 HV+42%
-        self.rs = rs          # Resistência do estator (45.85 mΩ)
-        self.ld = ld          # Indutância do eixo direto (670 µH)
-        self.lq = lq          # Indutância do eixo em quadratura (670 µH)
-        self.jm = jm          # Inércia do rotor (0.05769 kg·m²)
-        self.kf = kf          # Coeficiente de atrito
-        self.lambda_m = lambda_m  # Fluxo magnético do ímã (0.13849 Wb)
-        self.p = p            # Número de pares de polos (10)
-        
-        # Controladores FOC
-        self.id_controller = PIController(kp=0.5, ki=100, limit=1000)
-        self.iq_controller = PIController(kp=0.5, ki=100, limit=1000)
-        self.speed_controller = PIController(kp=1.0, ki=0, limit=500)
-        
-        # Referências
-        self.id_ref = 0        # Referência de corrente d (campo)
-        self.iq_ref = 0        # Referência de corrente q (torque)
-        self.speed_ref = 300   # Velocidade de referência (rad/s mecânico)
-        
-        # Parâmetros de simulação
-        self.h = 1e-5          # Passo de tempo (s)
-        self.tmax = 2.0        # Tempo máximo de simulação (s)
-        self.hp = self.tmax / 2000  # Passo para plotagem
-        
-        # Inicialização
+        self.rs = rs
+        self.ld = ld
+        self.lq = lq
+        self.jm = jm
+        self.kf = kf
+        self.lambda_m = lambda_m
+        self.p = p
+        self.valor_mu = valor_mu
+
+        self.m = 22.0
+        self.C = 0.385
+
+        self.id_controller = PIController(kp=0.5, ki=100.0, limit=1000.0)
+        self.iq_controller = PIController(kp=0.5, ki=100.0, limit=1000.0)
+        self.speed_controller = PIController(kp=1.0, ki=5, limit=500.0)
+
+        self.TL = bool(TL)
+        if callable(torque):
+            self._external_torque = torque
+        else:
+            self._external_torque = (lambda t, v=float(torque): v)
+
+        self.max_current = 220.0 * np.sqrt(2)
+        self.Vdc = 600.0
+        self.Vs = (self.valor_mu * self.Vdc) / np.sqrt(3)
+        self.Vlimit = self.Vs * 3
+
+        self.id_ref = 0.0
+        self.iq_ref = 0.0
+        self.speed_ref = 471.23
+
+        self.tmax = 2.0
+        self.hp = self.tmax / 2000.0
+
         self.reset_initial_conditions()
-        
-        # Armazenamento de dados
         self.initialize_storage()
+
+    def reset_initial_conditions(self):
+        self.cl = 0.0
+        self.wm0 = 0.0
+        self.theta_m0 = 0.0
+        self.isd0 = 0.0
+        self.isq0 = 0.0
+        self.iso0 = 0.0
+        self.temp0 = 25.0
+        self.int_id0 = 0.0
+        self.int_iq0 = 0.0
+        self.int_speed0 = 0.0
 
     def initialize_storage(self):
         self.tempo = []
@@ -76,358 +98,551 @@ class Motor:
         self.corrente1 = []
         self.corrente2 = []
         self.corrente3 = []
+        self.tensaosd = []
+        self.tensaosq = []
         self.tensao1 = []
         self.tensao2 = []
         self.tensao3 = []
-        self.tensaosd = []
-        self.tensaosq = []
         self.fluxosd = []
         self.fluxosq = []
         self.conjugado = []
         self.velocidade = []
-        self.frequencia = []
         self.conjcarga = []
         self.torque_mecanico = []
         self.temperatura = []
         self.vd_control = []
         self.vq_control = []
         self.speed_error = []
+        self.iq_ref_trace = []
+        self.id_ref_trace = []
 
-    def reset_initial_conditions(self):
-        self.cl = 0           # Torque de carga
-        self.wm = 0.0         # Velocidade mecânica
-        self.t = 0            # Tempo
-        self.tp = 0           # Tempo para plotagem
-        self.ce = 0           # Torque eletromagnético
-        self.isd = 0          # Corrente d-axis
-        self.isq = 0          # Corrente q-axis
-        self.iso = 0          # Corrente de sequência zero
-        self.theta_e = 0      # Ângulo elétrico
-        self.theta_m = 0      # Ângulo mecânico
-        self.temp = 25        # Temperatura inicial
-        self.m = 22           # Massa do motor (kg)
-        self.C = 0.385        # Capacidade térmica
-        self.Vdc = 830        # Tensão DC do barramento
-        self.Vs = self.Vdc / np.sqrt(3)  # Tensão de fase máxima
+    def set_external_torque(self, torque):
+        if callable(torque):
+            self._external_torque = torque
+        else:
+            v = float(torque)
+            self._external_torque = (lambda t, v=v: v)
 
-    def field_oriented_control(self):
-        """Implementação do Field-Oriented Control (FOC)"""
-        # 1. Controle de velocidade
-        speed_error = self.speed_ref - self.wm
-        self.speed_error.append(speed_error)
-        torque_ref = self.speed_controller.update(speed_error, self.h)
-        
-        # 2. Referências de corrente (estratégia id=0)
-        self.iq_ref = torque_ref / (1.5 * self.p * self.lambda_m)
-        self.id_ref = 0  # Maximiza torque por ampère
-        
-        # Limitar correntes de referência
-        max_current = 220 * np.sqrt(2)  # 220A RMS -> 311A pico
-        if abs(self.iq_ref) > max_current:
-            self.iq_ref = np.sign(self.iq_ref) * max_current
-        
-        # 3. Controle de corrente
-        error_d = self.id_ref - self.isd
-        error_q = self.iq_ref - self.isq
-        
-        # Termos de desacoplamento
-        we = self.p * self.wm  # Velocidade elétrica
-        decoupling_d = -we * self.lq * self.isq
-        decoupling_q = we * (self.ld * self.isd + self.lambda_m)
-        
-        # Ações de controle
-        vd = self.id_controller.update(error_d, self.h) + decoupling_d
-        vq = self.iq_controller.update(error_q, self.h) + decoupling_q
-        
-        # Armazenar para análise
+    def enable_external_torque(self, enable: bool):
+        self.TL = bool(enable)
+
+    def set_load(self, t):
+        if self.TL and (self._external_torque is not None):
+            try:
+                return float(self._external_torque(t))
+            except Exception:
+                pass
+        if t < 0.5:
+            return 0.0
+        elif t < 1.0:
+            return 100.0
+        else:
+            return -200.0
+
+    def field_oriented_control(self, isd, isq, wm, dt):
+        speed_error = self.speed_ref - wm
+        torque_ref = self.speed_controller.update(speed_error, dt)
+
+        iq_ref = torque_ref / (1.5 * self.p * self.lambda_m) if (1.5 * self.p * self.lambda_m) != 0 else 0.0
+        id_ref = 0.0
+
+        if abs(iq_ref) > self.max_current:
+            iq_ref = np.sign(iq_ref) * self.max_current
+
+        error_d = id_ref - isd
+        error_q = iq_ref - isq
+
+        we = self.p * wm
+        decoupling_d = -we * self.lq * isq
+        decoupling_q = we * (self.ld * isd + self.lambda_m)
+
+        vd = self.id_controller.update(error_d, dt) + decoupling_d
+        vq = self.iq_controller.update(error_q, dt) + decoupling_q
+
         self.vd_control.append(vd)
         self.vq_control.append(vq)
-        
-        return vd, vq
 
-    def inverse_park_transform(self, vd, vq):
-        """Transformação inversa de Park (dq -> abc)"""
-        # Transformação dq -> αβ
-        valpha = vd * np.cos(self.theta_e) - vq * np.sin(self.theta_e)
-        vbeta = vd * np.sin(self.theta_e) + vq * np.cos(self.theta_e)
-        
-        # Transformação αβ -> abc
-        v0 = 0  # Sem componente de sequência zero
+        vmag = np.sqrt(vd**2 + vq**2)
+        vmax = self.Vlimit
+        if vmag > vmax:
+            vd *= vmax / vmag
+            vq *= vmax / vmag
+
+        return vd, vq, id_ref, iq_ref, speed_error
+
+    def inverse_park_transform(self, vd, vq, theta_e):
+        valpha = vd * np.cos(theta_e) - vq * np.sin(theta_e)
+        vbeta = vd * np.sin(theta_e) + vq * np.cos(theta_e)
+        v0 = 0.0
         vs1 = valpha
-        vs2 = -0.5 * valpha + (np.sqrt(3)/2 * vbeta)
-        vs3 = -0.5 * valpha - (np.sqrt(3)/2 * vbeta)
-        
+        vs2 = -0.5 * valpha + (np.sqrt(3) / 2.0) * vbeta
+        vs3 = -0.5 * valpha - (np.sqrt(3) / 2.0) * vbeta
         return vs1, vs2, vs3, v0
 
-    def calculate_derivatives(self, vsd, vsq, vso):
-        """Modelo elétrico do PMSM"""
-        we = self.p * self.wm  # Velocidade elétrica
-        
-        # Equações diferenciais
-        dervisd = (vsd - self.rs * self.isd + we * self.lq * self.isq) / self.ld
-        dervisq = (vsq - self.rs * self.isq - we * (self.ld * self.isd + self.lambda_m)) / self.lq
-        derviso = (vso - self.rs * self.iso) / (0.1 * (self.ld + self.lq)/2)
-        
-        return dervisd, dervisq, derviso
-
-    def update_currents(self, dervisd, dervisq, derviso):
-        """Atualiza correntes e fluxos"""
-        # Limitar derivadas para estabilidade numérica
-        dervisd = np.clip(dervisd, -1e6, 1e6)
-        dervisq = np.clip(dervisq, -1e6, 1e6)
-        
-        self.isd += dervisd * self.h
-        self.isq += dervisq * self.h
-        self.iso += derviso * self.h
-        
-        # Limitar correntes fisicamente
-        max_current = 220 * np.sqrt(2)  # 220A RMS -> 311A pico
-        current_magnitude = np.sqrt(self.isd**2 + self.isq**2)
-        
-        if current_magnitude > max_current:
-            scaling = max_current / current_magnitude
-            self.isd *= scaling
-            self.isq *= scaling
-        
-        # Atualizar fluxos
-        self.flux_d = self.ld * self.isd + self.lambda_m
-        self.flux_q = self.lq * self.isq
-        flux_o = 0.1 * (self.ld + self.lq)/2 * self.iso
-        
-        return flux_o
-
-    def calculate_electromagnetic_torque(self):
-        """Calcula torque eletromagnético"""
-        self.ce = 1.5 * self.p * (self.lambda_m * self.isq)
-        return self.ce
-
-    def mechanical_dynamics(self):
-        """Modelo mecânico"""
-        # Atualizar velocidade
-        dwm = (self.ce - self.cl - self.kf * self.wm) / self.jm
-        self.wm += dwm * self.h
-        
-        # Atualizar posição
-        self.theta_m += self.wm * self.h
-        self.theta_e = self.p * self.theta_m  # Atualizar ângulo elétrico
-        
-        # Torque mecânico
-        cm = self.ce - self.cl
-        return cm
-
-    def thermal_model(self):
-        """Modelo térmico simplificado"""
-        try:
-            # Corrente RMS por fase
-            i_rms = np.sqrt(self.isd**2 + self.isq**2) / np.sqrt(2)
-            
-            # Perdas no cobre (3 fases)
-            copper_losses = 3 * self.rs * i_rms**2
-            
-            # Variação de temperatura
-            dT = (copper_losses * self.h) / (self.m * self.C)
-            self.temp += dT
-            
-            # Limitar temperatura entre 20°C e 120°C
-            self.temp = np.clip(self.temp, 20, 520)
-        except:
-            # Manter último valor válido em caso de erro
-            pass
-        
-        return self.temp
-
-    def load_torque(self):
-        """Perfil de torque de carga"""
-        if self.t < 0.5:
-            self.cl = 0
-        elif self.t < 1.0:
-            self.cl = 100  # 100 Nm
-        else:
-            self.cl = 250  # 250 Nm (nominal)
-
-    def abc_currents(self, flux_o):
-        """Transformação dq0 -> abc"""
-        # Correntes
-        is1 = self.rq23 * (self.isd * np.cos(self.theta_e) - self.isq * np.sin(self.theta_e))
-        is2 = self.rq23 * (self.isd * np.cos(self.theta_e - self.pi23) - self.isq * np.sin(self.theta_e - self.pi23))
-        is3 = self.rq23 * (self.isd * np.cos(self.theta_e + self.pi23) - self.isq * np.sin(self.theta_e + self.pi23))
-        
-        # Fluxos (apenas para registro)
-        fs1 = self.rq23 * self.flux_d
-        fs2 = self.rq23 * self.flux_d
-        fs3 = self.rq23 * self.flux_d
-        
+    def abc_currents_from_dq(self, isd, isq, theta_e, flux_d):
+        is1 = self.rq23 * (isd * np.cos(theta_e) - isq * np.sin(theta_e))
+        is2 = self.rq23 * (isd * np.cos(theta_e - self.pi23) - isq * np.sin(theta_e - self.pi23))
+        is3 = self.rq23 * (isd * np.cos(theta_e + self.pi23) - isq * np.sin(theta_e + self.pi23))
+        fs1 = self.rq23 * flux_d
+        fs2 = self.rq23 * flux_d
+        fs3 = self.rq23 * flux_d
         return is1, is2, is3, fs1, fs2, fs3
 
-    def outputs(self, is1, is2, is3, fs1, fs2, fs3, flux_o, cm, vso, vsd, vsq):
-        """Armazena dados para plotagem"""
-        self.tempo.append(self.t)
-        self.corrented.append(self.isd)
-        self.correnteq.append(self.isq)
-        self.corrente1.append(is1)
-        self.corrente2.append(is2)
-        self.corrente3.append(is3)
-        self.tensao1.append(vso)
-        self.tensao2.append(vsd)
-        self.tensao3.append(vsq)
-        self.fluxosd.append(self.flux_d)
-        self.fluxosq.append(self.flux_q)
-        self.conjugado.append(self.ce)
-        self.velocidade.append(self.wm)
-        self.torque_mecanico.append(cm)
-        self.conjcarga.append(self.cl)
-        self.temperatura.append(self.temp)
+    def edos(self, t, x):
+        isd, isq, iso, wm, theta_m, temp, int_id, int_iq, int_speed = x
+        theta_e = self.p * theta_m
+        we = self.p * wm
 
-    def simulate(self):
-        """Loop principal de simulação"""
-        while self.t < self.tmax:
-            self.t += self.h
-            
-            # 1. Atualizar torque de carga
-            self.load_torque()
-            
-            # 2. Executar controle FOC
-            vd, vq = self.field_oriented_control()
-            vs1, vs2, vs3, vso = self.inverse_park_transform(vd, vq)
-            
-            # 3. Modelo elétrico
-            dervisd, dervisq, derviso = self.calculate_derivatives(vd, vq, vso)
-            flux_o = self.update_currents(dervisd, dervisq, derviso)
-            self.calculate_electromagnetic_torque()
-            
-            # 4. Modelo mecânico
-            cm = self.mechanical_dynamics()
-            
-            # 5. Modelo térmico
-            self.thermal_model()
-            
-            # 6. Transformar para ABC
-            is1, is2, is3, fs1, fs2, fs3 = self.abc_currents(flux_o)
-            
-            # 7. Armazenar dados para plotagem
-            if self.t >= self.tp:
-                self.tp += self.hp
-                self.outputs(is1, is2, is3, fs1, fs2, fs3, flux_o, cm, vso, vd, vq)
+        cl = self.set_load(t)
 
-    def plot_results(self):
-        """Plotagem abrangente dos resultados"""
-        plt.figure(figsize=(15, 20))
-        
-        # Velocidade e torque
-        plt.subplot(5, 2, 1)
-        plt.plot(self.tempo, self.velocidade, 'b-', linewidth=2)
-        plt.title('Velocidade Mecânica')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Velocidade (rad/s)')
-        plt.grid(True)
-        
-        plt.subplot(5, 2, 2)
-        plt.plot(self.tempo, self.conjugado, 'r-', label='Torque Elétrico')
-        plt.plot(self.tempo, self.conjcarga, 'g--', label='Torque de Carga')
-        plt.title('Torque do Motor')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Torque (Nm)')
-        plt.legend()
-        plt.grid(True)
-        
-        # Correntes
-        plt.subplot(5, 2, 3)
-        plt.plot(self.tempo, self.corrented, 'b-', label='Id')
-        plt.plot(self.tempo, self.correnteq, 'r-', label='Iq')
-        plt.title('Correntes dq')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Corrente (A)')
-        plt.legend()
-        plt.grid(True)
-        
-        plt.subplot(5, 2, 4)
-        plt.plot(self.tempo, self.corrente1, 'b-', label='Fase 1')
-        plt.plot(self.tempo, self.corrente2, 'r-', label='Fase 2')
-        plt.plot(self.tempo, self.corrente3, 'g-', label='Fase 3')
-        plt.title('Correntes de Fase')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Corrente (A)')
-        plt.legend()
-        plt.grid(True)
-        
-        # Tensões
-        '''plt.subplot(5, 2, 5)
-        plt.plot(self.tempo, self.tensaosd, 'b-', label='Vd')
-        plt.plot(self.tempo, self.tensaosq, 'r-', label='Vq')
-        plt.title('Tensões de Controle dq')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Tensão (V)')
-        plt.legend()
-        plt.grid(True)'''
-        
-        plt.subplot(5, 2, 6)
-        plt.plot(self.tempo, self.tensao1, 'b-', label='Fase 1')
-        plt.plot(self.tempo, self.tensao2, 'r-', label='Fase 2')
-        plt.plot(self.tempo, self.tensao3, 'g-', label='Fase 3')
-        plt.title('Tensões de Fase')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Tensão (V)')
-        plt.legend()
-        plt.grid(True)
-        
-        # Fluxos
-        plt.subplot(5, 2, 7)
-        plt.plot(self.tempo, self.fluxosd, 'b-', label='Fluxo d')
-        plt.plot(self.tempo, self.fluxosq, 'r-', label='Fluxo q')
-        plt.title('Fluxos Magnéticos')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Fluxo (Wb)')
-        plt.legend()
-        plt.grid(True)
-        
-        # Temperatura
-        plt.subplot(5, 2, 8)
-        plt.plot(self.tempo, self.temperatura, 'm-')
-        plt.title('Temperatura do Motor')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Temperatura (°C)')
-        plt.grid(True)
-        
-        # Sinal de controle
-        '''plt.subplot(5, 2, 9)
-        plt.plot(self.tempo, self.vd_control, 'b-', label='Vd control')
-        plt.plot(self.tempo, self.vq_control, 'r-', label='Vq control')
-        plt.title('Sinais de Controle FOC')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Tensão (V)')
-        plt.legend()
-        plt.grid(True)'''
-        
-        # Erro de velocidade
-        '''plt.subplot(5, 2, 10)
-        plt.plot(self.tempo, self.speed_error, 'k-')
-        plt.title('Erro de Velocidade')
-        plt.xlabel('Tempo (s)')
-        plt.ylabel('Erro (rad/s)')
-        plt.grid(True)'''
-        
-        plt.tight_layout()
-        plt.show()
+        speed_error = self.speed_ref - wm
+        torque_ref_unsat = self.speed_controller.kp * speed_error + self.speed_controller.ki * int_speed
+        int_speed_dot = speed_error
+        torque_ref = torque_ref_unsat
 
-# Configuração e execução da simulação
-def simulate_emrax268():
-    motor = Motor(
-        rs=0.04585,       # 45.85 mΩ
-        ld=0.00067,       # 670 µH
-        lq=0.00067,       # 670 µH
-        jm=0.05769,       # 0.05769 kg·m²
-        kf=0.1,           # Coeficiente de atrito estimado
-        lambda_m=0.13849, # Fluxo do ímã permanente
-        p=10,             # 10 pares de polos
-        valor_mu=0.9      # Fator de modulação
+        denom = (1.5 * self.p * self.lambda_m)
+        iq_ref = torque_ref / denom if denom != 0 else 0.0
+        id_ref = 0.0
+        if abs(iq_ref) > self.max_current:
+            iq_ref = np.sign(iq_ref) * self.max_current
+
+        error_d = id_ref - isd
+        error_q = iq_ref - isq
+
+        vd_unclamped = self.id_controller.kp * error_d + self.id_controller.ki * int_id + (- we * self.lq * isq)
+        vq_unclamped = self.iq_controller.kp * error_q + self.iq_controller.ki * int_iq + ( we * (self.ld * isd + self.lambda_m) )
+
+        vd = np.clip(vd_unclamped, -self.Vlimit, self.Vlimit)
+        vq = np.clip(vq_unclamped, -self.Vlimit, self.Vlimit)
+
+        int_id_dot = 0.0 if abs(vd_unclamped) > self.Vlimit else error_d
+        int_iq_dot = 0.0 if abs(vq_unclamped) > self.Vlimit else error_q
+
+        d_isd = (vd - self.rs * isd + we * self.lq * isq) / self.ld
+        d_isq = (vq - self.rs * isq - we * (self.ld * isd + self.lambda_m)) / self.lq
+        L0 = 0.1 * (self.ld + self.lq) / 2.0
+        d_iso = (0.0 - self.rs * iso) / L0
+
+        ce = 1.5 * self.p * (self.lambda_m * isq)
+        d_wm = (ce - cl - self.kf * wm) / self.jm
+        d_theta_m = wm
+
+        i_rms = np.sqrt(isd**2 + isq**2) / np.sqrt(2)
+        copper_losses = 3.0 * self.rs * (i_rms**2)
+        d_temp = copper_losses / (self.m * self.C)
+
+        if abs(iq_ref) >= self.max_current and np.sign(int_speed) == np.sign(speed_error):
+            int_speed_dot = 0.0
+
+        dxdt = np.array([
+            d_isd, d_isq, d_iso,
+            d_wm, d_theta_m, d_temp,
+            int_id_dot, int_iq_dot, int_speed_dot
+        ], dtype=float)
+
+        return dxdt
+
+    def simulate(self, t0=0.0, tf=None):
+        if tf is None:
+            tf = self.tmax
+        t_eval = np.arange(t0, tf + self.hp, self.hp)
+
+        x0 = np.array([
+            self.isd0, self.isq0, self.iso0,
+            self.wm0, self.theta_m0, self.temp0,
+            self.int_id0, self.int_iq0, self.int_speed0
+        ], dtype=float)
+
+        sol = solve_ivp(fun=self.edos, t_span=(t0, tf), y0=x0, method='RK45', t_eval=t_eval, vectorized=False, atol=1e-6, rtol=1e-6)
+
+        self.initialize_storage()
+
+        self.id_controller.reset()
+        self.iq_controller.reset()
+        self.speed_controller.reset()
+
+        dt = self.hp
+        for idx, t in enumerate(sol.t):
+            isd = sol.y[0, idx]
+            isq = sol.y[1, idx]
+            iso = sol.y[2, idx]
+            wm = sol.y[3, idx]
+            theta_m = sol.y[4, idx]
+            temp = sol.y[5, idx]
+            int_id = sol.y[6, idx]
+            int_iq = sol.y[7, idx]
+            int_speed = sol.y[8, idx]
+
+            theta_e = self.p * theta_m
+            we = self.p * wm
+
+            vd_control, vq_control, id_ref, iq_ref, speed_error = self.field_oriented_control(isd, isq, wm, dt)
+
+            flux_d = self.ld * isd + self.lambda_m
+            flux_q = self.lq * isq
+            flux_o = 0.1 * (self.ld + self.lq) / 2.0 * iso
+
+            ce = 1.5 * self.p * (self.lambda_m * isq)
+
+            cl = self.set_load(t)
+            cm = ce - cl
+
+            vs1, vs2, vs3, v0 = self.inverse_park_transform(vd_control, vq_control, theta_e)
+
+            is1, is2, is3, fs1, fs2, fs3 = self.abc_currents_from_dq(isd, isq, theta_e, flux_d)
+
+            self.tempo.append(t)
+            self.corrented.append(isd)
+            self.correnteq.append(isq)
+            self.corrente1.append(is1)
+            self.corrente2.append(is2)
+            self.corrente3.append(is3)
+            self.tensaosd.append(vd_control)
+            self.tensaosq.append(vq_control)
+            self.tensao1.append(is1 * self.rs)
+            self.tensao2.append(is2 * self.rs)
+            self.tensao3.append(is3 * self.rs)
+            self.fluxosd.append(flux_d)
+            self.fluxosq.append(flux_q)
+            self.conjugado.append(ce)
+            #self.velocidade.append(wm)
+            self.velocidade.append(wm * 60 / (2 * np.pi))  # Convert rad/s to RPM
+            self.torque_mecanico.append(cm)
+            self.conjcarga.append(cl)
+            self.temperatura.append(temp)
+            self.vd_control.append(vd_control)
+            self.vq_control.append(vq_control)
+            self.speed_error.append(speed_error)
+            self.iq_ref_trace.append(iq_ref)
+            self.id_ref_trace.append(id_ref)
+
+# Criar instância do motor e simular
+motor = Motor(
+    rs=0.04585,
+    ld=0.00067,
+    lq=0.00067,
+    jm=0.05769,
+    kf=0.1,
+    lambda_m=0.13849,
+    p=10,
+    valor_mu=0.95,
+    TL=False,
+    torque=0.0
+)
+
+motor.speed_ref = 471.23
+motor.simulate()
+
+# Criar aplicação Dash
+external_stylesheets = [
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+    'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap',
+    'https://codepen.io/chriddyp/pen/bWLwgP.css'
+]
+
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server
+
+# Layout da aplicação
+app.layout = html.Div([
+    html.Div([
+        html.H1("Sistema de Controle FOC para Motor PMSM", 
+                style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '30px'}),
+        
+        html.Div([
+            html.Button([
+                html.I(className="fas fa-tachometer-alt", style={'marginRight': '8px'}),
+                "Velocidade e Torque"
+            ], id='btn-velocity-torque', className='btn btn-primary'),
+            
+            html.Button([
+                html.I(className="fas fa-bolt", style={'marginRight': '8px'}),
+                "Correntes"
+            ], id='btn-currents', className='btn btn-success'),
+            
+            html.Button([
+                html.I(className="fas fa-plug", style={'marginRight': '8px'}),
+                "Tensões"
+            ], id='btn-voltages', className='btn btn-warning'),
+            
+            html.Button([
+                html.I(className="fas fa-magnet", style={'marginRight': '8px'}),
+                "Fluxos e Temperatura"
+            ], id='btn-flux-temp', className='btn btn-info'),
+            
+            html.Button([
+                html.I(className="fas fa-sliders-h", style={'marginRight': '8px'}),
+                "Sinais de Controle"
+            ], id='btn-control', className='btn btn-secondary'),
+            
+            html.Button([
+                html.I(className="fas fa-chart-bar", style={'marginRight': '8px'}),
+                "Visão Completa"
+            ], id='btn-complete', className='btn btn-dark'),
+        ], style={'textAlign': 'center', 'marginBottom': '30px', 'display': 'flex', 
+                 'justifyContent': 'center', 'flexWrap': 'wrap', 'gap': '10px'}),
+        
+        dcc.Graph(id='motor-graph', style={'height': '70vh', 'borderRadius': '8px', 
+                                          'boxShadow': '0 4px 6px rgba(0,0,0,0.1)'}),
+        
+        dcc.Store(id='simulation-data')  # Para armazenar os dados da simulação
+    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'minHeight': '100vh'})
+])
+
+# Funções para criar os gráficos (mantidas como antes)
+def create_velocity_torque_plot(motor):
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Velocidade Mecânica", "Torque do Motor"),
+        vertical_spacing=0.1
     )
     
-    # Configurar referências
-    motor.speed_ref = 600  # Velocidade desejada (rad/s mecânico) ~ 2865 RPM
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.velocidade, name='Velocidade', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjugado, name='Torque Elétrico', 
+                            line=dict(color='#e74c3c')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjcarga, name='Torque de Carga', 
+                            line=dict(dash='dash', color='#7f8c8d')), row=2, col=1)
     
-    # Executar simulação
-    motor.simulate()
-    motor.plot_results()
+    fig.update_layout(height=700, title_text="Velocidade e Torque", 
+                     template="plotly_white", showlegend=True)
+    fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
+    fig.update_yaxes(title_text="Velocidade (RPM)", row=1, col=1)
+    fig.update_yaxes(title_text="Torque (Nm)", row=2, col=1)
+    
+    return fig
 
-if __name__ == "__main__":
-    simulate_emrax268()
+def create_currents_plot(motor):
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Correntes dq", "Correntes de Fase"),
+        vertical_spacing=0.1
+    )
+    
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrented, name='Id', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.correnteq, name='Iq', 
+                            line=dict(color='#e74c3c')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente1, name='Fase 1', 
+                            line=dict(color='#3498db')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente2, name='Fase 2', 
+                            line=dict(color='#e74c3c')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente3, name='Fase 3', 
+                            line=dict(color='#2ecc71')), row=2, col=1)
+    
+    fig.update_layout(height=700, title_text="Correntes", 
+                     template="plotly_white", showlegend=True)
+    fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
+    fig.update_yaxes(title_text="Corrente (A)", row=1, col=1)
+    fig.update_yaxes(title_text="Corrente (A)", row=2, col=1)
+    
+    return fig
+
+def create_voltages_plot(motor):
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Tensões de Controle dq", "Tensões de Fase"),
+        vertical_spacing=0.1
+    )
+    
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosd, name='Vd', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosq, name='Vq', 
+                            line=dict(color='#e74c3c')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao1, name='Fase 1', 
+                            line=dict(color='#3498db')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao2, name='Fase 2', 
+                            line=dict(color='#e74c3c')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao3, name='Fase 3', 
+                            line=dict(color='#2ecc71')), row=2, col=1)
+    
+    fig.update_layout(height=700, title_text="Tensões", 
+                     template="plotly_white", showlegend=True)
+    fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
+    fig.update_yaxes(title_text="Tensão (V)", row=1, col=1)
+    fig.update_yaxes(title_text="Tensão (V)", row=2, col=1)
+    
+    return fig
+
+def create_flux_temp_plot(motor):
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Fluxos Magnéticos", "Temperatura do Motor"),
+        vertical_spacing=0.1
+    )
+    
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.fluxosd, name='Fluxo d', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.fluxosq, name='Fluxo q', 
+                            line=dict(color='#e74c3c')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.temperatura, name='Temperatura', 
+                            line=dict(color='#f39c12')), row=2, col=1)
+    
+    fig.update_layout(height=700, title_text="Fluxos e Temperatura", 
+                     template="plotly_white", showlegend=True)
+    fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
+    fig.update_yaxes(title_text="Fluxo (Wb)", row=1, col=1)
+    fig.update_yaxes(title_text="Temperatura (°C)", row=2, col=1)
+    
+    return fig
+
+def create_control_plot(motor):
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Sinais de Controle FOC", "Erro de Velocidade"),
+        vertical_spacing=0.1
+    )
+    
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vd_control, name='Vd control', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vq_control, name='Vq control', 
+                            line=dict(color='#e74c3c')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.speed_error, name='Erro de Velocidade', 
+                            line=dict(color='#9b59b6')), row=2, col=1)
+    
+    fig.update_layout(height=700, title_text="Sinais de Controle", 
+                     template="plotly_white", showlegend=True)
+    fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
+    fig.update_yaxes(title_text="Tensão (V)", row=1, col=1)
+    fig.update_yaxes(title_text="Erro (rad/s)", row=2, col=1)
+    
+    return fig
+
+def create_complete_plot(motor):
+    fig = make_subplots(
+        rows=3, cols=2,
+        subplot_titles=(
+            "Velocidade Mecânica",
+            "Torque do Motor",
+            "Correntes dq",
+            "Correntes de Fase",
+            "Tensões de Controle dq",
+            "Tensões de Fase"
+        ),
+        vertical_spacing=0.08,
+        horizontal_spacing=0.1
+    )
+
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.velocidade, name='Velocidade', 
+                            line=dict(color='#3498db')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjugado, name='Torque Elétrico', 
+                            line=dict(color='#e74c3c')), row=1, col=2)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjcarga, name='Torque de Carga', 
+                            line=dict(dash='dash', color='#7f8c8d')), row=1, col=2)
+
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrented, name='Id', 
+                            line=dict(color='#3498db')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.correnteq, name='Iq', 
+                            line=dict(color='#e74c3c')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente1, name='Fase 1', 
+                            line=dict(color='#3498db')), row=2, col=2)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente2, name='Fase 2', 
+                            line=dict(color='#e74c3c')), row=2, col=2)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente3, name='Fase 3', 
+                            line=dict(color='#2ecc71')), row=2, col=2)
+
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosd, name='Vd', 
+                            line=dict(color='#3498db')), row=3, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosq, name='Vq', 
+                            line=dict(color='#e74c3c')), row=3, col=1)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao1, name='Fase 1', 
+                            line=dict(color='#3498db')), row=3, col=2)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao2, name='Fase 2', 
+                            line=dict(color='#e74c3c')), row=3, col=2)
+    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao3, name='Fase 3', 
+                            line=dict(color='#2ecc71')), row=3, col=2)
+
+    fig.update_layout(height=900, title_text="Visão Completa da Simulação", 
+                     template="plotly_white", hovermode="x unified", showlegend=False)
+    fig.update_xaxes(title_text="Tempo (s)", row=3, col=1)
+    fig.update_xaxes(title_text="Tempo (s)", row=3, col=2)
+    fig.update_yaxes(title_text="Velocidade (RPM)", row=1, col=1)
+    fig.update_yaxes(title_text="Torque (Nm)", row=1, col=2)
+    fig.update_yaxes(title_text="Corrente (A)", row=2, col=1)
+    fig.update_yaxes(title_text="Corrente (A)", row=2, col=2)
+    fig.update_yaxes(title_text="Tensão (V)", row=3, col=1)
+    fig.update_yaxes(title_text="Tensão (V)", row=3, col=2)
+    
+    return fig
+
+# Callback para executar a simulação e atualizar o gráfico
+@app.callback(
+    [Output('motor-graph', 'figure'),
+     Output('simulation-data', 'data')],
+    [Input('btn-velocity-torque', 'n_clicks'),
+     Input('btn-currents', 'n_clicks'),
+     Input('btn-voltages', 'n_clicks'),
+     Input('btn-flux-temp', 'n_clicks'),
+     Input('btn-control', 'n_clicks'),
+     Input('btn-complete', 'n_clicks')]
+)
+def update_graph(btn_velocity, btn_currents, btn_voltages, btn_flux, btn_control, btn_complete):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        # Executar simulação inicial
+        motor = Motor(
+            rs=0.04585,
+            ld=0.00067,
+            lq=0.00067,
+            jm=0.05769,
+            kf=0.1,
+            lambda_m=0.13849,
+            p=10,
+            valor_mu=0.95,
+            TL=False,
+            torque=0.0
+        )
+        motor.speed_ref = 471.23
+        motor.simulate()
+        
+        # Converter dados para JSON (apenas para demonstração)
+        data = {
+            'tempo': motor.tempo,
+            'velocidade': motor.velocidade,
+            'conjugado': motor.conjugado,
+            # Adicione outras variáveis conforme necessário
+        }
+        
+        return create_velocity_torque_plot(motor), data
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Executar simulação (ou usar dados armazenados)
+    motor = Motor(
+        rs=0.04585,
+        ld=0.00067,
+        lq=0.00067,
+        jm=0.05769,
+        kf=0.1,
+        lambda_m=0.13849,
+        p=10,
+        valor_mu=0.95,
+        TL=False,
+        torque=0.0
+    )
+    motor.speed_ref = 471.23
+    motor.simulate()
+    
+    # Converter dados para JSON (apenas para demonstração)
+    data = {
+        'tempo': motor.tempo,
+        'velocidade': motor.velocidade,
+        'conjugado': motor.conjugado,
+        # Adicione outras variáveis conforme necessário
+    }
+    
+    if button_id == 'btn-velocity-torque':
+        return create_velocity_torque_plot(motor), data
+    elif button_id == 'btn-currents':
+        return create_currents_plot(motor), data
+    elif button_id == 'btn-voltages':
+        return create_voltages_plot(motor), data
+    elif button_id == 'btn-flux-temp':
+        return create_flux_temp_plot(motor), data
+    elif button_id == 'btn-control':
+        return create_control_plot(motor), data
+    elif button_id == 'btn-complete':
+        return create_complete_plot(motor), data
+
+if __name__ == '__main__':
+    app.run(debug=True)
