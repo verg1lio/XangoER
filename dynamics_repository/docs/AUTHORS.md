@@ -1,6 +1,6 @@
 # Autores do projeto
 
-Abaixo está uma lista com os autores do código do [Digitaltwin](README.md) de dinâmica e suas participações
+Abaixo está uma lista com os autores do código do [Digitaltwin](dynamics_repository/README.md) de dinâmica e suas participações
 
 ## Subsistema de Freio
 
