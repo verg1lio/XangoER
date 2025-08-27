@@ -1,98 +1,62 @@
-"""
-Simulação de desempenho de um veículo Fórmula SAE elétrico -
-
-Autor: Marco Affonso e Igor Maia 
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
+import pygad  # Importa a biblioteca do Algoritmo Genético
+import sys    # Usado para criar a barra de progresso
 from pwt import Motor               
 from tire import Tire
 
 class Drivetrain:
-
     def __init__(self, massa, massa_roda,
                  raio_pneu, i, tempo_i,
                  tire_friction_coef, tire_Fz):
-
-        # geometric / mass
+        
         self.massa = massa
         self.massa_roda = massa_roda
         self.raio_pneu = raio_pneu
-
-        # transmissão
-        self.i = 14.9
-        
-        # tempo
+        self.i = i
         self.tempo_i = tempo_i
-
-        # pneus
         self.tire_friction_coef = tire_friction_coef
         self.tire_Fz = tire_Fz
 
-        # motor 
         self.motor = Motor(
-            rs=0.04585,
-            ld=0.00067,
-            lq=0.00067,
-            jm=0.05769,
-            kf=0.1,
-            lambda_m=0.13849,
-            p=10,
-            valor_mu=0.9
+            rs=0.04585, ld=0.00067, lq=0.00067, jm=0.05769,
+            kf=0.1, lambda_m=0.13849, p=10, valor_mu=0.9
         )
-
-        # instância base do pneu (será atualizada a cada passo com Ls e Fz)
         self.tire = Tire(
-            tire_Fz=850,
-            tire_Sa=0,
-            tire_Ls=1,  # inicial, atualizado em loop
-            tire_friction_coef=self.tire_friction_coef,
-            tire_Ca=0
+            tire_Fz=850, tire_Sa=0, tire_Ls=1,
+            tire_friction_coef=self.tire_friction_coef, tire_Ca=0
         )
 
     def CarPerformanceDistancia(self, distancia_final=75.0):
-        """
-        Roda a simulação até o veículo percorrer 'distancia_final' [m].
-        Retorna: performance (lista de dicts), vetor de tempo (numpy array), tempo_final
-        """
-
         # --- parâmetros fixos / físicos ---
         peso = self.massa * 9.81
         coeficiente_arrasto = 0.54
         densidade_ar = 1.162
         area_frontal = 1.06
-
-        # raio em metros
         raio = self.raio_pneu * 0.001
         c_r = 0.012
         b = 0.01
         eficiencia_transmissao = 0.95
-
         num_roda_motriz = 2
         num_rodas = 4
         Fz_por_roda = self.tire_Fz if self.tire_Fz is not None else (peso / num_rodas)
-
         pacejka_params = [0.333, 1.627, 1, 4.396, 931.4, 366.4]
-
-        # integração explícita Euler 
+        
         dt = 0.001
         tempo = self.tempo_i
-
-        # estados iniciais
         v_linear_ms = 0.0
         omega_roda = 0.0
-        deslocamento = 0.0   # posição [m]
-
-        # A inércia do motor (jm) é refletida no eixo da roda ao quadrado da relação de transmissão total (i_total)
+        deslocamento = 0.0
+        
         inercia_motor_refletida = self.motor.jm * (self.i**2)
-
-        # A inércia rotacional efetiva por roda é a da roda em si mais a do motor dividida pelo número de rodas motrizes
         Jt = (0.5 * self.massa_roda * raio**2) + (inercia_motor_refletida / num_roda_motriz)
 
         eps_v = 1e-3
         performance = []
 
+        # Loop de segurança para evitar simulações infinitas
+        max_time = 20 # segundos
+        
         while deslocamento < distancia_final:
             
 
@@ -153,7 +117,6 @@ class Drivetrain:
 
         return performance, np.array([p["tempo"] for p in performance]), tempo
 
-    # ------------------------------------------------------------------------
     def printCarPerformance(self, performance):
         """
         Gera gráficos de desempenho do veículo com base no histórico do motor
@@ -249,50 +212,102 @@ class Drivetrain:
         plt.tight_layout()
         plt.show()
 
+# ==============================================================================
+# INÍCIO DA IMPLEMENTAÇÃO DO ALGORITMO GENÉTICO
+# ==============================================================================
 
-# ---------------------------------------------------------------------------
-def Instancias():
-    """
-    Cria instâncias do veículo e pneu e executa a simulação completa até 75 m.
-    """
-
-    # Modelo do veículo - parâmetros originais mantidos
+# 1. FUNÇÃO DE APTIDÃO (FITNESS)
+# Esta função recebe uma solução (relação de transmissão) e retorna um valor
+# de aptidão. Queremos MINIMIZAR o tempo, então a aptidão será 1/tempo.
+def fitness_func(ga_instance, solution, solution_idx):
+    # Extrai a relação de transmissão da solução
+    transmission_ratio = solution[0]
+    
+    # Cria uma instância do Drivetrain com a relação de transmissão atual
     dt_model = Drivetrain(
-     
-        massa=347,                  # Massa do veículo [kg]
-        massa_roda=6,               # Massa da Roda [kg]
-        raio_pneu=220,              # Raio do pneu [mm]
-        i=5,                     # Redução total
-        tempo_i=0,                  # Tempo inicial de simulação (s)
-        tire_friction_coef=1.45,    # Coeficiente de fricção 
-        tire_Fz=850                 # Carga vertical no pneu [N]
+        massa=347, massa_roda=6, raio_pneu=220,
+        i=transmission_ratio,  # Relação sendo testada pelo AG
+        tempo_i=0, tire_friction_coef=1.45, tire_Fz=850
     )
+    
+    # Roda a simulação
+    _, _, final_time = dt_model.CarPerformanceDistancia(distancia_final=75)
+    
+    # Calcula a aptidão. Adicionamos um valor pequeno ao denominador para evitar divisão por zero.
+    fitness = 1.0 / (final_time + 1e-6)
+    
+    return fitness
 
-    # Simulação de desempenho até 75 m
-    performance_veiculo, variacao_tempo, tempo_final = dt_model.CarPerformanceDistancia(distancia_final=75)
-    dt_model.printCarPerformance(performance_veiculo)
+# 2. FUNÇÃO DE CALLBACK PARA MOSTRAR O PROGRESSO
+# Esta função será chamada ao final de cada geração.
+def on_generation_callback(ga_instance):
+    generation = ga_instance.generations_completed
+    total_generations = ga_instance.num_generations
+    progress = (generation / total_generations) * 100
+    
+    # Cria uma barra de progresso simples
+    bar_length = 50
+    filled_length = int(bar_length * generation // total_generations)
+    bar = '█' * filled_length + '-' * (bar_length - filled_length)
+    
+    # Escreve na mesma linha para atualizar a barra
+    sys.stdout.write(f'\rProgresso da Otimização: |{bar}| {progress:.1f}% Concluído')
+    sys.stdout.flush()
 
-    # Opcional: calcular slip ratio final e forças para plot separado (vetorizado)
-    velocidade_angular = np.array([dado["va"] for dado in performance_veiculo])
-    velocidade_linear = np.array([dado["vlm"] for dado in performance_veiculo])
-    slip_ratio = Tire.SlipRatio(velocidade_angular, dt_model.raio_pneu * 0.001, velocidade_linear)
-
-    # Modelo do pneu para o vetor slip_ratio (apenas para gráficos)
-    tire = Tire(
-        tire_Fz=850,
-        tire_Sa=0,
-        tire_Ls=slip_ratio,
-        tire_friction_coef=1.45,
-        tire_Ca=0
-    )
-    result = [0.333, 1.627, 1, 4.396, 931.4, 366.4]
-    _, _, tire_longitudinal_forces = tire.Tire_forces(result)
-
-    # Gráficos de slip ratio (usa função existente da classe Tire)
-    tire.printSlipRatio(variacao_tempo, slip_ratio, tire_longitudinal_forces)
-
-    print(f"Tempo final para percorrer 75 m: {tempo_final:.3f} s")
-
-# ---------------------------------------------------------------------------
+# 3. CONFIGURAÇÃO E EXECUÇÃO DO AG
 if __name__ == "__main__":
-    Instancias()
+    print("--- Otimização da Relação de Transmissão com Algoritmo Genético ---")
+
+    # Parâmetros do Algoritmo Genético
+    num_generations = 200       # Número de gerações (iterações)
+    num_parents_mating = 5     # Número de soluções selecionadas como pais
+    sol_per_pop = 40           # Número de soluções (cromossomos) em cada população
+    num_genes = 1              # Estamos otimizando apenas um parâmetro: a relação de transmissão
+
+    # Define o espaço de busca para a relação de transmissão. Ex: entre 3 e 15.
+    gene_space = [{'low': 3.0, 'high': 15.0}]
+
+    # Criação da instância do AG
+    ga_instance = pygad.GA(
+        num_generations=num_generations,
+        num_parents_mating=num_parents_mating,
+        fitness_func=fitness_func,
+        sol_per_pop=sol_per_pop,
+        num_genes=num_genes,
+        gene_space=gene_space,
+        gene_type=float,          # O gene é um número de ponto flutuante
+        on_generation=on_generation_callback, # Função para mostrar o progresso
+        # Parâmetros de mutação para explorar melhor o espaço de busca
+        mutation_type="random",
+        mutation_percent_genes=100, # Mutacionar o único gene
+        random_mutation_min_val= -1.0, # Variação máxima da mutação
+        random_mutation_max_val= 1.0
+    )
+
+    # Executa o AG
+    ga_instance.run()
+    
+    print("\n\n--- Otimização Concluída! ---")
+
+    # Extrai a melhor solução encontrada
+    solution, solution_fitness, solution_idx = ga_instance.best_solution()
+    best_ratio = solution[0]
+    best_time = 1.0 / solution_fitness
+
+    print(f"Melhor Relação de Transmissão Encontrada: {best_ratio:.3f}")
+    print(f"Tempo Mínimo Estimado para 75m: {best_time:.4f} segundos")
+
+    # Plota o gráfico de evolução da aptidão
+    ga_instance.plot_fitness()
+
+    # Roda e plota a simulação final com a melhor relação encontrada
+    print("\n--- Gerando gráficos para a melhor solução encontrada... ---")
+    
+    best_drivetrain = Drivetrain(
+        massa=347, massa_roda=6, raio_pneu=220,
+        i=best_ratio,
+        tempo_i=0, tire_friction_coef=1.45, tire_Fz=850
+    )
+    
+    performance_final, tempo_vetor, _ = best_drivetrain.CarPerformanceDistancia(distancia_final=75)
+    best_drivetrain.printCarPerformance(performance_final)
