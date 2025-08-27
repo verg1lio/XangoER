@@ -1,6 +1,7 @@
 """
 Simulação de desempenho de um veículo Fórmula SAE elétrico -
-Autor: Marco Affonso e Igor Maia
+
+Autor: Marco Affonso e Igor Maia 
 """
 
 import numpy as np
@@ -10,32 +11,26 @@ from tire import Tire
 
 class Drivetrain:
 
-    def __init__(self, cgx, cgy, massa, massa_roda, entre_eixos,
-                 raio_pneu, reducao_primaria, reducao_final, tempo_i,
+    def __init__(self, massa, massa_roda,
+                 raio_pneu, i, tempo_i,
                  tire_friction_coef, tire_Fz):
 
         # geometric / mass
-        self.cgx = cgx
-        self.cgy = cgy
         self.massa = massa
         self.massa_roda = massa_roda
-        self.entre_eixos = entre_eixos
-        # raio em mm na entrada — guardo valor original e valor em m quando necessário
         self.raio_pneu = raio_pneu
 
         # transmissão
-        self.reducao_primaria = reducao_primaria
-        self.reducao_final = reducao_final
-
+        self.i = 14.9
+        
         # tempo
         self.tempo_i = tempo_i
-        self.tempo_f = 0
 
         # pneus
         self.tire_friction_coef = tire_friction_coef
         self.tire_Fz = tire_Fz
 
-        # motor (mantive os mesmos parâmetros do seu código original)
+        # motor 
         self.motor = Motor(
             rs=0.04585,
             ld=0.00067,
@@ -49,17 +44,17 @@ class Drivetrain:
 
         # instância base do pneu (será atualizada a cada passo com Ls e Fz)
         self.tire = Tire(
-            tire_Fz=self.tire_Fz,
+            tire_Fz=850,
             tire_Sa=0,
             tire_Ls=1,  # inicial, atualizado em loop
             tire_friction_coef=self.tire_friction_coef,
             tire_Ca=0
         )
 
-    def CarPerformance(self):
+    def CarPerformanceDistancia(self, distancia_final=75.0):
         """
-        Roda a simulação usando EDOs acopladas para v(t) e omega_w(t).
-        Retorna: performance (lista de dicts) e vetor de tempo (numpy array)
+        Roda a simulação até o veículo percorrer 'distancia_final' [m].
+        Retorna: performance (lista de dicts), vetor de tempo (numpy array), tempo_final
         """
 
         # --- parâmetros fixos / físicos ---
@@ -67,129 +62,96 @@ class Drivetrain:
         coeficiente_arrasto = 0.54
         densidade_ar = 1.162
         area_frontal = 1.06
-        # converto raio mm -> m
+
+        # raio em metros
         raio = self.raio_pneu * 0.001
         c_r = 0.012
-        b = 0.01                     # coeficiente de atrito/atrito mecânico no rotor (mantido)
+        b = 0.01
         eficiencia_transmissao = 0.95
 
-        # número de rodas motrizes (RWD)
         num_roda_motriz = 2
         num_rodas = 4
-
-        # carga por roda 
         Fz_por_roda = self.tire_Fz if self.tire_Fz is not None else (peso / num_rodas)
 
-        # parâmetros Pacejka placeholder
         pacejka_params = [0.333, 1.627, 1, 4.396, 931.4, 366.4]
-
-        # verificações de tempo
-        if self.tempo_f == 0:
-            raise ValueError("Defina o tempo final: dt_model.tempo_f = <valor>")
 
         # integração explícita Euler 
         dt = 0.001
-        variacao_tempo = np.arange(self.tempo_i, self.tempo_f + dt/2, dt)
+        tempo = self.tempo_i
 
-        # --- estados iniciais ---
-        v_linear_ms = 0.0      # velocidade linear do CM (m/s)  -> estado 1
-        omega_roda = 0.0       # velocidade angular da roda (rad/s) -> estado 2
+        # estados iniciais
+        v_linear_ms = 0.0
+        omega_roda = 0.0
+        deslocamento = 0.0   # posição [m]
 
-        # inércia efetiva de cada roda 
-        Iw = 0.5 * self.massa_roda * raio**2
+        # A inércia do motor (jm) é refletida no eixo da roda ao quadrado da relação de transmissão total (i_total)
+        inercia_motor_refletida = self.motor.jm * (self.i**2)
 
-        # numerics
-        eps_v = 1e-3           # evita divisão por zero em slip ratio
+        # A inércia rotacional efetiva por roda é a da roda em si mais a do motor dividida pelo número de rodas motrizes
+        Jt = (0.5 * self.massa_roda * raio**2) + (inercia_motor_refletida / num_roda_motriz)
+
+        eps_v = 1e-3
         performance = []
 
-        tempo_0_100 = None
+        while deslocamento < distancia_final:
+            
 
-        for tempo in variacao_tempo:
-            # --- cálculo da redução total entre motor e roda ---
-            i_total = self.reducao_primaria * self.reducao_final
-
-            # --- forças resistivas ---
-            forca_rolamento = 4 * c_r * peso
+            # forças resistivas
+            forca_rolamento = c_r * peso
             forca_arrasto = 0.5 * densidade_ar * coeficiente_arrasto * area_frontal * v_linear_ms**2
             forca_resistiva_total = forca_rolamento + forca_arrasto
 
-            # --- slip ratio dinâmico por roda ---
+            # slip ratio
             denom_v = max(v_linear_ms, eps_v)
             slip_ratio_roda = (omega_roda * raio - v_linear_ms) / denom_v
 
-            # --- consulta ao modelo de pneu (força longitudinal por roda) ---
+            # modelo do pneu
             self.tire.tire_Fz = Fz_por_roda
             self.tire.tire_Ls = slip_ratio_roda
-            # suponho que Tire_forces(params) retorna (Fy, Mz, Fx)
             _, _, Fx_roda = self.tire.Tire_forces(pacejka_params)
 
-            # --- torque de carga no motor ---
-            # torque por forças resistivas refletidas ao eixo do motor:
+            # torque de carga no motor
             torque_rr = forca_rolamento * raio
             torque_fa = forca_arrasto * raio
             torque_atr_mec = b * (self.motor.wm) 
             torque_carga = torque_rr + torque_fa + torque_atr_mec
-
-            # torque_carga_motor é o torque no motor que representa a carga externa
-            torque_carga_motor = torque_carga / (i_total * eficiencia_transmissao)
+            torque_carga_motor = torque_carga / (self.i * eficiencia_transmissao)
 
             self.motor.set_load(torque_carga_motor)
-            torque_motor_gerado = self.motor.step(dt)   # Nm no eixo do motor
+            torque_motor_gerado = self.motor.step(dt)
 
-            # torque disponível na superfície da roda 
-            torque_trativo_rodas_total = torque_motor_gerado * i_total * eficiencia_transmissao
-            # torque por roda motriz
+            # torque na roda
+            torque_trativo_rodas_total = torque_motor_gerado * self.i * eficiencia_transmissao
             torque_por_roda = torque_trativo_rodas_total / num_roda_motriz
 
-            # --- EDOs: cálculo das derivadas ---
-            # translacional:
+            # EDOs
             forca_trativa_real = num_roda_motriz * Fx_roda
             dvdt = (forca_trativa_real - forca_resistiva_total) / self.massa
+            domegadt = (torque_por_roda - raio * Fx_roda) / Jt
 
-            # rotacional (por roda): 
-            domegadt = (torque_por_roda - raio * Fx_roda) / Iw
-
-            # integração explícita (Euler)
+            # integração
             v_linear_ms += dvdt * dt
             omega_roda += domegadt * dt
+            deslocamento += v_linear_ms * dt
+            tempo += dt
 
-             # --- Verificação de 0-100 km/h DENTRO DO LOOP ---
-            # 2. Verifica se a velocidade atual passou de 100 E se ainda não salvamos o tempo
-            velocidade_atual_kmh = v_linear_ms * 3.6
-            if velocidade_atual_kmh >= 100.0 and tempo_0_100 is None:
-                tempo_0_100 = tempo # Salva o tempo na primeira vez que acontece
-
-            # armazenar histórico para saída
-            self.motor.store_history(tempo)   # manter histórico do motor (sua função)
+            # salvar histórico
+            self.motor.store_history(tempo)
             performance.append({
                 "tempo": float(tempo),
-                "vlk": float(v_linear_ms * 3.6),     # km/h
-                "vlm": float(v_linear_ms),           # m/s
-                "va": float(omega_roda),             # rad/s
+                "s": float(deslocamento),           # posição acumulada [m]
+                "vlk": float(v_linear_ms * 3.6),    # km/h
+                "vlm": float(v_linear_ms),          # m/s
+                "va": float(omega_roda),            # rad/s
                 "fa": float(forca_arrasto),
                 "rr": float(forca_rolamento),
                 "ff": float(forca_trativa_real),
-                "fp": float(torque_por_roda / raio * num_roda_motriz),  # força trativa potencial aproximada
+                "fp": float(torque_por_roda / raio * num_roda_motriz),
                 "sr": float(slip_ratio_roda),
                 "ft_roda": float(Fx_roda)
             })
-  
-        # --- IMPRESSÃO DO RESULTADO NO FINAL DO MÉTODO ---
-        # 3. Após o loop terminar, imprime o tempo necessário para atingir os 100km/h
-        print("\n" + "="*50)
-        print("ANÁLISE DE DESEMPENHO (0 a 100 km/h)")
-        print("="*50)
 
-        if tempo_0_100 is not None:
-            print(f"Tempo para atingir 100 km/h: {tempo_0_100:.2f} segundos")
-        else:
-            velocidade_maxima = max(p['vlk'] for p in performance) if performance else 0
-            print(f"O veículo não atingiu 100 km/h em {self.tempo_f:.1f} segundos.")
-            print(f"Velocidade máxima alcançada: {velocidade_maxima:.2f} km/h")
-        
-        print("="*50 + "\n")
-        
-        return performance, variacao_tempo
+        return performance, np.array([p["tempo"] for p in performance]), tempo
 
     # ------------------------------------------------------------------------
     def printCarPerformance(self, performance):
@@ -249,20 +211,20 @@ class Drivetrain:
         plt.tight_layout()
         plt.show()
 
-        # Impressões resumidas
+         # Impressões resumidas
         print("Tempo [s]\tVelocidade Angular [rad/s]\tVelocidade Linear [km/h]")
         for i in range(0, len(performance), max(1, len(performance)//10)):
             t = performance[i]["tempo"]
             va = performance[i]["va"]
             vlk = performance[i]["vlk"]
-            print(f"{t:.2f}\t\t\t{va:.2f}\t\t\t{vlk:.2f}")
+            print(f"{t:.2f}\t\t{va:.2f}\t\t{vlk:.2f}")
 
         print("\nForça de Arrasto [N]\tForça Trativa Potencial [N]\tForça Trativa [N]")
         for i in range(0, len(performance), max(1, len(performance)//10)):
             fa = performance[i]["fa"]
             fp = performance[i]["fp"]
             ff = performance[i]["ff"]
-            print(f"{fa:.2f}\t\t\t\t{fp:.2f}\t\t\t\t{ff:.2f}")
+            print(f"{fa:.2f}\t\t{fp:.2f}\t\t{ff:.2f}")
 
         # Plots secundários: velocidade angular e linear x tempo
         tempo = perf_dict["tempo"]
@@ -286,31 +248,28 @@ class Drivetrain:
 
         plt.tight_layout()
         plt.show()
-    
 
+
+# ---------------------------------------------------------------------------
 def Instancias():
     """
-    Cria instâncias do veículo e pneu e executa a simulação completa.
+    Cria instâncias do veículo e pneu e executa a simulação completa até 75 m.
     """
 
     # Modelo do veículo - parâmetros originais mantidos
     dt_model = Drivetrain(
-        cgx=853,                    # Centro de gravidade no eixo X [mm]
-        cgy=294,                    # Centro de gravidade no eixo Y [mm]
+     
         massa=347,                  # Massa do veículo [kg]
         massa_roda=6,               # Massa da Roda [kg]
-        entre_eixos=1567,           # Entre-eixos [mm]
         raio_pneu=220,              # Raio do pneu [mm]
-        reducao_primaria=2.12,      # Redução primária
-        reducao_final=2.76,         # Redução final (diferencial)
+        i=5,                     # Redução total
         tempo_i=0,                  # Tempo inicial de simulação (s)
         tire_friction_coef=1.45,    # Coeficiente de fricção 
         tire_Fz=850                 # Carga vertical no pneu [N]
     )
-    dt_model.tempo_f = 20
 
-    # Simulação de desempenho (agora com EDOs acopladas)
-    performance_veiculo, variacao_tempo = dt_model.CarPerformance()
+    # Simulação de desempenho até 75 m
+    performance_veiculo, variacao_tempo, tempo_final = dt_model.CarPerformanceDistancia(distancia_final=75)
     dt_model.printCarPerformance(performance_veiculo)
 
     # Opcional: calcular slip ratio final e forças para plot separado (vetorizado)
@@ -331,6 +290,8 @@ def Instancias():
 
     # Gráficos de slip ratio (usa função existente da classe Tire)
     tire.printSlipRatio(variacao_tempo, slip_ratio, tire_longitudinal_forces)
+
+    print(f"Tempo final para percorrer 75 m: {tempo_final:.3f} s")
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
