@@ -1,5 +1,3 @@
-#find_new_index + class Estrutura
-
 import numpy as np
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
