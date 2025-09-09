@@ -1,17 +1,862 @@
-#Rework do find new index para nós centrais
+#find_new_index + class Estrutura
 
 import numpy as np
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import traceback
 from scipy.spatial.distance import pdist
-from rascunho_propriedadestubos import Estrutura #Substituir pelo nome correto da main
+#from rascunho_KT_new import Estrutura #Substituir pelo nome correto da main
 import matplotlib.pyplot as plt
+from scipy.linalg import eigh
+import pandas as pd
 import os
 from datetime import datetime
 import time
 
-from rascunho_propriedadestubos import K_global
+class Estrutura:
+
+    def __init__(self, elements, nodes):
+        """
+        Initializes the structure with elements, nodes, and physical properties.
+        
+        Inputs:
+            - elements: connectivity matrix between nodes (tuples of node indices).
+            - nodes: node coordinates (Nx3 array, where N is the number of nodes).
+            - m: total mass of the system (float).
+            - Id: directional moment of inertia (float).
+            - Ip: planar moment of inertia (float).
+
+        Outputs: None.
+
+        Code authors: 
+            - Patrícia Nascimento Vaccarezza; 
+            - Eduardo Almeida Menezes; 
+            - Cayque Lemos Souza; 
+            - Antônio Marcos Lopes Brito Junior; 
+            - Larissa Pereira Leanor;
+            - Alexandre Duque;
+            - Vergílio Torezan Silingardi Del Claro.
+        """
+        self.elements = elements                                             #Matriz de elementos conectados
+        self.num_elements = len(elements)                                    #Número de elementos
+        self.nodes = nodes                                                   #Matriz de nós com suas posições
+        self.num_nodes = len(nodes)                                          #Número total de nós
+        self.num_dofs_per_node = 6                                           #6 graus de liberdade por nó
+        self.num_dofs = self.num_nodes * self.num_dofs_per_node              #Total de Graus de liberdade (gdls)
+        self.K_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de rigidez global
+        self.M_global = np.zeros((self.num_dofs, self.num_dofs))             #Matriz de massa global
+        self.num_modes = 1                                                  #Número de modos de vibração a serem retornados
+        self.car_mass = 0
+
+    def calcular_comprimento(self, element):    
+        """
+        Calculates the length of an element based on node coordinates.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - element length (float).
+        """                    
+        node1, node2, tube_type = element
+        x1, y1, z1 = self.nodes[node1]
+        x2, y2, z2 = self.nodes[node2]
+        return np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
+    def momento_inercia_area_e_polar(self, diametro, espessura):                            #Função para calculo dos momentos de inércia de área e polar
+            outer_radius = (diametro / 2)
+            inner_radius = (outer_radius - espessura)
+            I = (np.pi * 0.25) * (outer_radius ** 4 - inner_radius ** 4)
+            J = (np.pi * 0.5) * (outer_radius ** 4 - inner_radius ** 4)
+            return I, J
+
+    def area_seccao_transversal(self, diameter, espessura):                                 #Função para calcular a área da secção transversal do tubo (diâmetro externo)
+        outer_radius = diameter / 2
+        inner_radius = (outer_radius - espessura) 
+        A = (outer_radius ** 2 - inner_radius ** 2) * np.pi
+        return A 
+    
+    def mass(self):
+        """
+        Calculate the mass of the entire structure.
+
+        Parameters:
+        None (uses class attributes):
+
+
+        outputs:
+            - self.car_mass (float): Mass of the entire structure
+        """
+        for element in self.elements:
+            L_e = self.calcular_comprimento(element)
+            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+            A = self.area_seccao_transversal(d,e)                #Área da secção transversal (m^2)
+            rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
+            raio_externo = d / 2
+            raio_interno = raio_externo - e
+            volume = np.pi*L_e* (raio_externo**2 - raio_interno**2)
+            self.car_mass+= volume*rho
+
+        return self.car_mass
+    
+    def obter_propriedades(self, tube_nome):                                                #Função que lê a planilha 'tubos.csv' e extrai as propriedades de cada tipo de tubo lá presentes
+        df = pd.read_csv('tubos.csv')  
+        tubo = df[df['Tube'] == tube_nome]
+    
+        if tubo.empty:
+            raise ValueError(f"Tubo '{tube_nome}' não encontrado.")
+    
+       
+        propriedades = tubo.iloc[0]
+        E = propriedades['E']
+        G = propriedades['G']
+        diametro = propriedades['Diametro(m)']
+        espessura = propriedades['Espessura(m)']
+        densidade = propriedades['Densidade(kg/m^3)']
+        poisson = propriedades['Poisson']
+
+        return float(E), float(G), float(diametro), float(espessura), float(densidade), float(poisson)
+
+    def node_loc_matrix(self, node_tags, node_coord): 
+        """
+        Creates a matrix with node locations for visualization.
+        Inputs:
+            - node_tags: list of node identifiers.
+            - node_coord: matrix of node coordinates.
+        Outputs: None."""
+
+        num_nodes = len(node_tags)
+        node_loc_matrix = np.zeros((num_nodes, 4), dtype=float)
+        for i, (x, y, z) in enumerate(node_coord, start=0):
+            node_loc_matrix[i][0] = node_tags[i] + 1
+            node_loc_matrix[i][1] = x
+            node_loc_matrix[i][2] = y
+            node_loc_matrix[i][3] = z
+        
+        # print("\n   Nó   x   y   z")
+        # print(node_loc_matrix)
+
+    def connect_matrix(self):
+        """
+        Generates and prints the connectivity matrix of elements.
+        Inputs: None (uses class attributes).
+        Outputs: None.
+        """
+        # Inicializar uma lista para armazenar as conexões
+        connections = []
+
+        # Criando a lista a partir de Connections para monstar a matriz connect
+        for i, element in enumerate(self.elements):
+            node_start, node_end, tube_type = element
+            connections.append([i + 1, node_start, node_end])
+            
+        # Converter a lista em um array numpy
+        connections_matrix = np.array(connections)
+
+        # print("Matriz de conectividade:")
+        # print(connections_matrix)
+
+    def element(self, element):
+        """
+        Computes the element stiffness and mass matrices.
+        Inputs:
+            - element: tuple (start node index, end node index).
+        Outputs:
+            - k_e: element stiffness matrix.
+            - m_e: element mass matrix.
+        """
+        # Variáveis e constantes físicas do modelo
+        d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+        e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+        E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
+        G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
+        A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
+        I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
+        J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
+        rho = self.obter_propriedades(element[2])[4]       #Densidade do material (kg/m^3)
+        kappa=0.9                                          #Fator de correção para cisalhamento 
+        L_e = self.calcular_comprimento(element)
+        Phi = (12 * E * I) / (kappa * G * A * L_e**2)
+
+        c1 = E * A / L_e
+        c2 = G * J / L_e
+        c3 = E * I / L_e**3             #Euler-Bernoulli
+        c4 = (E*I)/(L_e**3*(1+Phi))     #Timoshenko
+        t1 = (4+Phi)
+        t2 = (2-Phi)
+        d1 = rho*A*L_e
+        d2 = (I*L_e)/6
+        d3 = (rho*A*L_e)/420
+        #print(A, I, J, d, e)
+        # Matriz de Rigidez Elementar (Euler-Bernoulli)
+        # Para converter para timoshenko basta trocar c3 por c4,onde tem (4 * L_e**2 * c3) substitui por (t1* L_e**2 * c4) e onde tiver (2 * L_e**2 * c3) por (t2* L_e**2 * c4))
+        k_e= np.array([
+                [12 * c4, 0, 0, 6 * L_e * c4, 0, 0, -12 * c4, 0, 0, 6 * L_e * c4, 0, 0],
+                [0, c1, 0, 0, 0, 0, 0, -c1, 0, 0, 0, 0],
+                [0, 0, 12 * c4, 0, 0, 6 * L_e* c4, 0, 0, -12 * c4, 0, 0, 6 * L_e * c4],
+                [6 * L_e * c4, 0, 0, t1* L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0],
+                [0, 0, 0, 0, c2, 0, 0, 0, 0, 0, -c2, 0],
+                [0, 0, 6 * L_e * c4, 0, 0, t1* L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t2 * L_e**2 * c4],
+                [-12 * c4, 0, 0, -6 * L_e * c4, 0, 0, 12 * c4, 0, 0, -6 * L_e * c4, 0, 0],
+                [0, -c1, 0, 0, 0, 0, 0, c1, 0, 0, 0, 0],
+                [0, 0, -12 * c4, 0, 0, -6 * L_e * c4, 0, 0, 12 * c4, 0, 0, -6 * L_e * c4],
+                [6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t1* L_e**2 * c4, 0, 0],
+                [0, 0, 0, 0, -c2, 0, 0, 0, 0, 0, c2, 0],
+                [0, 0, 6 * L_e * c4, 0, 0, t2 * L_e**2 * c4, 0, 0, -6 * L_e * c4, 0, 0, t1* L_e**2 * c4]
+            ])
+        
+        # Matriz de Massa Elementar
+        m_e= np.array([
+                [156 * d3, 0, 0, 22 * L_e * d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3, 0, 0],
+                [0,2*d1, 0, 0, 0, 0, 0, d1, 0, 0, 0, 0],
+                [0, 0, 156 * d3, 0, 0, 22 * L_e* d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3],
+                [22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0],
+                [0, 0, 0, 0, 2*d2, 0, 0, 0, 0, 0, d2, 0],
+                [0, 0, 22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3],
+                [54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156* d3, 0, 0, -22 * L_e * d3, 0, 0],
+                [0, d1, 0, 0, 0, 0, 0, 2*d1, 0, 0, 0, 0],
+                [0, 0, 54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156 * d3, 0, 0, -22 * L_e * d3],
+                [-13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0],
+                [0, 0, 0, 0, d2, 0, 0, 0, 0, 0, 2*d2, 0],
+                [0, 0, -13 * L_e * d3, 0, 0,-3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3]
+            ])
+        return k_e,m_e
+
+    def aplicar_engastes(self, nodes, dofs):
+        """
+        Applies constraints (fixed DOFs) on specific nodes.
+        Inputs:
+            - nodes: list of node indices to be constrained.
+            - dofs: list of degrees of freedom to be fixed.
+        Outputs: None.
+        """
+        for node in nodes:                                          # Laço para selecionar cada nó que será engastado
+            for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
+                index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
+                self.K_global[index, index] = 10**9                # Um valor suficientemente grande para simular um engaste 
+
+    def matrizes_global(self):
+        """
+        Assembles the global stiffness and mass matrices.
+        Inputs: None (uses class attributes).
+        Outputs:
+            - K_global: global stiffness matrix.
+            - M_global: global mass matrix.
+        """
+        for element in self.elements:
+            node1, node2, tube_type = element
+            k_e, m_e = self.element(element)
+            # DOFs associados ao elemento            
+            dofs = [6 * node1, 6 * node1 + 1, 6 * node1 + 2, 6 * node1 + 3, 6 * node1 + 4, 6 * node1 + 5,
+                    6 * node2, 6 * node2 + 1, 6 * node2 + 2, 6 * node2 + 3, 6 * node2 + 4, 6 * node2 + 5]
+
+            # Atualizando as matrizes globais
+            self.K_global[np.ix_(dofs, dofs)] += k_e
+            self.M_global[np.ix_(dofs, dofs)] += m_e
+
+        #self.aplicar_engastes([30,31,32,33], [0, 1, 2, 3, 4, 5])                             #Por enquanto não estaremos considerando engastes
+        pd.DataFrame(self.K_global).to_csv('Matriz_Global_Rigidez.csv', index=True, header=True)
+        pd.DataFrame(self.M_global).to_csv('Matriz_Global_Massa.csv', index=True, header=True)        
+
+        # print (self.K_global)
+        # print (self.M_global)
+
+        #plt.figure(figsize=(6, 6))
+        #plt.spy(self.K_global, markersize=10)  # Adjust markersize for visibility
+        #plt.title("Spy Plot of the Kg")
+        #plt.xlabel("Columns")
+        #plt.ylabel("Rows")
+        #plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        #plt.show()
+
+        #plt.figure(figsize=(6, 6))
+        #plt.spy(self.M_global, markersize=10)  # Adjust markersize for visibility
+        #plt.title("Spy Plot of the Mg")
+        #plt.xlabel("Columns")
+        #plt.ylabel("Rows")
+        #plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+        #plt.show()
+
+        return self.K_global,self.M_global
+
+    def shape_fun(self, F_flexao1=1000, F_flexao2=1000, F_axial=1000,F_torcao=1000): 
+        """
+        Calculates deformations and stiffness of elements under loads.
+        Inputs:
+            - F_flex1: array of point bending forces.
+            - F_flex2: array of distributed bending forces.
+            - F_axial: array of axial forces.
+            - F_torsion: array of torsion forces.
+        Outputs:
+            - Arrays of torsion, deformations, and stiffness (bending and torsional).
+        """
+        #E = 2.1e11  	#Modulo de Young (Pa)
+        #I = 1.6667e-5 	#Momento de inercia (m^4)
+        #G = 81.2e9  	#Modulo de Cisalhamento (Pa)
+        #A= 0.0125	    #Área da seção do elemento (m^2)	
+        #J = I/2     	#Momento polar de inércia (m^4)
+        KF_total = 0
+        KT_total = 0
+        KF_elements = []
+        KT_elements = [] 
+        torcao, deformacao, flexao1, flexao2, flexao3 = [], [], [], [], []
+        for element in self.elements:
+            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
+            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
+            E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
+            G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
+            A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
+            I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
+            J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
+            L_e = self.calcular_comprimento(element)
+            # Equação de torsão
+            torcao_val = (F_torcao * L_e) / (G * J)         #Fonte[1]
+            torcao.append(torcao_val)
+            # Equação  para deformação axial
+            deformacao_val = (F_axial* L_e / (A * E))       #Fonte[2]
+            deformacao.append(deformacao_val)
+            # Equação para flexão
+            flexao_val1 = (F_flexao1*L_e**3)/(48 * E * I)      #Fonte[3.1] (carga pontual no meio do elemento biapoiado)
+            flexao_val2 = (5*F_flexao2*L_e**4)/(384 * E * I)   #Fonte[3.2] (carga distribuída ao longo de todo o elemento biapoiado)
+            flexao_val3 = flexao_val1 + flexao_val2            #Fonte[3.3] (tentativa de carregamento misto)
+            flexao1.append(flexao_val1)
+            flexao2.append(flexao_val2)
+            flexao3.append(flexao_val3)
+
+            # Rigidez flexional
+            KF = E * I / L_e
+            # Rigidez torsional
+            KT = G * J / L_e
+
+            KF_total += KF
+            KT_total += KT
+
+            KF_elements.append(KF)
+            KT_elements.append(KT)
+            
+        return (np.array(torcao), np.array(deformacao), np.array(flexao1), 
+            np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
+
+    def modal_analysis(self):
+        """
+        Performs modal analysis to compute natural frequencies and mode shapes.
+        Inputs: None.
+        Outputs:
+            - eigenvalues: eigenvalues (squared natural frequencies).
+            - eigenvectors: eigenvectors (mode shapes).
+            - frequencies: natural frequencies (Hz).
+        """
+        # Análise modal por resolução do problema de autovalor e autovetor
+        unsorted_eigenvalues, unsorted_eigenvectors = eigh(self.K_global, self.M_global)
+
+        # Frequências naturais (raiz quadrada dos autovalores)
+        unsorted_frequencies = np.sqrt(unsorted_eigenvalues) / (2 * np.pi)  # Divisão por 2*pi para converter para hertz
+
+        # Tratando os dados (tomando apenas as 20 primeiras frequências naturais)
+        sorted_indices = np.argsort(unsorted_frequencies)  # Ordena as frequências em ordem crescente
+        top_indices = sorted_indices[:self.num_modes]  # Seleciona os índices dos primeiros n modos
+
+        eigenvalues = np.array(unsorted_eigenvalues)[top_indices]  # Filtra os primeiros n autovalores
+        eigenvectors = np.array(unsorted_eigenvectors)[:, top_indices]  # Filtra os primeiros n autovetores
+        frequencies = np.array(unsorted_frequencies)[top_indices]  # Filtra as primeiras n frequências
+
+        return eigenvalues, eigenvectors, frequencies
+    
+    def static_analysis(self, F_global, fixed_dofs):
+        """
+        Perform static analysis by solving Ku = F with boundary conditions.
+
+        Parameters:
+            F_global (ndarray): Global force vector (N).
+            fixed_dofs (list): List of DOF indices to be fixed.
+
+        Returns:
+            displacements (ndarray): Displacement vector (N).
+
+        Resolve uma análise estática para deslocamentos em DOFs livres.
+        Entradas:
+            - K_global: matriz de rigidez global.
+            - F_global: vetor de forças globais.
+            - fixed_dofs: índices de graus de liberdade fixos.
+        Saídas:
+            - displacements: vetor de deslocamentos nos DOFs.
+        """
+        # Total number of DOFs
+        n_dofs = self.K_global.shape[0]
+
+        # Create a mask for free DOFs (DOFs not constrained)
+        free_dofs = np.array([i for i in range(n_dofs) if i not in fixed_dofs])
+
+        # Reduce the stiffness matrix and force vector
+        K_reduced = self.K_global[np.ix_(free_dofs, free_dofs)]
+        F_reduced = F_global[free_dofs]
+
+        # Solve for displacements at free DOFs
+        # USE "linalg.lstsq" FOR NEAR SINGULAR MATRICES (ALL OF THEM)
+        u_reduced = np.linalg.lstsq(K_reduced, F_reduced, rcond=None)[0]  # Get only the solution vector
+
+        # Construct full displacement vector
+        displacements = np.zeros(n_dofs)
+        displacements[free_dofs] = u_reduced
+        
+        return displacements
+
+#    def calcular_B_Elementar(self, displacements, element):
+#         """
+#         Calcula a matriz B de um elemento individual.
+#         """
+#         L_e = self.calcular_comprimento(element)
+#         node1, node2, tube_type = element
+#         # Extract displacements for the nodes of the element
+#         dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
+#         dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
+#         # Construct the B matrix (simplified for axial and bending)
+#         B = np.array([
+#             [-(dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[1] - dofs_node1[1]) / L_e**2, 0, 0, 0, 0, 0],       # Y
+#             [0, -(dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[2] - dofs_node1[2]) / L_e**2, 0, 0, 0, 0],       # Z
+#             [0, 0, -(dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[3] - dofs_node1[3]) / L_e**2, 0, 0, 0],       # RX
+#             [0, 0, 0, -(dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0, 0, 0, 0, (dofs_node2[4] - dofs_node1[4]) / L_e**2, 0, 0],       # RY
+#             [-(dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[0] - dofs_node1[0]) / L_e, 0, 0, 0, 0, 0],             # X
+#             [0, 0, 0, 0, -(dofs_node2[5] - dofs_node1[5]) / L_e, 0, 0, 0, 0, 0, (dofs_node2[5] - dofs_node1[5]) / L_e, 0]              # RZ
+#         ])
+#         return B
+
+#    def calcular_B_Elementar(self, displacements, element):
+#        """
+#        Calcula a matriz B de um elemento individual.
+#        """
+#        L_e = self.calcular_comprimento(element)
+#        node1,node2,_= element
+#        # Extract displacements for the nodes of the element
+#        dofs_node1 = displacements[node1 * self.num_dofs_per_node: (node1 + 1) * self.num_dofs_per_node]
+#        dofs_node2 = displacements[node2 * self.num_dofs_per_node: (node2 + 1) * self.num_dofs_per_node]
+#
+#        #Construct the B matrix
+#        B = np.array([
+#        [  0   ,-1/L_e,   0  ,    0 ,    0 ,    0 ,  0  , 1/L_e,   0 ,    0 ,    0 ,   0    ],
+#
+#        [  0   ,   0  ,   0  ,    0 ,-1/L_e,   0  ,  0  ,  0   ,  0  ,   0  ,1/L_e ,   0    ],
+#
+#        [  0   ,   0  ,   0  ,-1/L_e,   0  ,   0  ,  0  ,  0   ,  0  ,1/L_e ,  0   ,   0    ],
+#
+#        [  0   ,   0  ,   0  ,    0 ,    0 ,-1/L_e,  0  ,  0   ,  0  ,   0  ,   0  , 1/L_e  ],
+#
+#        [-1/L_e,   0  ,   0  ,    0 ,    0 ,-1+dofs_node1[5]/L_e,1/L_e,  0   ,  0  ,   0  ,   0  , -dofs_node2[5]/L_e],
+#            
+#        [  0   ,   0  ,-1/L_e, 1-dofs_node1[3]/L_e,   0  ,   0  ,  0  ,  0   ,1/L_e, dofs_node2[3]/L_e,  0   ,   0    ],
+#        ])
+#        return B
+
+    def calcular_B_Elementar(self, element):
+        """
+        Calcula a matriz B (6x12) para um elemento de viga de Timoshenko
+        com o eixo longitudinal no eixo Y.
+        """
+        L = self.calcular_comprimento(element)
+        B =  [  [0,       -1/L,     0,       0,     0,       0,       0,       1/L,     0,       0,     0,       0     ],  # ε_yy (axial)
+                [0,        0,       0,    -1/L,     0,       0,       0,        0,      0,     1/L,     0,       0     ],  # κ_x (curvatura sobre X)
+                [0,        0,       0,       0,     0,   -1/L,        0,        0,      0,       0,     0,     1/L     ],  # κ_z (curvatura sobre Z)
+                [-1/L,     0,       0,       0,     0,   -0.5,     1/L,        0,      0,       0,     0,    -0.5      ],  # γ_xy (cisalhamento XY)
+                [0,        0,   -1/L,     0.5,      0,     0,        0,        0,    1/L,     0.5,     0,       0      ],  # γ_zy (cisalhamento ZY)
+                [0,        0,       0,       0,   -1/L,     0,        0,        0,      0,       0,   1/L,       0     ]]   # φ_y (torção)
+
+        return B
+
+    def compute_strain(self, displacements):
+        """
+        Compute strains for all elements. The B_matrices (Strain-displacement 
+        matrices for each element are computed here, locally, by the will of
+        Newton.
+
+        Parameters:
+            displacements (ndarray): Displacement vector for all nodes.
+
+        Returns:
+            strains (list of ndarray): Strain tensors for all elements.
+        """
+
+        strains = []
+        for element in self.elements:
+            B = self.calcular_B_Elementar(element)
+            node1, node2, tube_type = element
+            element_dofs = []
+            for node in [node1, node2]:
+                for dof in range(self.num_dofs_per_node):
+                    element_dofs.append(node * self.num_dofs_per_node + dof)
+            element_displacements = displacements[element_dofs]
+            strain = np.dot(B, element_displacements)  # B-matrix times element's displacement vector
+            strains.append(strain)
+        return strains
+    
+#    def compute_stress(self, strains):
+#        """
+#        Compute stresses for all elements using Hooke's law.
+#
+#        Parameters:
+#            strains (list of ndarray): Strain tensors for all elements.
+#            E (float): Young's modulus.
+#            nu (float): Poisson's ratio.
+#
+#        Returns:
+#            stresses (list of ndarray): Stress tensors for all elements.
+#        """
+#        stresses = [] 
+#        # Construct constitutive matrix (isotropic 3D elasticity)
+#        for i in range(len(self.elements)):
+#            element=self.elements[i]
+#            E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
+#            G = self.obter_propriedades(element[2])[1]         #Modulo de Cisalhamento (Pa)
+#            nu = self.obter_propriedades(element[2])[5]
+#            lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+#            C = np.array([
+#                [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
+#                [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
+#                [lambda_        , lambda_       , lambda_ + 2*G ,   0,  0,  0],
+#                [              0,              0,              0,   G,  0,  0],
+#                [              0,              0,              0,   0,  G,  0],
+#                [              0,              0,              0,   0,  0,  G]
+#            ])
+#
+#            strain=strains[i]
+#            stress = np.dot(C, strain)  # Hooke's law: C times strain
+#            stresses.append(stress)
+#        return stresses
+
+    def compute_stress(self, strains):
+        """
+        Compute stresses for all elements using a Timoshenko-beam diagonal constitutive matrix.
+        """
+        stresses = []
+        for i, element in enumerate(self.elements):
+            # extrai propriedades
+            E, G, d, e, rho, nu = self.obter_propriedades(element[2])
+
+            # matriz constitutiva diagonal (6×6)
+            C = np.array([
+                [E,    0.0,  0.0,  0.0,  0.0,  0.0],  # axial ε_yy → σ_yy = E * ε_yy
+                [0.0,  E,    0.0,  0.0,  0.0,  0.0],  # curvatura κ_x → M_x/E (não usado para tensão direta)
+                [0.0,  0.0,  E,    0.0,  0.0,  0.0],  # curvatura κ_z → M_z/E
+                [0.0,  0.0,  0.0,  G,    0.0,  0.0],  # cisalhamento γ_xy → τ_xy = G * γ_xy
+                [0.0,  0.0,  0.0,  0.0,  G,    0.0],  # cisalhamento γ_zy → τ_zy = G * γ_zy
+                [0.0,  0.0,  0.0,  0.0,  0.0,  G   ]   # torção φ_y → τ_y = G * φ_y
+            ])
+
+            stress = C @ strains[i]
+            stresses.append(stress)
+        return stresses
+        
+    def compute_Kf_Kt(self, K_global, lfNode, lrNode, rfNode, rrNode, lcNode, rcNode):
+        """
+        Calculates Torsional and Beaming stiffness of chassis
+        Inputs:
+        - K_global: Global stiffness matrix
+        - lfNode: Left front suspension node index
+        - lrNode: Left rear suspension node index
+        - rfNode: Right front suspension node index
+        - rrNode: Right rear suspension node index
+        - lcNode: Left central node index
+        - rcNode: Right central node index
+        Outputs:
+        - Kt: Torsional stiffness of the chassis
+        - Kf: Beaming stiffness of the chassis
+        """
+        #Start Kt simulation
+        F_global = np.zeros(K_global.size)
+        F_global[2+lfNode*6] = 250  #Forças aplicadas nos nós onde estaria a suspensão dianteira
+        F_global[2+rfNode*6] = -250  #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
+        
+        fixed_nodes=[lrNode, rrNode]  #Fixação dos nós onde estaria a suspensão traseira
+        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
+        
+        displacements = self.static_analysis(F_global, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
+        mi1=np.abs(displacements[lfNode*6+2])  
+        mi2=np.abs(displacements[rfNode*6+2])  
+        L = np.abs(self.nodes[lfNode][0] - self.nodes[rfNode][0])  #0 - pega a coordenada no eixo x
+        alpha= np.degrees(np.atan((mi1+mi2)/(L)))  #Ângulo de torção do chassi após aplicação do torque
+        tau = (np.abs(F_global[2+rfNode*6]))*(L)  #Cálculo do torque aplicado
+        
+        Kt = tau/alpha
+
+        #Start Kf simulation
+        F_global = np.zeros(K_global.size)
+        F = 5000  #Módulo da força que vai gerar a flexão
+        F_global[2+lcNode*6] = -F/2  #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
+        F_global[2+rcNode*6] = -F/2  #Sinal negativo por conta da direção de aplicação da força
+        
+        fixed_nodes=[rfNode, lfNode, rrNode, lrNode]  #Fixação dos nós onde estaria a suspensão dianteira e traseira
+        fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]  #Lista com os dofs fixados
+        
+        displacements = self.static_analysis(F_global, fixed_dofs)  #Calcula os displacements com as condições de contorno aplicadas acima
+        dY=np.abs(displacements[2+lcNode*6])  #Deslocamento em Y de um dos nós onde foi aplicado a força
+
+        Kf=F/dY
+
+        return Kt, Kf
+
+    def compute_von_mises(self, stresses):
+        """
+        Compute von Mises stress for all elements.
+
+        Parameters:
+            stresses (list of ndarray): Stress tensors for all elements.
+
+        Returns:
+            von_mises_stresses (list of float): Von Mises stress for each element.
+        """
+        von_mises_stresses = []
+        for stress in stresses:
+            sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
+            von_mises = np.sqrt(
+                0.5 * (
+                    (sigma_xx - sigma_yy)**2 +
+                    (sigma_yy - sigma_zz)**2 +
+                    (sigma_zz - sigma_xx)**2 +
+                    6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
+                )
+            )
+            von_mises_stresses.append(von_mises/10**6)
+        return np.array(von_mises_stresses)
+
+    def Mesh(self):
+        """
+        Generates a `.geo` file for the structure mesh in GMSH.
+        Inputs: None (uses class attributes and user-provided file name).
+        Outputs: None.
+        """
+        
+        filename = input("Insira o nome do arquivo: ") + ".geo"
+        diretorio = input("Insira o diretorio onde o arquivo .geo deve ser salvo: ")
+
+        if not os.path.exists(diretorio):
+            os.makedirs(diretorio)
+
+        filepath = os.path.join(diretorio, filename)
+
+        with open(filepath, 'w') as geo_file:
+            for i, (x, y, z) in enumerate(self.nodes):
+                geo_file.write(f'Point({i + 1}) = {{{x}, {y}, {z}, 1.0}};\n')
+
+            for i, (start, end) in enumerate(self.elements):
+                geo_file.write(f'Line({i + 1}) = {{{start + 1}, {end + 1}}};\n')
+
+            if len(self.elements) > 2:
+                line_loop_indices = ', '.join(str(i + 1) for i in range(len(self.elements)))
+                geo_file.write(f'Line Loop(1) = {{{line_loop_indices}}};\n')
+                geo_file.write('Plane Surface(1) = {1};\n')
+
+            geo_file.write('Mesh.Algorithm = 6;\n')
+            geo_file.write('Mesh.ElementOrder = 1;\n')
+            geo_file.write('Mesh.Format = 1;\n')
+
+        print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
+
+    def plot_colored_wireframe(nodes, elements, scalar_values, graphtitle='Wireframe plot', scalelabel='Your variable here', colormap='jet'):
+        """
+        Plots a 3D wireframe of the structure with color mapping based on scalar values.
+        
+        Parameters:
+            nodes (array): Array of node coordinates (N x 3).
+            elements (list): List of tuples defining connections between nodes.
+            scalar_values (array): 1D array of scalar values (e.g., strain) at each node.
+            graphtitle (str): Graph title.
+            scalelabel (str): LColormap scale label description.
+            colormap (str): Colormap name for visualization.
+        """
+        # Normalize scalar values to [0, 1] for colormap
+        norm = plt.Normalize(vmin=np.min(scalar_values), vmax=np.max(scalar_values))
+        cmap = plt.get_cmap(colormap)
+        
+        # Create the plot
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot each element with color based on scalar values
+        for node1, node2, tube_type in elements:
+            # Get coordinates for the two nodes
+            x = [nodes[node1][0], nodes[node2][0]]
+            y = [nodes[node1][1], nodes[node2][1]]
+            z = [nodes[node1][2], nodes[node2][2]]
+            
+            # Get the scalar value for the midpoint of the element
+            scalar_midpoint = (scalar_values[node1] + scalar_values[node2]) / 2
+            
+            # Map scalar value to color
+            color = cmap(norm(scalar_midpoint))
+            
+            # Plot the line segment with the corresponding color
+            ax.plot(x, y, z, color=color, linewidth=2)
+
+        # Add a colorbar
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        mappable.set_array(scalar_values)
+        cbar = plt.colorbar(mappable, ax=ax, orientation='vertical', shrink=0.8, pad=0.1)
+        cbar.set_label(scalelabel, fontsize=12)
+
+        # Set axis labels and title
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(graphtitle)
+        ax.set_box_aspect([1,3,2])
+        #plt.xlim([min(nodes)*1.1,max(nodes)*1.1])
+        #plt.ylim([min(nodes)*1.1,max(nodes)*1.1])
+        plt.tight_layout()
+        plt.show()
+
+    def modal_analysis_plot(self):
+        """
+        Plots the modal shapes of the structure in 3D, showing the deformed and original configurations.
+
+        This function performs the following:
+        - Computes eigenvalues and eigenvectors using the modal analysis method.
+        - Extracts the translational displacements (x, y, z) for each node from the modal shapes.
+        - Scales and visualizes the deformed structure for each mode, overlaying it on the original structure.
+        - Annotates the nodes of both the original and deformed structures.
+
+        Parameters:
+            None (uses class attributes):
+                - coordinates (array): Array of node coordinates (N x 3).
+                - connections (list): List of tuples defining element connections between nodes.
+                - modal_analysis (method): Computes eigenvalues and eigenvectors.
+        """     
+        autovalores, autovetores, _ = self.modal_analysis()
+
+        for mode_idx in range(len(autovalores)):
+            mode_shape = autovetores[:, mode_idx]
+            displacements = np.zeros((len(self.nodes), 3))  # Assuming we want to visualize x, y, z displacements only
+
+            # Loop through nodes to extract the translations
+            for j, (x, y, z) in enumerate(self.nodes):
+                # 6 DOFs per node: [u_x, u_y, u_z, theta_x, theta_y, theta_z]
+                dof_start = 6 * j  # Start index of DOFs for node j
+                displacements[j, 0] = mode_shape[dof_start]     # u_x
+                displacements[j, 1] = mode_shape[dof_start+1] # u_y
+                displacements[j, 2] = mode_shape[dof_start+1] # u_z
+
+            # Scale displacements for plots
+            scale_factor = 1  # Adjust as needed
+            deformed_nodes = np.array(self.nodes) + displacements * scale_factor
+
+            # Plot deformed
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+
+            # Plot deformed structure
+            for i, (node1, node2,_) in enumerate(self.elements):
+                x = [deformed_nodes[node1][0], deformed_nodes[node2][0]]
+                y = [deformed_nodes[node1][1], deformed_nodes[node2][1]]
+                z = [deformed_nodes[node1][2], deformed_nodes[node2][2]]
+                ax.plot(x, y, z, 'r-', label="Deformed" if i == 0 else "")  # Add label only once
+
+            #Colocando a legenda dos nós no gráfico
+            for i, (x, y, z) in enumerate(self.nodes):
+                ax.scatter(x, y, z, color='b', s=20)
+                ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
+
+            #Colocando a legenda dos nós após a deformação no gráfico
+            #for i, (x, y, z) in enumerate(deformed_nodes):
+            #    ax.scatter(x, y, z, color='r', s=25)
+            #    ax.text(x, y, z, f'  {i+1}', color='black', fontsize=8)
+
+            # Plot original structure
+            for i, (node1, node2,_) in enumerate(self.elements):
+                x = [self.nodes[node1][0], self.nodes[node2][0]]
+                y = [self.nodes[node1][1], self.nodes[node2][1]]
+                z = [self.nodes[node1][2], self.nodes[node2][2]]
+                ax.plot(x, y, z, 'k--', label="Original" if i == 0 else "")  # Add label only once
+
+            # Add labels and title
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_title(f'Forma modal nº: {mode_idx + 1}')
+            ax.legend()  # Ensure the legend is displayed
+            ax.set_zlim([-0.5,1.5])
+            ax.set_ylim([0,2])
+            plt.tight_layout()
+            plt.show()
+
+    def shape_fun_plot(self, F_flexao1, F_flexao2, F_axial, F_torcao):
+        """
+            Generates plots of deformations and stiffness values for each element based on the given forces.
+
+            This function calls `shape_fun` to calculate torsional, axial, and flexural deformations, as well as stiffness values.
+            It then plots these results across subplots to visualize the behavior of each element under the applied forces.
+
+            Parameters:
+                F_flexao1 (float): Force applied for flexural deformation (point load at mid-span).
+                F_flexao2 (float): Force applied for distributed flexural deformation.
+                F_axial (float): Axial force applied to the elements.
+                F_torcao (float): Torsional force applied to the elements.
+
+            Plots:
+                1. Torsional deformation for each element.
+                2. Axial deformation for each element.
+                3. Flexural deformation due to point load for each element.
+                4. Flexural deformation due to distributed load for each element.
+                5. Combined flexural deformation for each element.
+                6. Flexural and torsional stiffness for each element.
+
+            Notes:
+                - Total flexural stiffness (KF_total) and torsional stiffness (KT_total) are displayed in the overall plot title.
+                - The function uses subplots to organize the visuals, and the layout is adjusted for clarity.
+            """
+        torcao,deformacao_axial,flexao1,flexao2,flexao3,KF_total,KT_total,KF_elements,KT_elements= self.shape_fun(F_flexao1, F_flexao2, F_axial, F_torcao)
+        
+        # Configuração dos subplots
+        fig, axs = plt.subplots(6, 1, figsize=(12, 22))
+
+        # Plot da Torção
+        axs[0].plot(torcao, 'o-', label=[f'Força {F}N' for F in F_torcao])
+        axs[0].set_title('Deformação por Torção de cada Elemento')
+        axs[0].set_xlabel('Elemento')
+        axs[0].set_ylabel('Torção (rad)')
+        axs[0].legend()
+
+        # Plot da Deformação Axial
+        axs[1].plot(deformacao_axial, 's-', label=[f'Força {F}N' for F in F_axial])
+        axs[1].set_title('Deformação Axial de cada Elemento')
+        axs[1].set_xlabel('Elemento')
+        axs[1].set_ylabel('Deformação (m)')
+        axs[1].legend()
+
+        # Plot da Flexão por Carga Pontual
+        axs[2].plot(flexao1, 'o-', label=[f'Força {F}N' for F in F_flexao1])
+        axs[2].set_title('Deformação por Carga Pontual de cada Elemento')
+        axs[2].set_xlabel('Elemento')
+        axs[2].set_ylabel('Deflexão (m)')
+        axs[2].legend()
+
+        # Plot da Flexão por Carga Distribuída
+        axs[3].plot(flexao2, 'o-', label=[f'Força {F}N' for F in F_flexao2])
+        axs[3].set_title('Deformação por Carga Distribuída de cada Elemento')
+        axs[3].set_xlabel('Elemento')
+        axs[3].set_ylabel('Deflexão (m)')
+        axs[3].legend()
+
+        # Plot da Flexão Mista
+        axs[4].plot(flexao3, 'o-', label='Carregamento misto')
+        axs[4].set_title('Deformação por Flexão Mista de cada Elemento')
+        axs[4].set_xlabel('Elemento')
+        axs[4].set_ylabel('Deflexão (m)')
+        axs[4].legend()
+
+        # Plot da Rigidez Flexional e Torsional por Elemento
+        axs[5].plot(KF_elements, 'o-', label='Rigidez Flexional (KF)')
+        axs[5].plot(KT_elements, 's-', label='Rigidez Torsional (KT)')
+        axs[5].set_title('Rigidez Flexional e Torsional de cada Elemento')
+        axs[5].set_xlabel('Elemento')
+        axs[5].set_ylabel('Rigidez (N/m)')
+        axs[5].legend()
+
+        # Mostrando os totais no título geral
+        plt.suptitle(f'KF Total: {KF_total:.2e} N/m, KT Total: {KT_total:.2e} N/m', fontsize=16)
+
+        # Ajustes de layout
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.show()
+        print(f'KF Total: {KF_total:.2e} N/m \nKT Total: {KT_total:.2e} N/m')
+
+
 
 def init_worker(optimizer_instance):
     """
@@ -38,10 +883,10 @@ class ChassisDEOptimizer:
         base_nodes: np.ndarray,
         base_connections: list,
         mandatory_indices: list,
-        pop_size: int = 2,
+        pop_size: int = 10,
         F: float = 0.5,
         CR: float = 0.9,
-        max_generations: int = 5,
+        max_generations: int = 20,
         radius_mand: float = 0.025,
         radius_opt: float = 0.05,
         use_parallel: bool = True,
@@ -144,32 +989,6 @@ class ChassisDEOptimizer:
                     adjusted[i] = orig + (delta / dist) * r
         adjusted[self.is_central, 0] = 0.0
         return np.round(adjusted, 3)
-        
-    def find_new_index(self, old_index):
-        """
-        Calcula o indice do nó após passar pela otimização
-        Retorna o novo indice do nó e do seu espelhado correspondente
-        Caso seja um nó central retorna apenas o novo indice do nó
-        
-        Entradas:
-        - old_index: Índice do nó
-
-        Retorno:
-        - new_index: Índice do nó após passar pela otimização
-        - mirrored_index: índice do nó espelhado correspondente
-        - new_central_index: novo index se for um nó central
-        """
-        new_index = old_index*2
-        mirrored_index = old_index*2+1
-
-        for i in range(len(self.base_nodes)):
-            if self.is_central[i]:
-                first_central=i
-                break
-        
-        new_central_index=(first_central*2)+(old_index-first_central)
-        
-        return new_central_index if self.is_central[old_index] else new_index,mirrored_index
     
     def validate_min_distance(self, coords: np.ndarray, min_dist: float = 0.05) -> bool:
         """
@@ -675,72 +1494,269 @@ class ChassisDEOptimizer:
         print(f" - Nodes: {nodes_path}")
         print(f" - Elements: {elements_path}")
 
+def find_new_index(old_index, nodes):
+    """
+    Calcula o indice do nó após passar pela otimização
+    Retorna o novo indice do nó e do seu espelhado correspondente
+    Caso seja um nó central retorna apenas o novo indice do nó
+    
+    Entradas:
+    - old_index: Índice do nó no base nodes
+    - nodes: lista de nós pós otimização
+    Retorno:
+    - new_index: Índice do nó após passar pela otimização
+    - mirrored_index: índice do nó espelhado correspondente
+    - new_central_index: novo index se for um nó central
+    """
+    is_central = np.isclose(nodes[:, 0], 0.0)
+    
+    first_central = np.sum(~is_central)
+
+    if (old_index*2)>=first_central:
+        new_central_index=first_central+(old_index-(first_central//2))
+        return new_central_index
+    else:
+        new_index=old_index*2
+        mirrored_index=new_index+1
+        return new_index,mirrored_index
+    
 def penalidades_geometricas(nodes, elements):
+    '''
+    Define e aplica as penalidades geométricas nos indivíduos do processo de otimização
+
+    Entradas:
+    - nodes: matriz de localização dos nós
+    - elements: matriz de conexão dos nós ou matriz dos elementos
+
+    Saída: 
+    - penalidade: valor total da soma das penalidades geométricas acumuladas
+    '''
 
     penalidade = 0
+
     # Penalidade em relação ao FH e FHB
-    fronthoop_node = nodes[ChassisDEOptimizer.find_new_index(20)]       #declara o nó do fronthoop com indice novo
-    fhb_node = nodes[ChassisDEOptimizer.find_new_index(5)[0]]           #declara o nó de um front hoop bracing com indice novo
-    dist_fh_fhb = fronthoop_node[2] - fhb_node[2]                       #declara a distância no eixo z entre esses dois nós 
-    if dist_fh_fhb > 0.05:                                              #condição retirada do regulamento
-        penalidade += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                       #aplicação de penalidade
+    def penalidade_fh_fhb(nodes):
+        '''
+        Segue a regra F.6.3.4 do regulamento da SAE-2025 que limita a distância máxima entre o ponto mais alto do Front Hoop e o ponto que o conecta ao Front Hoop Bacing
+        Distância máxima: 0,05 m
+        
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        fronthoop_node = nodes[find_new_index(20, nodes)]                          #declara o nó do fronthoop com indice novo
+        fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
+        dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
+        if dist_fh_fhb > 0.05:                                                     #condição retirada do regulamento
+            pen += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                              #aplicação de penalidade
+
+        return pen
+
     # Penalidade em relação ao MH e o MHB
-    mainhoop_node = nodes[ChassisDEOptimizer.find_new_index(15)]                            #declara o nó do main hoop com indice novo
-    mhb_node = nodes[ChassisDEOptimizer.find_new_index(14)[0]]                              #declara o nó do main hoop bracing com indice novo não espelhado
-    deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
-    deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
-    deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "x" em ambos os nós
-    dist_mh_mhb = np.sqrt(deltax_mh_mhb ** 2 + deltay_mh_mhb ** 2 + deltaz_mh_mhb ** 2)     #declara a distância entre os dois nós      
-    if dist_mh_mhb > 0.16:                                                                  #condição retirada do regulamento
-        penalidade += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                        #aplicação de penalidade
+    def penalidade_mh_mhb(nodes):
+        '''
+        Segue a regra F.5.9.4 do regulamento da SAE-2025 que limita a distância máxima entre o ponto mais alto do Main Hoop e o ponto que o conecta ao(s) Main Hoop Bacing(s).
+        Distância máxima: 0,16 m
+
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        mainhoop_node = nodes[find_new_index(16, nodes)]                                        #declara o nó do main hoop com indice novo
+        mhb_node = nodes[find_new_index(14, nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
+        deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
+        deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
+        deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "z" em ambos os nós
+        dist_mh_mhb = np.sqrt(deltax_mh_mhb ** 2 + deltay_mh_mhb ** 2 + deltaz_mh_mhb ** 2)     #declara a distância entre os dois nós      
+        if dist_mh_mhb > 0.16 or dist_mh_mhb < 0:                                                                  #condição retirada do regulamento
+            pen += ((dist_mh_mhb - 0.16) ** 2) * 1e6                                            #aplicação de penalidade
+        
+        return pen
     
     # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
-    x_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(6)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    y_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(6)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    z_porcao_mh = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(6)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    x_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][0] - nodes[ChassisDEOptimizer.find_new_index(16)][0]                                               #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
-    y_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][1] - nodes[ChassisDEOptimizer.find_new_index(16)][1]                                               #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
-    z_mhb = nodes[ChassisDEOptimizer.find_new_index(14)][2] - nodes[ChassisDEOptimizer.find_new_index(16)][2]                                               #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
-    vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
-    vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
-    modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    modulo_vetor_mhb = np.sqrt(vetor_mhb[0] ** 2 + vetor_mhb[1] ** 2 + vetor_mhb[2] ** 2 )                                                                  #módulo do vetor formado pelos nós do elemento do Main Hoop Bracing
-    produto_escalar_mh_porcao_e_mhb = (vetor_porcao_mh[0] * vetor_mhb[0]) + (vetor_porcao_mh[1] * vetor_mhb[1]) + (vetor_porcao_mh[2] * vetor_mhb[2])       #produto escalar entre os dois vetores criados
-    cos_theta_mh_mhb = produto_escalar_mh_porcao_e_mhb / (modulo_vetor_porcao_mh * modulo_vetor_mhb)                                                        #valor do cosseno do ângulo formado pelos dois vetores
-    theta_mh_mhb = np.degrees(np.acos(cos_theta_mh_mhb))                                                                                                    #valor do ângulo formado pelos dois vetores
-    if theta_mh_mhb < 30:                                                                                                                                   #condição retirada do regulamento
-        penalidade += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                         #aplicação da penalidade
-    
-    # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
-    x_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][0] - nodes[ChassisDEOptimizer.find_new_index(4)][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    y_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][1] - nodes[ChassisDEOptimizer.find_new_index(4)][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    z_porcao_fh = nodes[ChassisDEOptimizer.find_new_index(5)][2] - nodes[ChassisDEOptimizer.find_new_index(4)][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-    vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                                              #vetor formado pelos nós que formam a porção do front hoop analisada
-    modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                                           #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
-    produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                                              #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
-    cos_theta_fh_porcao_vertical = produto_escalar_porcao_fh_e_vertical / modulo_vetor_porcao_fh                                                           #cosseno ângulo formado entre a porção do front hoop analisada e a vertical
-    theta_fh_porcao_vertical = np.degrees(np.acos(cos_theta_fh_porcao_vertical))                                                                           #cálculo do ângulo através do cosseno
-    if theta_fh_porcao_vertical > 20:                                                                                                                      #condição retirada do regulamento
-        penalidade += ((theta_fh_porcao_vertical - 20) ** 2) * 1e6                                                                                            #aplicação da penalidade
-    
-    # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
-    produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                                              #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
-    cos_theta_mh_porcao_vertical = produto_escalar_porcao_mh_e_vertical / modulo_vetor_porcao_mh                                                           #cosseno do ângulo formado entre este vetor mencionado e a vertical
-    theta_mh_porcao_vertical = np.degrees(np.acos(cos_theta_mh_porcao_vertical))                                                                           #ângulo formado entre este vetor mencionado e a vertical
-    if theta_mh_porcao_vertical > 10:                                                                                                                      #condição retirada do regulamento
-        penalidade += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                                          #aplicação da penalidade
+    def penalidade_angulo_mh_mhb(nodes):
+        '''
+        Segue a regra F.5.9.5 do regulamento da SAE-2025 que limita o ângulo mínimo entre o Main Hoop e o(s) Main Hoop Bacing(s)
+        Ângulo mínimo: 30°
 
-    # Penalidade altura mínima da Side Impact Structure
-    z_zone_impact_bottom_back = nodes[ChassisDEOptimizer.find_new_index(7)][2]                                  #coordenada vertical do ponto mais baixo da parte posterior da side impact structure
-    z_zone_impact_top_back = nodes[ChassisDEOptimizer.find_new_index(6)][2]                                     #coordenada vertical do ponto mais alto da parte posterior da side impact structure
-    z_zone_impact_bottom_front = nodes[ChassisDEOptimizer.find_new_index(3)][2]                                 #coordenada vertical do ponto mais baixo da parte frontal da side impact structure
-    z_zone_impact_top_front = nodes[ChassisDEOptimizer.find_new_index(4)][2]                                    #coordenada vertical do ponto mais alto da parte frontal da side impact structure
-    dist_bottom_top_back = z_zone_impact_top_back - z_zone_impact_bottom_back                                   #distância vertical entre os extremos da parte posterior desta estrutura
-    dist_bottom_top_front = z_zone_impact_top_front - z_zone_impact_bottom_front                                #distância vertical entre os extremos da parte frontal desta estrutura
-    if dist_bottom_top_back < 0.29 and dist_bottom_top_front < 0.29:                                            #condição retirada do regulamento
-        penalidade += ((dist_bottom_top_front - 0.29) ** 2 + (dist_bottom_top_back - 0.29) ** 2) * 1e6          #aplicação da penalidade
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        x_mhb = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(15, nodes)[0]][0]                                                                       #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
+        y_mhb = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(15, nodes)[0]][1]                                                                       #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
+        z_mhb = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(15, nodes)[0]][2]                                                                       #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
+        vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
+        vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
+        modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        modulo_vetor_mhb = np.sqrt(vetor_mhb[0] ** 2 + vetor_mhb[1] ** 2 + vetor_mhb[2] ** 2 )                                                                  #módulo do vetor formado pelos nós do elemento do Main Hoop Bracing
+        produto_escalar_mh_porcao_e_mhb = (vetor_porcao_mh[0] * vetor_mhb[0]) + (vetor_porcao_mh[1] * vetor_mhb[1]) + (vetor_porcao_mh[2] * vetor_mhb[2])       #produto escalar entre os dois vetores criados
+        cos_theta_mh_mhb = produto_escalar_mh_porcao_e_mhb / (modulo_vetor_porcao_mh * modulo_vetor_mhb)                                                        #valor do cosseno do ângulo formado pelos dois vetores
+        theta_mh_mhb = np.degrees(np.acos(cos_theta_mh_mhb))                                                                                                    #valor do ângulo formado pelos dois vetores
+        if theta_mh_mhb < 30:                                                                                                                                   #condição retirada do regulamento
+            pen += ((theta_mh_mhb - 30) ** 2) * 1e6                                                                                                             #aplicação da penalidade
+    
+        return pen
+
+    # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
+    def penalidade_angulo_vetical_fh(nodes):
+        '''
+        Segue a regra F.5.7.6 do regulamento da SAE-2025 que limita o ângulo entre a parte do Front Hoop acima da Upper Side Impact Structure e o eixo da vertical 
+        Ângulo máximo: 20°
+
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        x_porcao_fh = nodes[find_new_index(5, nodes)[0]][0] - nodes[find_new_index(4, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_fh = nodes[find_new_index(5, nodes)[0]][1] - nodes[find_new_index(4, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_fh = nodes[find_new_index(5, nodes)[0]][2] - nodes[find_new_index(4, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                      #vetor formado pelos nós que formam a porção do front hoop analisada
+        modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                   #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
+        produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                      #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
+        cos_theta_fh_porcao_vertical = produto_escalar_porcao_fh_e_vertical / modulo_vetor_porcao_fh                                   #cosseno ângulo formado entre a porção do front hoop analisada e a vertical
+        theta_fh_porcao_vertical = np.degrees(np.acos(cos_theta_fh_porcao_vertical))                                                   #cálculo do ângulo através do cosseno
+        if theta_fh_porcao_vertical > 20:                                                                                              #condição retirada do regulamento
+            pen += ((theta_fh_porcao_vertical - 20) ** 2) * 1e6                                                                        #aplicação da penalidade
+    
+        return pen
+
+    # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
+    def penalidade_angulo_vertical_mh(nodes):
+        '''
+        Segue a regra F.5.8.3 do regulamento da SAE-2025 que limita o ângulo entre a parte do Main Hoop que fica acima do ponto que o conecta com o Upper Side Impact Tube com o eixo da vertical
+        Ângulo máximo: 10° 
+
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                       #vetor formado pelos nós do elemento da porção do mainhoop analisada
+        modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                  #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                       #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
+        cos_theta_mh_porcao_vertical = produto_escalar_porcao_mh_e_vertical / modulo_vetor_porcao_mh                                    #cosseno do ângulo formado entre este vetor mencionado e a vertical
+        theta_mh_porcao_vertical = np.degrees(np.acos(cos_theta_mh_porcao_vertical))                                                    #ângulo formado entre este vetor mencionado e a vertical
+        if theta_mh_porcao_vertical > 10:                                                                                               #condição retirada do regulamento
+            pen += ((theta_mh_porcao_vertical -10) ** 2) * 1e6                                                                          #aplicação da penalidade
+
+        return pen
+
+    # Penalidade para posição do Upper Side Impact Member
+    def penalidade_posicao_upper_SI_member(nodes):
+        '''
+        Segue a regra F.6.4.4 do regulamento da SAE-2025 que define uma zona permitida para a posição do Upper Side Impact Member
+        Zona: 265 mm a 320 mm da parte frontal do Lower Side Impact Member que é ligado ao Front Hoop
+
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0
+        upper_SI_node_front_z = nodes[find_new_index(4, nodes)[0]][2]
+        upper_SI_node_back_z = nodes[find_new_index(6, nodes)[0]][2]
+        lowest_point_SI_z =  nodes[find_new_index(7, nodes)[0]][2]
+        dist_lowestpoint_front_usim = upper_SI_node_front_z - lowest_point_SI_z
+        dist_lowestpoint_back_usim = upper_SI_node_back_z - lowest_point_SI_z
+
+        if dist_lowestpoint_front_usim * 1000 not in range(265, 321) and dist_lowestpoint_back_usim * 1000 not in range(265, 321):
+            pen += ((dist_lowestpoint_front_usim) ** 2 + (dist_lowestpoint_back_usim) ** 2) * 1e6
+
+
+        return pen
+    
+    # Penalidade de retidão vertical para um elemento definido entre dois nós
+    def penalidade_retidão_vertical (nodes, no1, no2):
+        '''
+        Esta penalidade tem como função garantir a retidão de qualquer elemento com a vertical. Ou seja, dados os nós das extremidades do elemento, caso o ângulo formado por ele e o eixo da vertical 
+        seja diferente de 0°, uma penalidade alta será gerada
+
+        Entrada: 
+        - nodes: matriz de localização dos nós
+
+        Saída:
+        - pen: valor desta penalidade acumulada, especificamente
+        '''
+        pen = 0 
+        componente_x_vetor = nodes[find_new_index(no1, nodes)[0]][0] - nodes[find_new_index(no2, nodes)[0]][0]                          
+        componente_y_vetor = nodes[find_new_index(no1, nodes)[0]][1] - nodes[find_new_index(no2, nodes)[0]][1]   
+        componente_z_vetor = nodes[find_new_index(no1, nodes)[0]][2] - nodes[find_new_index(no2, nodes)[0]][2]
+        vetor_no1_no2 = (componente_x_vetor, componente_y_vetor, componente_z_vetor)
+        modulo_vetor_no1_no2 = np.linalg.norm(vetor_no1_no2)
+        vertical = np.array([0, 0, 1])                                                                                             #vetor vertical unitario
+        produto_escalar_no1_no2_vertical = np.dot(vetor_no1_no2, vertical)
+        cos_theta_no1_no2_vertical = produto_escalar_no1_no2_vertical / modulo_vetor_no1_no2
+        theta_no1_no2 = np.degrees(np.acos(cos_theta_no1_no2_vertical))
+        if theta_no1_no2 > 1e-6 :
+            pen += ((theta_no1_no2) ** 2) * 1e6
+        
+        return pen
+    
+    def penalidade_gabarito_F_z(nodes):
+        pen = 0
+        fbh_z_cent = nodes[find_new_index(18,nodes)]
+        fbh_z_ext = nodes[find_new_index(1,nodes)[0]]
+        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
+        if largura_fbh < 0.02:
+            pen += ((largura_fbh - 0.02) ** 2) * 1e6
+        return pen
+    
+    def penalidade_gabarito_M_z(nodes):
+        pen = 0
+        fbh_z_cent = nodes[find_new_index(21,nodes)]
+        fbh_z_ext = nodes[find_new_index(7,nodes)[0]]
+        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
+        if largura_fbh < 0.275:
+            pen += ((largura_fbh - 0.275) ** 2) * 1e6
+        return pen
+    
+    def penalidade_gabarito_B_z(nodes):
+        pen = 0
+        fbh_z_cent = nodes[find_new_index(22,nodes)]
+        fbh_z_ext = nodes[find_new_index(8,nodes)[0]]
+        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
+        if largura_fbh < 0.175:
+            pen += ((largura_fbh - 0.175) ** 2) * 1e6
+        return pen
+
+    # Controle das penalidades
+    penalidade += penalidade_fh_fhb(nodes)
+    penalidade += penalidade_mh_mhb(nodes)
+    penalidade += penalidade_angulo_vetical_fh(nodes)
+    penalidade += penalidade_angulo_vertical_mh(nodes)
+    penalidade += penalidade_angulo_mh_mhb(nodes)
+    penalidade += penalidade_posicao_upper_SI_member(nodes)
+    penalidade += penalidade_retidão_vertical(nodes, 0, 1)
+    penalidade += penalidade_retidão_vertical(nodes, 12, 13)
+    penalidade += penalidade_gabarito_B_z(nodes)
+    penalidade += penalidade_gabarito_M_z(nodes)
+    penalidade += penalidade_gabarito_F_z(nodes)
 
     return penalidade
+
+
 
 def evaluate(nodes,elements) -> float:
     """
@@ -763,6 +1779,7 @@ def evaluate(nodes,elements) -> float:
 
         penalty = 0
         penalty += penalidades_geometricas(nodes, elements)
+
         # Instanciamento da estrutura
         estrutura = Estrutura(elements, nodes)
         t1 = time.perf_counter()
@@ -787,10 +1804,11 @@ def evaluate(nodes,elements) -> float:
         t5 = time.perf_counter()
 
         massa = estrutura.mass()
-        LFnode,RFnode = otimizador.find_new_index(3) #Left front suspension node index (3)
-        LRnode,RRnode = otimizador.find_new_index(11) #Left rear suspension node index (11)
-        LCnode,RCnode = otimizador.find_new_index(7) #Left central node index (7)
-        KT, KF = estrutura.compute_Kf_Kt(K_global,LFnode,LRnode,RFnode,RRnode,LCnode,RCnode)
+        LFnode,RFnode = find_new_index(3,nodes) #Left front suspension node index (3)
+        LRnode,RRnode = find_new_index(11,nodes) #Left rear suspension node index (11)
+        LCnode,RCnode = find_new_index(7,nodes) #Left central node index (7)
+        KT, KF = estrutura.compute_Kf_Kt(estrutura.K_global,LFnode,LRnode,RFnode,RRnode,LCnode,RCnode)
+        print(KT,KF)
         t6 = time.perf_counter()
 
         penalty += penalidade_chassi(KT, KF, massa, von, frequencies)
@@ -886,7 +1904,7 @@ def penalidade_chassi(KT, KF, massa, tensoes, frequencias):
             penalidade_total += 100 * severidade 
     return penalidade_total * 100  # Fator de escala global
 
-if __name__ == "__main__":
+if __name__ == "__main__":                                                      #centrais começando depois dos nós passíveis de espelhamento
     nodes = np.array([[-0.181,  0.000,  0.360],             #00
     [-0.181,  0.000,  0.050],                               #01
     [-0.280,  0.275,  0.240],                               #02
@@ -902,9 +1920,9 @@ if __name__ == "__main__":
     [-0.183,  2.015,  0.285],                               #12
     [-0.183,  2.015,  0.060],                               #13
     [-0.170,  1.400,  0.965],                               #14
-    [ 0.000,  1.410,  1.105],                               #15
-    [-0.293,  1.950,  0.250],                               #16
-    [0.000,  0.000,  0.360],                                #conection between the 2 sides
+    [-0.293,  1.950,  0.250],                               #15
+    [ 0.000,  1.410,  1.105],                               #16
+    [0.000,  0.000,  0.360],                                #conection between the 2 sides 
     [0.000,  0.000,  0.050],                                #conection between the 2 sides
     [0.000,  0.495,  0.045],                                #conection between the 2 sides
     [0.000,  0.555,  0.550],                                #conection between the 2 sides
@@ -918,8 +1936,8 @@ if __name__ == "__main__":
                                 
     connections = [(0,1)  ,(0,2)  ,(1,2)  ,(0,5)  ,(2,5)  ,(2,4)  ,(2,3)  ,(1,3)  ,
                 (3,7)  ,(3,4)  ,(4,7)  ,(4,6)  ,(5,6)  ,(7,6)  ,(7,8)  ,(6,8)  ,
-                (6,9)  ,(8,9)  ,(8,10) ,(9,10) ,(9,11) ,(10,11),(11,16),(16,13),
-                (11,12),(11,13),(12,13),(12,16),(16,14),(14,15),(14,6) ,(9,16) ,
+                (6,9)  ,(8,9)  ,(8,10) ,(9,10) ,(9,11) ,(10,11),(11,15),(15,13),
+                (11,12),(11,13),(12,13),(12,15),(15,14),(14,16),(14,6) ,(9,15) ,
                 (4,5)  ,(0,17) ,(1,18) ,(3,19) ,(5,20) ,(7,21) ,(8,22) ,(10,23),
                 (11,24),(12,25),(6,27),(13,26)]
 
@@ -927,8 +1945,8 @@ if __name__ == "__main__":
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 5
-    pop_size = 5
+    max_gen = 10
+    pop_size = 10
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
@@ -946,7 +1964,7 @@ if __name__ == "__main__":
     print(f"\nRESULTADOS FINAIS:")
     print(f"Melhor custo: {best_cost:.6e}")
     print(f"Massa: {best_mass:.2f} kg")
-    print(f"Rigidez Torcional (KT): {best_KT:.2e} N·m/rad")
+    print(f"Rigidez Torcional (KT): {best_KT:.2f} N·m/rad")
     print(f"Rigidez Flexional (KF): {best_KF:.2e} N/m")
     nodes_final, elements_final = best_indiv
 
