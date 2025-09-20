@@ -1663,31 +1663,25 @@ def penalidades_geometricas(nodes, elements):
 
         return pen  
     
-    def penalidade_gabarito_F_z(nodes):
+    def penalidade_gabarito_F_z(nodes, no1, no2, ):
         pen = 0
-        fbh_z_cent = nodes[find_new_index(18,nodes)]
-        fbh_z_ext = nodes[find_new_index(1,nodes)[0]]
-        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
-        if largura_fbh < 0.02:
-            pen += ((largura_fbh - 0.02) ** 2) * 1e6
+    # Lista de pares de nós e seus respectivos limites mínimos
+        requisitos = [
+        ((1, 18), 0.20),
+        ((7, 21), 0.275),
+        ((8, 22), 0.175),
+        ]
+
+        for (n1, n2), largura_min in requisitos:
+            largura = abs(nodes[find_new_index(n1, nodes)[0]][0] -
+                      nodes[find_new_index(n2, nodes)[0]][0])
+        
+            if largura < largura_min:
+                pen += ((largura - largura_min) ** 2) * 1e6
+
         return pen
-    def penalidade_gabarito_M_z(nodes):
-        pen = 0
-        fbh_z_cent = nodes[find_new_index(21,nodes)]
-        fbh_z_ext = nodes[find_new_index(7,nodes)[0]]
-        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
-        if largura_fbh < 0.275:
-            pen += ((largura_fbh - 0.275) ** 2) * 1e6
-        return pen
-    
-    def penalidade_gabarito_B_z(nodes):
-        pen = 0
-        fbh_z_cent = nodes[find_new_index(22,nodes)]
-        fbh_z_ext = nodes[find_new_index(8,nodes)[0]]
-        largura_fbh = fbh_z_ext[0] - fbh_z_cent[0]
-        if largura_fbh < 0.175:
-            pen += ((largura_fbh - 0.175) ** 2) * 1e6
-        return pen
+   
+ 
 
 
     # Controle das penalidades
@@ -1701,8 +1695,6 @@ def penalidades_geometricas(nodes, elements):
     penalidade += penalidade_angulo_vertical_frontbulkhead(nodes)
     penalidade += penalidade_angulo_vertical_rear(nodes)
     penalidade += penalidade_gabarito_F_z(nodes)
-    penalidade += penalidade_gabarito_M_z(nodes)
-    penalidade += penalidade_gabarito_B_z(nodes)
 
     return penalidade
 
