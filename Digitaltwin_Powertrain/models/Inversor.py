@@ -20,7 +20,7 @@ class Pedal:
     ganho : float, optional
         Gain factor to scale the pedal reference (default is 1.0).
 
-    Attributes
+    Attributess
     ----------
     posicao : float
         Current pedal position, normalized between 0.0 (released) and 1.0 (fully pressed).
