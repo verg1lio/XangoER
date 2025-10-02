@@ -1,3 +1,4 @@
+import numpy as np
 class Pedal:
     """A Pedal object representing an accelerator input for modulation control.
 

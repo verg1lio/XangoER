@@ -1,12 +1,5 @@
 import numpy as np
-
-# ============================
-# Constantes globais
-# ============================
-PI = np.pi
-PI23 = 2 * np.pi / 3       # 120°
-SQRT3_2 = np.sqrt(3) / 2   # √3/2 (usado na Clarke)
-TWO_THIRDS = 2 / 3         # Fator da Clarke
+from Digitaltwin_Powertrain.Constants.constants import PI23, SQRT3_2, TWO_THIRDS
 
 
 class Pedal:
@@ -129,8 +122,8 @@ class Inversor:
             Phase voltages (vs1, vs2, vs3).
         """
         self.tete += self.h * self.ws
-        if self.tete >= 2 * PI:
-            self.tete -= 2 * PI
+        if self.tete >= 2 * np.pi:
+            self.tete -= 2 * np.pi
 
         cos_tete = np.cos(self.tete)
         cos_tete_pi23 = np.cos(self.tete - self.pi23)
