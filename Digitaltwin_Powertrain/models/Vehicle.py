@@ -1,3 +1,4 @@
+import numpy as np
 class Vehicle:
     """Vehicle model for dynamic simulation.
 
