@@ -20,8 +20,8 @@ def build_defaults():
     inversor = Inversor(eficiencia=0.95, freq_chaveamento=10000)
 
     # motor params: rs, ld, lq, jm, kf, lambda_m, p, valor_mu
-    motor = Motor(rs=0.01, ld=0.001, lq=0.001, jm=0.01, kf=0.001,
-                  lambda_m=0.05, p=2, valor_mu=0.9,
+    motor = Motor(rs=0.04585, ld=0.00067, lq=0.00172, jm=0.05769, kf=0.1,
+                  lambda_m=0.13849, p=10, valor_mu=0.99,
                   TL=False, torque=0.0,
                   vehicle=vehicle, transmission=transmission, battery=battery, tire=tire)
 
