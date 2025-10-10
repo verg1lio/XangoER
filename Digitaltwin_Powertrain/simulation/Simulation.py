@@ -291,6 +291,9 @@ class Simulation:
             try:
                 if hasattr(self.inversor, 'set_Vdc'):
                     self.inversor.set_Vdc(Vdc_now)
+                    modulacao= self.pedal
+                    va,vb,vc=self.inversor.souce_voltage(modulacao)
+vq,vd=self.inversor.parktransformation(va,vb,vc)
             except Exception:
                 pass
         else:
