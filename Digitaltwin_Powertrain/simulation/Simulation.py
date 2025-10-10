@@ -1,7 +1,12 @@
+import sys
+import os
+
+# Adiciona o diretório pai ao path do Python
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from scipy.integrate import solve_ivp
 from models.BatteryPack import BatteryPack
-from models.Inversor import Inversor
+from models import Inversor
 from models import PIDController as PID
 from models.Tire import Tire
 from models.Transmission import Transmission
@@ -58,7 +63,7 @@ class Simulation:
                  tire: Optional[Tire] = None,
                  inversor: Optional[Inversor] = None,
                  tmax: float = 10.0,
-                 steps: int = 2000):
+                 steps: int = 200):
         # store models
         self.motor = motor
         self.vehicle = vehicle
@@ -71,7 +76,7 @@ class Simulation:
         self.tmax = float(tmax)
         self.steps = int(steps)
         # conservative controller update timestep used inside combined_edos
-        self.hp = self.tmax / float(self.steps) if self.steps > 0 else 1e-3
+        self.hp = self.tmax / float(self.steps) if self.steps > 0 else 1e-2
 
         # extract motor parameters safely with defaults
         self.p = getattr(self.motor, 'p', 1)
@@ -81,7 +86,7 @@ class Simulation:
         self.lambda_m = getattr(self.motor, 'lambda_m', 0.0)
         self.jm = getattr(self.motor, 'jm', 1.0)
         self.kf = getattr(self.motor, 'kf', 0.0)
-        self.torque_constant = getattr(self.motor, 'torque_constant', 0.0)
+        self.torque_constant =  (3.0/2.0) * self.p * self.lambda_m
         self.max_current = getattr(self.motor, 'max_current', np.inf)
         self.Vdc_default = getattr(self.motor, 'Vdc', 600.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
@@ -293,7 +298,7 @@ class Simulation:
                     self.inversor.set_Vdc(Vdc_now)
                     modulacao= self.pedal
                     va,vb,vc=self.inversor.souce_voltage(modulacao)
-vq,vd=self.inversor.parktransformation(va,vb,vc)
+                    vq,vd=self.inversor.parktransformation(va,vb,vc)
             except Exception:
                 pass
         else:
@@ -338,6 +343,8 @@ vq,vd=self.inversor.parktransformation(va,vb,vc)
         else:
             if self.battery is not None:
                 dx.extend([dsoc_dt, dIast_dt, dtime_dt])
+        
+        print(f"t: {t}")
 
         return np.array(dx, dtype=float)
 
@@ -402,6 +409,7 @@ vq,vd=self.inversor.parktransformation(va,vb,vc)
 
         # integrate
         try:
+            print("Starting simulation...")
             sol = solve_ivp(fun=self.combined_edos, t_span=(t0, tf), y0=x0,
                             method='RK45', t_eval=t_eval, atol=1e-6, rtol=1e-6)
         except Exception as e:
@@ -416,6 +424,7 @@ vq,vd=self.inversor.parktransformation(va,vb,vc)
                                    kd=getattr(self.speed_controller, 'kd', 0.0), limit=self.speed_controller.limit, Ts=self.hp)
 
         for idx, t in enumerate(sol.t):
+
             y = sol.y[:, idx]
             # motor states
             isd = y[0]; isq = y[1]; iso = y[2]
@@ -594,5 +603,7 @@ vq,vd=self.inversor.parktransformation(va,vb,vc)
             'iq_ref': np.array(self.iq_ref_trace),
             'id_ref': np.array(self.id_ref_trace)
         }
-
         return results
+
+# sim = Simulation(1,100)
+# sim.simulate()

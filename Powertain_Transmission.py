@@ -292,7 +292,7 @@ class Vehicle:
     def calculate_load_torque(self, velocity, transmission):
         """Calcula o torque de carga refletido no motor"""
         resistance_force = self.calculate_resistance_forces(velocity)
-        wheel_torque = resistance_force * self.wheel_radius
+        wheel_torque = self.calculate_resistance_forces(velocity) * self.wheel_radius
         motor_torque = transmission.wheel_to_motor_torque(wheel_torque)
         return motor_torque
 
@@ -324,7 +324,7 @@ class Motor:
 
         self.id_controller = PIController(kp=0.5, ki=100.0, limit=600.0)
         self.iq_controller = PIController(kp=0.5, ki=100.0, limit=600.0)
-        self.speed_controller = PIController(kp=10.0, ki=5, limit=600.0)
+        self.speed_controller = PIController(kp=10.0, ki=0, limit=600.0)
 
         self.TL = bool(TL)
         if callable(torque):
@@ -577,10 +577,10 @@ class Motor:
 
         # Atualiza a tensão DC do inversor com a tensão da bateria
         if self.battery:
-            self.Vdc1 = self.battery.calcular_tensao(-isq, soc, Iast, tempo_acumulado)
+            self.Vdc1 = 1500#self.battery.calcular_tensao(-isq, soc, Iast, tempo_acumulado)
             self.inversor.set_Vdc(self.Vdc1)
         else:
-            self.Vdc = 600
+            self.Vdc = 1600
 
         vd = np.clip(vd_unclamped, -self.Vdc1, self.Vdc1)
         vq = np.clip(vq_unclamped, -self.Vdc1, self.Vdc1)

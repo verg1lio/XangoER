@@ -11,8 +11,8 @@ from simulation.Simulation import Simulation
 
 def build_defaults():
     transmission = Transmission.Transmission(final_drive_ratio=4.0, efficiency=0.95)
-    vehicle = Vehicle.Vehicle(mass=230.0, wheel_radius=0.16, drag_coeff=0.3,
-                      frontal_area=1.0, rolling_resistance=0.015, road_grade=0.0)
+    vehicle = Vehicle.Vehicle(mass=230.0, wheel_radius=0.275, drag_coeff=0.7789,
+                      frontal_area=0.68, rolling_resistance=0.015, road_grade=0.0)
     battery = BatteryPack.BatteryPack(tipo_celula='Li-ion', n_serie=162, n_paralelo=1, soc_inicial=1.0)
     tire = Tire.Tire(pacejka_params=[0.333, 1.627, 1, 4.396, 931.4, 366.4], tire_friction_coef=1.45)
     inversor = Inversor.Inversor(eficiencia=0.95, freq_chaveamento=10000)
@@ -22,7 +22,7 @@ def build_defaults():
                   speed_ref=471.23)
 
     sim = Simulation(motor=motor, vehicle=vehicle, transmission=transmission,
-                     battery=battery, tire=tire, inversor=inversor, tmax=10, steps=1000)
+                     battery=battery, tire=tire, inversor=inversor, tmax=10, steps=10)
     return sim
 
 # ---------------------
@@ -42,14 +42,14 @@ server = app.server
 app.layout = html.Div([
     dcc.Store(id='simulation-data'),
     dcc.Store(id='parameters-store', data={
-        'vehicle': {'mass': 300, 'wheel_radius': 0.16, 'drag_coeff': 0.3,
-                    'frontal_area': 1, 'rolling_resistance': 0.015, 'road_grade': 0},
+        'vehicle': {'mass': 230, 'wheel_radius': 0.275, 'drag_coeff': 0.7789,
+                    'frontal_area': 0.68, 'rolling_resistance': 0.015, 'road_grade': 0},
         'transmission': {'final_drive_ratio': 4.0, 'efficiency': 0.95},
         'battery': {'tipo_celula': 'Li-ion', 'n_serie': 162, 'n_paralelo': 1, 'soc_inicial': 1.0},
         'motor': {'rs': 0.04585, 'ld': 0.00067, 'lq': 0.00067, 'jm': 0.05769,
-                  'kf': 0.1, 'lambda_m': 0.13849, 'p': 10, 'valor_mu': 0.95},
+                  'kf': 0.1, 'lambda_m': 0.13849, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 471.23},
         'inversor': {'eficiencia': 0.95, 'freq_chaveamento': 10000},
-        'simulacao': {'tmax': 10, 'velocidade_ref': 471.23},
+        'simulacao': {'tmax': 10},
         'tire': {
             'pacejka_params': [0.333, 1.627, 1, 4.396, 931.4, 366.4],
             'tire_friction_coef': 1.45
@@ -97,9 +97,9 @@ app.layout = html.Div([
                     dbc.Label("Massa (kg)"),
                     dbc.Input(id='vehicle-mass', type='number', value=230, step=1),
                     dbc.Label("Raio da Roda (m)"),
-                    dbc.Input(id='wheel-radius', type='number', value=0.16, step=0.01),
+                    dbc.Input(id='wheel-radius', type='number', value=0.275, step=0.01),
                     dbc.Label("Coef. de Arrasto"),
-                    dbc.Input(id='drag-coeff', type='number', value=0.78, step=0.01),
+                    dbc.Input(id='drag-coeff', type='number', value=0.7789, step=0.01),
                     dbc.Label("Área Frontal (m²)"),
                     dbc.Input(id='frontal-area', type='number', value=0.68, step=0.1),
                     dbc.Label("Resistência Rolamento"),
@@ -147,7 +147,7 @@ app.layout = html.Div([
                     dbc.Label("Indutância d (H)"),
                     dbc.Input(id='motor-ld', type='number', value=0.00067, step=0.00001),
                     dbc.Label("Indutância q (H)"),
-                    dbc.Input(id='motor-lq', type='number', value=0.00067, step=0.00001),
+                    dbc.Input(id='motor-lq', type='number', value=0.00137, step=0.00001),
                     dbc.Label("Inércia (kg.m²)"),
                     dbc.Input(id='motor-jm', type='number', value=0.05769, step=0.0001),
                     dbc.Label("Atrito (N.m.s)"),
@@ -228,113 +228,113 @@ app.layout = html.Div([
 # ---------------------
 # Funções de plotagem (definidas globalmente)
 # ---------------------
-def create_velocity_torque_plot(motor):
+def create_velocity_torque_plot(sim):
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Velocidade Mecânica", "Torque do Motor"), vertical_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.velocidade, name='Velocidade'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjugado, name='Torque Elétrico'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjcarga, name='Torque de Carga', line=dict(dash='dash')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.velocidade, name='Velocidade'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.conjugado, name='Torque Elétrico'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.conjcarga, name='Torque de Carga', line=dict(dash='dash')), row=2, col=1)
     fig.update_layout(height=900, title_text="Velocidade e Torque", template="plotly_white")
     fig.update_xaxes(title_text="Tempo (s)", row=2, col=1)
     fig.update_yaxes(title_text="Velocidade (RPM)", row=1, col=1)
     fig.update_yaxes(title_text="Torque (Nm)", row=2, col=1)
     return fig
 
-def create_currents_plot(motor):
+def create_currents_plot(sim):
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Correntes dq", "Correntes de Fase"), vertical_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrented, name='Id'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.correnteq, name='Iq'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente1, name='Fase 1'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente2, name='Fase 2'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente3, name='Fase 3'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrented, name='Id'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.correnteq, name='Iq'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente1, name='Fase 1'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente2, name='Fase 2'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente3, name='Fase 3'), row=2, col=1)
     fig.update_layout(height=900, title_text="Correntes", template="plotly_white")
     return fig
 
-def create_voltages_plot(motor):
+def create_voltages_plot(sim):
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Tensões de Controle dq", "Tensões de Fase"), vertical_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosd, name='Vd'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vd_real, name='Vd real'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosq, name='Vq'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vq_real, name='Vq real'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao1, name='Fase 1'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao2, name='Fase 2'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao3, name='Fase 3'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensaosd, name='Vd'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vd_real, name='Vd real'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensaosq, name='Vq'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vq_real, name='Vq real'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao1, name='Fase 1'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao2, name='Fase 2'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao3, name='Fase 3'), row=2, col=1)
     fig.update_layout(height=900, title_text="Tensões", template="plotly_white")
     return fig
 
-def create_flux_temp_plot(motor):
-    fig = make_subplots(rows=2, cols=1, subplot_titles=("Fluxos Magnéticos", "Temperatura do Motor"), vertical_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.fluxosd, name='Fluxo d'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.fluxosq, name='Fluxo q'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.temperatura, name='Temperatura'), row=2, col=1)
+def create_flux_temp_plot(sim):
+    fig = make_subplots(rows=2, cols=1, subplot_titles=("Fluxos Magnéticos", "Temperatura do sim"), vertical_spacing=0.1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.fluxosd, name='Fluxo d'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.fluxosq, name='Fluxo q'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.temperatura, name='Temperatura'), row=2, col=1)
     fig.update_layout(height=900, title_text="Fluxos e Temperatura", template="plotly_white")
     return fig
 
-def create_control_plot(motor):
+def create_control_plot(sim):
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Sinais de Controle FOC", "Erro de Velocidade"), vertical_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vd_control, name='Vd control'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vq_control, name='Vq control'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.speed_error, name='Erro de Velocidade'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vd_control, name='Vd control'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vq_control, name='Vq control'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.speed_error, name='Erro de Velocidade'), row=2, col=1)
     fig.update_layout(height=900, title_text="Sinais de Controle", template="plotly_white")
     return fig
 
-def create_complete_plot(motor):
+def create_complete_plot(sim):
     fig = make_subplots(rows=3, cols=2, subplot_titles=(
-        "Velocidade Mecânica", "Torque do Motor", "Correntes", "Correntes de Fase", "Tensões de Controle", "Tensões de Fase"
+        "Velocidade Mecânica", "Torque do sim", "Correntes", "Correntes de Fase", "Tensões de Controle", "Tensões de Fase"
     ), vertical_spacing=0.08, horizontal_spacing=0.1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.velocidade, name='Velocidade'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjugado, name='Torque Elétrico'), row=1, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.conjcarga, name='Torque de Carga', line=dict(dash='dash')), row=1, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrented, name='Id'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.correnteq, name='Iq'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente1, name='Fase 1'), row=2, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente2, name='Fase 2'), row=2, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.corrente3, name='Fase 3'), row=2, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosd, name='Vd'), row=3, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vd_real, name='Vd real'), row=3, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensaosq, name='Vq'), row=3, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vq_real, name='Vq real'), row=3, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao1, name='Fase 1'), row=3, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao2, name='Fase 2'), row=3, col=2)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tensao3, name='Fase 3'), row=3, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.velocidade, name='Velocidade'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.conjugado, name='Torque Elétrico'), row=1, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.conjcarga, name='Torque de Carga', line=dict(dash='dash')), row=1, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrented, name='Id'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.correnteq, name='Iq'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente1, name='Fase 1'), row=2, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente2, name='Fase 2'), row=2, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrente3, name='Fase 3'), row=2, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensaosd, name='Vd'), row=3, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vd_real, name='Vd real'), row=3, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensaosq, name='Vq'), row=3, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vq_real, name='Vq real'), row=3, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao1, name='Fase 1'), row=3, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao2, name='Fase 2'), row=3, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensao3, name='Fase 3'), row=3, col=2)
     fig.update_layout(height=900, title_text="Visão Completa da Simulação", template="plotly_white", hovermode="x unified", showlegend=False)
     return fig
 
-def create_vehicle_plot(motor):
+def create_vehicle_plot(sim):
     fig = make_subplots(
         rows=2, cols=2, 
         subplot_titles=("Velocidade (km/h)", "Aceleração (m/s²)", "Forças (N)", "Torque na Roda (Nm)"), 
         vertical_spacing=0.15, horizontal_spacing=0.1
     )
-    velocity_kmh = [v * 3.6 for v in motor.vehicle_velocity]
-    fig.add_trace(go.Scatter(x=motor.tempo, y=velocity_kmh, name='Velocidade'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.vehicle_acceleration, name='Aceleração'), row=1, col=2)
+    velocity_kmh = [v * 3.6 for v in sim.vehicle_velocity]
+    fig.add_trace(go.Scatter(x=sim.tempo, y=velocity_kmh, name='Velocidade'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vehicle_acceleration, name='Aceleração'), row=1, col=2)
     
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.tractive_force_hist, name='Força Trativa'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.resistive_force_hist, name='Forças Resistivas'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tractive_force_hist, name='Força Trativa'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.resistive_force_hist, name='Forças Resistivas'), row=2, col=1)
     
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.wheel_torque, name='Torque na Roda'), row=2, col=2)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.wheel_torque, name='Torque na Roda'), row=2, col=2)
     
     fig.update_layout(height=900, title_text="Desempenho do Veículo", template="plotly_white", legend_tracegroupgap=180)
     fig.update_yaxes(title_text="Força (N)", row=2, col=1)
     return fig
 
-def create_tire_plot(motor):
+def create_tire_plot(sim):
     fig = make_subplots(
         rows=1, cols=2, 
         subplot_titles=("Slip Ratio x Tempo", "Força Longitudinal x Slip Ratio")
     )
 
     fig.add_trace(
-        go.Scatter(x=motor.tempo, y=motor.slip_ratio_hist, name='Slip Ratio', line=dict(color='blue')),
+        go.Scatter(x=sim.tempo, y=sim.slip_ratio_hist, name='Slip Ratio', line=dict(color='blue')),
         row=1, col=1
     )
     fig.update_xaxes(title_text="Tempo [s]", row=1, col=1)
     fig.update_yaxes(title_text="Slip Ratio", row=1, col=1)
 
-    if len(motor.slip_ratio_hist) > 0:
+    if len(sim.slip_ratio_hist) > 0:
         df_tire = pd.DataFrame({
-            'slip': motor.slip_ratio_hist,
-            'fx': motor.longitudinal_force_hist
+            'slip': sim.slip_ratio_hist,
+            'fx': sim.longitudinal_force_hist
         })
         df_tire_sorted = df_tire.sort_values(by='slip').drop_duplicates(subset='slip')
 
@@ -356,11 +356,11 @@ def create_tire_plot(motor):
     
     return fig
 
-def create_battery_plot(motor):
+def create_battery_plot(sim):
     fig = make_subplots(rows=3, cols=1, subplot_titles=("Tensão do Banco (V)", "Corrente (A)", "SoC"), vertical_spacing=0.12)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.battery_voltage_hist, name='Tensão Banco'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.battery_current_hist, name='Corrente'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=motor.tempo, y=motor.soc_hist, name='SoC'), row=3, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.battery_voltage_hist, name='Tensão Banco'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.battery_current_hist, name='Corrente'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=sim.tempo, y=sim.soc_hist, name='SoC'), row=3, col=1)
     fig.update_layout(height=900, title_text="Estado da Bateria", template="plotly_white")
     fig.update_yaxes(title_text="Tensão (V)", row=1, col=1)
     fig.update_yaxes(title_text="Corrente (A)", row=2, col=1)
@@ -470,13 +470,12 @@ def update_parameters(n_clicks, mass, wheel_radius, drag_coeff, frontal_area, ro
         'kf': motor_kf,
         'lambda_m': motor_lambda,
         'p': motor_poles,
-        'valor_mu': motor_modulation
-        
+        'valor_mu': motor_modulation,
+        'velocidade_ref': speed_ref
     }
 
     current_params['simulacao'] = {
-        'tmax': sim_time,
-        'velocidade_ref': speed_ref
+        'tmax': sim_time
     }
 
     return current_params
@@ -503,12 +502,12 @@ def run_simulation_once(n_clicks, parameters):
     simulacao_params = parameters['simulacao']
     tire_params = parameters['tire']
 
-    transmission = Transmission.Transmission(**transmission_params)
-    vehicle = Vehicle.Vehicle(**vehicle_params)
-    battery = BatteryPack.BatteryPack(**battery_params)
-    tire = Tire.Tire(**tire_params)
+    transmission = Transmission(**transmission_params)
+    vehicle = Vehicle(**vehicle_params)
+    battery = BatteryPack(**battery_params)
+    tire = Tire(**tire_params)
 
-    motor = Motor.Motor(
+    motor = Motor(
         rs=motor_params['rs'],
         ld=motor_params['ld'],
         lq=motor_params['lq'],
@@ -519,30 +518,30 @@ def run_simulation_once(n_clicks, parameters):
         valor_mu=motor_params['valor_mu'],
         TL=False,
         torque=0.0 ,
-        speed_ref= simulacao_params['velocidade_ref']
+        speed_ref= motor_params['velocidade_ref']
     )
     
 
  
     sim = Simulation(
         motor=motor, vehicle=vehicle, transmission=transmission,
-        battery=battery, tire=tire, inversor=Inversor.Inversor(eficiencia=0.95, freq_chaveamento=10000),
-        tmax=simulacao_params['tmax'], steps=1000
+        battery=battery, tire=tire, inversor=Inversor(eficiencia=0.95, freq_chaveamento=100),
+        tmax=simulacao_params['tmax'], steps=10000
     )
 
     sim.simulate()
     
     # Gerar todas as figuras
     figures = {
-        'velocity_torque': create_velocity_torque_plot(motor),
-        'currents': create_currents_plot(motor),
-        'voltages': create_voltages_plot(motor),
-        'flux_temp': create_flux_temp_plot(motor),
-        'control': create_control_plot(motor),
-        'complete': create_complete_plot(motor),
-        'vehicle': create_vehicle_plot(motor),
-        'tire': create_tire_plot(motor),
-        'battery': create_battery_plot(motor)
+        'velocity_torque': create_velocity_torque_plot(sim),
+        'currents': create_currents_plot(sim),
+        'voltages': create_voltages_plot(sim),
+        'flux_temp': create_flux_temp_plot(sim),
+        'control': create_control_plot(sim),
+        'complete': create_complete_plot(sim),
+        'vehicle': create_vehicle_plot(sim),
+        'tire': create_tire_plot(sim),
+        'battery': create_battery_plot(sim)
     }
     
     stored_figures = {}
@@ -594,4 +593,5 @@ def update_graph_from_stored(btn_velocity, btn_currents, btn_voltages, btn_flux,
     return {}
 
 if __name__ == '__main__':
+    print("")
     app.run(debug=True)

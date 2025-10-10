@@ -1,3 +1,8 @@
+import sys
+import os
+
+# Adiciona o diretório pai ao path do Python
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from Constants.constants import PI23, SQRT3_2, TWO_THIRDS
 

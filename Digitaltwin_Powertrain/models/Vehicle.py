@@ -100,6 +100,6 @@ class Vehicle:
             Equivalent motor torque required to overcome resistance [Nm].
         """
         resistance_force = self.calculate_resistance_forces(velocity)
-        wheel_torque = resistance_force * self.wheel_radius
+        wheel_torque = self.calculate_resistance_forces(velocity) * self.wheel_radius
         motor_torque = transmission.wheel_to_motor_torque(wheel_torque)
         return motor_torque
