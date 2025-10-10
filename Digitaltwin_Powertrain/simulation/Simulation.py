@@ -470,8 +470,8 @@ class Simulation:
             vd_pid = pid_id_log.update(error_d, dt=dt)
             vq_pid = pid_iq_log.update(error_q, dt=dt)
 
-            vd_control = np.clamp(vd_pid + decoupling_d, -Vclamp, Vclamp)
-            vq_control = np.clamp(vq_pid + decoupling_q, -Vclamp, Vclamp)
+            vd_control = np.clip(vd_pid + decoupling_d, -Vclamp, Vclamp)
+            vq_control = np.clip(vq_pid + decoupling_q, -Vclamp, Vclamp)
 
             # battery/inverter interaction for logging
             if self.battery is not None:
