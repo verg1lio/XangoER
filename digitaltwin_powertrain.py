@@ -3,7 +3,60 @@ import matplotlib.pyplot as plt
 from scipy import signal
 import control as clt
 
+<<<<<<< HEAD
 class Motor:
+=======
+#commit
+class PWT:
+    """A PWT (Power Train) object.
+
+    This class will create a Power Train digital twin with the battery, power conversor, motor and controller elements provided.
+
+    Parameters AINDA A ALTERAR, ISSO É UM EXEMPLO
+    ----------
+    bat_type : string
+    String descevendo modelo usado para a bateria. No momento temos implementado:
+    disk_elements : list
+    List with the disk elements.
+    bearing_elements : list
+    List with the bearing elements.
+    automeshing : boolean
+    Set it True to use the automeshing method. Default is False.
+    If automeshing is True, the previous shaft_elements parameter is now defined by:
+    shaft_elements : list
+    List with the length, inner and outter diameter and material of each element, as follows:
+    [[length, inner, outter, material],[length, inner, outter, material],...]
+    For the other parameters please check the respective bearing and disk classes for more information.
+    **kwargs : dict, optional
+    If automeshing is True, these parameters needs to be informed.
+    The possible arguments are:
+    alpha : float
+    Proportional damping coefficient, associated to the element Mass matrix
+    beta : float
+    Proportional damping coefficient, associated to the element Stiffness matrix
+
+    Returns
+    -------
+    A rotor object.
+
+    Attributes
+    ----------
+    MM : array
+    Global mass matrix.
+    KK : array
+    Global stiffness matrix.
+    CCgyros: array
+    Global gyroscopic matrix.
+    CCtotal: array
+    Global damping matrix
+
+    Examples
+    --------
+    >>> import lmest_rotor as lm
+    >>> rotor = lm.rotor_example()
+    >>> rotor.MM
+    array(30x30)
+>>>>>>> aa6bdd385063363c3a5962ce62488a445d7ef24b
     """
     Classe que modela o comportamento de um motor de indução trifasico. Inclui modelagem de tensão da fonte, 
     tensão direta e em quadratura, corrente, derivadas dos fluxos e correntes, fases de corrente e fluxos, 
@@ -106,6 +159,7 @@ class Motor:
 
         Calcula a tensão das três fases em função do ângulo elétrico do estator.
 
+<<<<<<< HEAD
         Returns
         -------
         vs1 : float
@@ -970,3 +1024,6 @@ class Peso:
         print(f"O peso total é {total} kg")
 
 Peso.example()
+=======
+example()
+>>>>>>> aa6bdd385063363c3a5962ce62488a445d7ef24b
