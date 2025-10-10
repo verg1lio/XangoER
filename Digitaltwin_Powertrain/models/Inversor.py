@@ -54,7 +54,7 @@ class Inversor:
         Applies Clarke and Park transforms to compute (vq, vd).
     """
 
-    def __init__(self, eficiencia=0.95, freq_chaveamento=10000):
+    def __init__(self, eficiencia=0.95, freq_chaveamento=1000):
         self.eficiencia = eficiencia
         self.freq_chaveamento = freq_chaveamento
         self.Vdc = 0.0

@@ -526,7 +526,7 @@ def run_simulation_once(n_clicks, parameters):
     sim = Simulation(
         motor=motor, vehicle=vehicle, transmission=transmission,
         battery=battery, tire=tire, inversor=Inversor(eficiencia=0.95, freq_chaveamento=100),
-        tmax=simulacao_params['tmax'], steps=10000
+        tmax=simulacao_params['tmax'], steps=1000
     )
 
     sim.simulate()

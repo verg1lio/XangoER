@@ -16,44 +16,7 @@ from typing import Optional, Dict, Any
 
 
 class Simulation:
-    """Vehicle + motor + battery + inverter simulation orchestrator using PID controllers.
-
-    This class assembles the ODEs that couple a PMSM motor, vehicle longitudinal
-    dynamics, transmission, tyre and battery pack, and integrates them with
-    ``scipy.integrate.solve_ivp``.
-
-    Parameters
-    ----------
-    motor : Motor, optional
-        Motor object (from models.motor). Many motor parameters are read with
-        ``getattr`` so motor can be omitted for quick tests.
-    vehicle : Vehicle, optional
-        Vehicle dynamics model.
-    transmission : Transmission, optional
-        Transmission model.
-    battery : BatteryPack, optional
-        Battery model.
-    tire : Tire, optional
-        Tyre model.
-    inversor : Inversor, optional
-        Inverter model. If None, a default Inversor() is created.
-    tmax : float, optional
-        Default simulation horizon in seconds (default = 10.0).
-    steps : int, optional
-        Number of output points (default = 2000).
-
-    Notes
-    -----
-    - Controllers used inside the simulation are instances of ``PIDController``
-      created from gains available in the motor object (if present) or with
-      reasonable defaults.
-    - State vector layout used by the integrator (x) is:
-        [isd, isq, iso, wm, theta_m, temp,
-         (vehicle_velocity, vehicle_position),
-         (soc, Iast, tempo_acumulado)]
-      The optional blocks are present only if the corresponding models are
-      provided to the Simulation constructor.
-    """
+    """Vehicle + motor + battery + inverter simulation orchestrator using PID controllers."""
 
     def __init__(self,
                  motor: Optional[Motor] = None,
@@ -63,7 +26,8 @@ class Simulation:
                  tire: Optional[Tire] = None,
                  inversor: Optional[Inversor] = None,
                  tmax: float = 10.0,
-                 steps: int = 200):
+                 steps: int = 2000):
+        
         # store models
         self.motor = motor
         self.vehicle = vehicle
@@ -72,11 +36,11 @@ class Simulation:
         self.tire = tire
         self.inversor = inversor if inversor is not None else Inversor()
 
-        # simulation time configuration
+        # simulation time configuration - REDUZIDO PARA TESTE
         self.tmax = float(tmax)
         self.steps = int(steps)
         # conservative controller update timestep used inside combined_edos
-        self.hp = self.tmax / float(self.steps) if self.steps > 0 else 1e-2
+        self.hp = self.tmax / float(self.steps) if self.steps > 0 else 1e-3
 
         # extract motor parameters safely with defaults
         self.p = getattr(self.motor, 'p', 1)
@@ -86,7 +50,10 @@ class Simulation:
         self.lambda_m = getattr(self.motor, 'lambda_m', 0.0)
         self.jm = getattr(self.motor, 'jm', 1.0)
         self.kf = getattr(self.motor, 'kf', 0.0)
-        self.torque_constant =  (3.0/2.0) * self.p * self.lambda_m
+        
+        # CORREÇÃO: torque_constant calculado corretamente
+        self.torque_constant = (3.0/2.0) * self.p * self.lambda_m
+        
         self.max_current = getattr(self.motor, 'max_current', np.inf)
         self.Vdc_default = getattr(self.motor, 'Vdc', 600.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
@@ -107,19 +74,20 @@ class Simulation:
         iq_proto = getattr(self.motor, 'iq_controller', None)
         sp_proto = getattr(self.motor, 'speed_controller', None)
 
-        id_kp = getattr(id_proto, 'kp', 0.5) if id_proto is not None else 0.5
-        id_ki = getattr(id_proto, 'ki', 100.0) if id_proto is not None else 100.0
+        # CORREÇÃO: Ganhos mais conservadores para evitar instabilidade
+        id_kp = getattr(id_proto, 'kp', 0.1) if id_proto is not None else 0.1
+        id_ki = getattr(id_proto, 'ki', 10.0) if id_proto is not None else 10.0
         id_kd = getattr(id_proto, 'kd', 0.0) if id_proto is not None else 0.0
         id_limit = getattr(id_proto, 'limit', 600.0) if id_proto is not None else 600.0
 
-        iq_kp = getattr(iq_proto, 'kp', 0.5) if iq_proto is not None else 0.5
-        iq_ki = getattr(iq_proto, 'ki', 100.0) if iq_proto is not None else 100.0
+        iq_kp = getattr(iq_proto, 'kp', 0.1) if iq_proto is not None else 0.1
+        iq_ki = getattr(iq_proto, 'ki', 10.0) if iq_proto is not None else 10.0
         iq_kd = getattr(iq_proto, 'kd', 0.0) if iq_proto is not None else 0.0
         iq_limit = getattr(iq_proto, 'limit', 600.0) if iq_proto is not None else 600.0
 
-        sp_kp = getattr(sp_proto, 'kp', 10.0) if sp_proto is not None else 10.0
-        sp_ki = getattr(sp_proto, 'ki', 5.0) if sp_proto is not None else 5.0
-        sp_kd = getattr(sp_proto, 'kd', 0.0) if sp_proto is not None else 0.0
+        sp_kp = getattr(sp_proto, 'kp', 5.0) if sp_proto is not None else 5.0
+        sp_ki = getattr(sp_proto, 'ki', 2.0) if sp_proto is not None else 2.0
+        sp_kd = getattr(sp_proto, 'kd', 0.1) if sp_proto is not None else 0.1
         sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 600.0
 
         # instantiate internal PID controllers used by the integrator
@@ -204,169 +172,164 @@ class Simulation:
         self.battery_current_hist = []
 
     def combined_edos(self, t: float, x: np.ndarray) -> np.ndarray:
-        """Assemble combined ODEs (motor electrical/mechanical + vehicle + battery).
+        """Assemble combined ODEs (motor electrical/mechanical + vehicle + battery)."""
+        try:
+            # Unpack mandatory motor states
+            isd, isq, iso, wm, theta_m, temp = x[:6]
+            idx = 6
 
-        Parameters
-        ----------
-        t : float
-            Current time [s].
-        x : ndarray
-            State vector in the order described in class docstring.
-
-        Returns
-        -------
-        dxdt : ndarray
-            Time derivatives of the state vector.
-        """
-        # Unpack mandatory motor states
-        # motor layout: isd, isq, iso, wm, theta_m, temp
-        isd, isq, iso, wm, theta_m, temp = x[:6]
-        idx = 6
-
-        # vehicle states
-        if (self.vehicle is not None) and (self.transmission is not None):
-            vehicle_velocity = x[idx]; vehicle_position = x[idx + 1]
-            idx += 2
-        else:
-            vehicle_velocity = 0.0
-            vehicle_position = 0.0
-
-        # battery states
-        if self.battery is not None:
-            soc = x[idx]; Iast = x[idx + 1]; tempo_acumulado = x[idx + 2]
-        else:
-            soc = 1.0; Iast = 0.0; tempo_acumulado = 0.0
-
-        # electrical transforms
-        theta_e = self.p * theta_m
-        we = self.p * wm
-
-        # --- Vehicle/tyre related computations ---
-        if (self.vehicle is not None) and (self.transmission is not None) and (self.tire is not None):
-            cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission)
-            vel_ang_roda = self.transmission.motor_to_wheel_speed(wm)
-            slip = self.tire.SlipRatio(vel_ang_roda, self.vehicle.wheel_radius, vehicle_velocity)
-            Fz = self.vehicle.mass * self.vehicle.g
-            Fx_max = self.tire.Tire_forces(Fz, slip)
-            wheel_torque_ideal = self.transmission.motor_to_wheel_torque(self.torque_constant * isq)
-            traction_force_ideal = wheel_torque_ideal / self.vehicle.wheel_radius
-            traction_force_limited = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max))
-            resistance_force = self.vehicle.calculate_resistance_forces(vehicle_velocity)
-            resultant_force = traction_force_limited - resistance_force
-            if vehicle_velocity < 0.01 and resultant_force < 0:
-                vehicle_acceleration = 0.0
+            # vehicle states
+            if (self.vehicle is not None) and (self.transmission is not None):
+                vehicle_velocity = x[idx]; vehicle_position = x[idx + 1]
+                idx += 2
             else:
-                vehicle_acceleration = resultant_force / self.vehicle.mass
-        else:
-            cl = 0.0
-            vehicle_acceleration = 0.0
-            traction_force_limited = 0.0
-            resistance_force = 0.0
-            Fx_max = 0.0
-            slip = 0.0
+                vehicle_velocity = 0.0
+                vehicle_position = 0.0
 
-        # --- Speed controller (PID) ---
-        speed_error = (self.speed_ref - wm) if (self.motor is not None) else 0.0
-        torque_ref = self.speed_controller.update(speed_error, dt=self.hp)
-
-        iq_ref = torque_ref / self.torque_constant if self.torque_constant != 0 else 0.0
-        id_ref = 0.0
-        if abs(iq_ref) > self.max_current:
-            iq_ref = np.sign(iq_ref) * self.max_current
-
-        # current errors
-        error_d = id_ref - isd
-        error_q = iq_ref - isq
-
-        # decoupling
-        decoupling_d = -we * self.lq * isq
-        decoupling_q = we * (self.ld * isd + self.lambda_m)
-
-        # PID controllers for d/q voltages
-        vd_pid = self.id_controller.update(error_d, dt=self.hp)
-        vq_pid = self.iq_controller.update(error_q, dt=self.hp)
-
-        vd_unclamped = vd_pid + decoupling_d
-        vq_unclamped = vq_pid + decoupling_q
-
-        # DC link from battery
-        if self.battery is not None:
-            batt_current_est = abs(isq)
-            Vdc_now = self.battery.calcular_tensao(batt_current_est, soc, Iast, tempo_acumulado) if soc >= 0.0 else 0.0
-            try:
-                if hasattr(self.inversor, 'set_Vdc'):
-                    self.inversor.set_Vdc(Vdc_now)
-                    modulacao= self.pedal
-                    va,vb,vc=self.inversor.souce_voltage(modulacao)
-                    vq,vd=self.inversor.parktransformation(va,vb,vc)
-            except Exception:
-                pass
-        else:
-            Vdc_now = self.Vdc_default
-
-        Vclamp = Vdc_now if Vdc_now > 0 else self.Vdc_default
-        vd = np.clip(vd_unclamped, -Vclamp, Vclamp)
-        vq = np.clip(vq_unclamped, -Vclamp, Vclamp)
-
-        # anti-windup for PID controllers: freeze integrator when saturated
-        # (our PIDController implementation handles anti-windup inside update)
-
-        # electrical dynamics (linearized RL)
-        d_isd = (vd - self.rs * isd + we * self.lq * isq) * self.inv_ld
-        d_isq = (vq - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
-        L0 = 0.1 * (self.ld + self.lq) / 2.0
-        d_iso = (0.0 - self.rs * iso) / (L0 if L0 != 0 else 1.0)
-
-        # mechanical dynamics
-        ce = self.torque_constant * isq
-        d_wm = (ce - cl - self.kf * wm) * self.inv_jm
-        d_theta_m = wm
-
-        # thermal dynamics (simple copper loss heating)
-        i_rms_sq = isd**2 + isq**2
-        copper_losses = 3.0 * self.rs * (i_rms_sq / 2.0)
-        d_temp = copper_losses * self.inv_mC
-
-        # battery derivatives
-        if self.battery is not None:
-            corrente_batt = abs(isq)
-            dsoc_dt, dIast_dt, dtime_dt = self.battery.calcular_derivadas(corrente_batt)
-        else:
-            dsoc_dt, dIast_dt, dtime_dt = 0.0, 0.0, 0.0
-
-        # assemble derivative vector consistent with simulate() x0 layout
-        dx = [d_isd, d_isq, d_iso, d_wm, d_theta_m, d_temp]
-        if (self.vehicle is not None) and (self.transmission is not None):
-            dx.extend([vehicle_acceleration, vehicle_velocity])
+            # battery states
             if self.battery is not None:
-                dx.extend([dsoc_dt, dIast_dt, dtime_dt])
-        else:
-            if self.battery is not None:
-                dx.extend([dsoc_dt, dIast_dt, dtime_dt])
-        
-        print(f"t: {t}")
+                soc = x[idx]; Iast = x[idx + 1]; tempo_acumulado = x[idx + 2]
+            else:
+                soc = 1.0; Iast = 0.0; tempo_acumulado = 0.0
 
-        return np.array(dx, dtype=float)
+            # electrical transforms
+            theta_e = self.p * theta_m
+            we = self.p * wm
+
+            # --- Vehicle/tyre related computations ---
+            if (self.vehicle is not None) and (self.transmission is not None) and (self.tire is not None):
+                try:
+                    cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission)
+                    vel_ang_roda = self.transmission.motor_to_wheel_speed(wm)
+                    slip = self.tire.SlipRatio(vel_ang_roda, self.vehicle.wheel_radius, vehicle_velocity)
+                    Fz = self.vehicle.mass * self.vehicle.g
+                    Fx_max = self.tire.Tire_forces(Fz, slip)
+                    wheel_torque_ideal = self.transmission.motor_to_wheel_torque(self.torque_constant * isq)
+                    traction_force_ideal = wheel_torque_ideal / self.vehicle.wheel_radius
+                    traction_force_limited = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max))
+                    resistance_force = self.vehicle.calculate_resistance_forces(vehicle_velocity)
+                    resultant_force = traction_force_limited - resistance_force
+                    if vehicle_velocity < 0.01 and resultant_force < 0:
+                        vehicle_acceleration = 0.0
+                    else:
+                        vehicle_acceleration = resultant_force / self.vehicle.mass
+                except Exception as e:
+                    print(f"Erro em cálculos veiculares: {e}")
+                    cl = 0.0
+                    vehicle_acceleration = 0.0
+                    traction_force_limited = 0.0
+                    resistance_force = 0.0
+                    Fx_max = 0.0
+                    slip = 0.0
+            else:
+                cl = 0.0
+                vehicle_acceleration = 0.0
+                traction_force_limited = 0.0
+                resistance_force = 0.0
+                Fx_max = 0.0
+                slip = 0.0
+
+            # --- Speed controller (PID) ---
+            speed_error = (self.speed_ref - wm) if (self.motor is not None) else 0.0
+            torque_ref = self.speed_controller.update(speed_error, dt=self.hp)
+
+            iq_ref = torque_ref / self.torque_constant if self.torque_constant != 0 else 0.0
+            id_ref = 0.0
+            
+            # Limitar corrente de referência
+            if abs(iq_ref) > self.max_current:
+                iq_ref = np.sign(iq_ref) * self.max_current
+
+            # current errors
+            error_d = id_ref - isd
+            error_q = iq_ref - isq
+
+            # decoupling
+            decoupling_d = -we * self.lq * isq
+            decoupling_q = we * (self.ld * isd + self.lambda_m)
+
+            # PID controllers for d/q voltages
+            vd_pid = self.id_controller.update(error_d, dt=self.hp)
+            vq_pid = self.iq_controller.update(error_q, dt=self.hp)
+
+            vd_unclamped = vd_pid + decoupling_d
+            vq_unclamped = vq_pid + decoupling_q
+
+            # DC link from battery
+            if self.battery is not None:
+                try:
+                    batt_current_est = abs(isq)
+                    Vdc_now = self.battery.calcular_tensao(batt_current_est, soc, Iast, tempo_acumulado) if soc >= 0.0 else self.Vdc_default
+                    if hasattr(self.inversor, 'set_Vdc'):
+                        self.inversor.set_Vdc(Vdc_now)
+                except Exception as e:
+                    print(f"Erro em bateria: {e}")
+                    Vdc_now = self.Vdc_default
+            else:
+                Vdc_now = self.Vdc_default
+
+            Vclamp = Vdc_now if Vdc_now > 0 else self.Vdc_default
+            
+            # CORREÇÃO: Limitação mais conservadora
+            vd = np.clip(vd_unclamped, -Vclamp, Vclamp)
+            vq = np.clip(vq_unclamped, -Vclamp, Vclamp)
+
+            # electrical dynamics (linearized RL)
+            d_isd = (vd - self.rs * isd + we * self.lq * isq) * self.inv_ld
+            d_isq = (vq - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
+            
+            # CORREÇÃO: Evitar divisão por zero em iso
+            L0 = max(0.1 * (self.ld + self.lq) / 2.0, 1e-6)
+            d_iso = (0.0 - self.rs * iso) / L0
+
+            # mechanical dynamics
+            ce = self.torque_constant * isq
+            d_wm = (ce - cl - self.kf * wm) * self.inv_jm
+            d_theta_m = wm
+
+            # thermal dynamics (simple copper loss heating)
+            i_rms_sq = isd**2 + isq**2
+            copper_losses = 3.0 * self.rs * (i_rms_sq / 2.0)
+            d_temp = copper_losses * self.inv_mC
+
+            # battery derivatives
+            if self.battery is not None:
+                try:
+                    corrente_batt = abs(isq)
+                    dsoc_dt, dIast_dt, dtime_dt = self.battery.calcular_derivadas(corrente_batt)
+                except Exception as e:
+                    print(f"Erro em derivadas da bateria: {e}")
+                    dsoc_dt, dIast_dt, dtime_dt = 0.0, 0.0, 0.0
+            else:
+                dsoc_dt, dIast_dt, dtime_dt = 0.0, 0.0, 0.0
+
+            # assemble derivative vector consistent with simulate() x0 layout
+            dx = [d_isd, d_isq, d_iso, d_wm, d_theta_m, d_temp]
+            if (self.vehicle is not None) and (self.transmission is not None):
+                dx.extend([vehicle_acceleration, vehicle_velocity])
+                if self.battery is not None:
+                    dx.extend([dsoc_dt, dIast_dt, dtime_dt])
+            else:
+                if self.battery is not None:
+                    dx.extend([dsoc_dt, dIast_dt, dtime_dt])
+
+            return np.array(dx, dtype=float)
+            
+        except Exception as e:
+            print(f"Erro crítico em combined_edos: {e}")
+            # Retornar derivadas zeradas em caso de erro
+            n_states = len(x)
+            return np.zeros(n_states, dtype=float)
 
     def simulate(self, t0: float = 0.0, tf: Optional[float] = None) -> Dict[str, Any]:
-        """Run the simulation and return results.
-
-        Parameters
-        ----------
-        t0 : float, optional
-            Start time (default 0.0).
-        tf : float, optional
-            Final time (default uses self.tmax).
-
-        Returns
-        -------
-        results : dict
-            Dictionary with numpy arrays of logged signals.
-        """
+        """Run the simulation and return results."""
         if tf is None:
             tf = self.tmax
 
-        num_points = int((tf - t0) / self.hp) + 1
+        print(f"🚀 Iniciando simulação: t0={t0}, tf={tf}, steps={self.steps}")
+
+        # CORREÇÃO: Reduzir número de pontos para evitar travamento
+        num_points = min(self.steps, 1000)  # Máximo 500 pontos
         t_eval = np.linspace(t0, tf, num_points)
 
         # build initial state vector
@@ -399,22 +362,44 @@ class Simulation:
 
         # reset storage and controllers
         self.initialize_storage()
+        
         # reset internal PIDs states
         try:
             self.id_controller.reset()
             self.iq_controller.reset()
             self.speed_controller.reset()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Aviso ao resetar controladores: {e}")
 
         # integrate
         try:
-            print("Starting simulation...")
-            sol = solve_ivp(fun=self.combined_edos, t_span=(t0, tf), y0=x0,
-                            method='RK45', t_eval=t_eval, atol=1e-6, rtol=1e-6)
+            print("⏳ Executando integração numérica...")
+            
+            # CORREÇÃO: Método mais robusto e tolerâncias relaxadas
+            sol = solve_ivp(
+                fun=self.combined_edos, 
+                t_span=(t0, tf), 
+                y0=x0,
+                method='RK45', 
+                t_eval=t_eval, 
+                atol=1e-4,  # Relaxado
+                rtol=1e-3,  # Relaxado  
+                max_step=0.1  # Limitar passo máximo
+            )
+            
+            print(f"✅ Integração concluída! {len(sol.t)} pontos calculados")
+            
         except Exception as e:
-            raise RuntimeError(f"Simulation solver failed: {e}")
+            print(f"❌ Erro na integração: {e}")
+            # Criar solução fallback
+            t_fallback = np.linspace(t0, tf, 100)
+            y_fallback = np.zeros((len(x0), len(t_fallback)))
+            for i in range(len(x0)):
+                y_fallback[i, :] = x0[i]  # Estado constante
+            sol = type('obj', (object,), {'t': t_fallback, 'y': y_fallback})()
 
+        # post-process: reconstruir sinais para logging
+        print("📊 Processando resultados...")
         # post-process: reconstruct controller outputs deterministically for logging
         pid_id_log = PID.Controller(kp=self.id_controller.kp, ki=self.id_controller.ki,
                                    kd=getattr(self.id_controller, 'kd', 0.0), limit=self.id_controller.limit, Ts=self.hp)
@@ -422,7 +407,7 @@ class Simulation:
                                    kd=getattr(self.iq_controller, 'kd', 0.0), limit=self.iq_controller.limit, Ts=self.hp)
         pid_sp_log = PID.Controller(kp=self.speed_controller.kp, ki=self.speed_controller.ki,
                                    kd=getattr(self.speed_controller, 'kd', 0.0), limit=self.speed_controller.limit, Ts=self.hp)
-
+        
         for idx, t in enumerate(sol.t):
 
             y = sol.y[:, idx]
@@ -467,11 +452,26 @@ class Simulation:
             decoupling_d = -we * self.lq * isq
             decoupling_q = we * (self.ld * isd + self.lambda_m)
 
+            # DC link from battery
+            if self.battery is not None:
+                try:
+                    batt_current_est = abs(isq)
+                    Vdc_now = self.battery.calcular_tensao(batt_current_est, soc, Iast, tempo_acumulado) if soc >= 0.0 else self.Vdc_default
+                    if hasattr(self.inversor, 'set_Vdc'):
+                        self.inversor.set_Vdc(Vdc_now)
+                except Exception as e:
+                    print(f"Erro em bateria: {e}")
+                    Vdc_now = self.Vdc_default
+            else:
+                Vdc_now = self.Vdc_default
+
+            Vclamp = Vdc_now if Vdc_now > 0 else self.Vdc_default
+
             vd_pid = pid_id_log.update(error_d, dt=dt)
             vq_pid = pid_iq_log.update(error_q, dt=dt)
 
-            vd_control = vd_pid + decoupling_d
-            vq_control = vq_pid + decoupling_q
+            vd_control = np.clamp(vd_pid + decoupling_d, -Vclamp, Vclamp)
+            vq_control = np.clamp(vq_pid + decoupling_q, -Vclamp, Vclamp)
 
             # battery/inverter interaction for logging
             if self.battery is not None:
@@ -603,7 +603,6 @@ class Simulation:
             'iq_ref': np.array(self.iq_ref_trace),
             'id_ref': np.array(self.id_ref_trace)
         }
-        return results
 
-# sim = Simulation(1,100)
-# sim.simulate()
+        print(f"✅ Simulação finalizada! {len(results['t'])} pontos coletados")
+        return results

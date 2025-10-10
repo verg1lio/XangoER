@@ -50,7 +50,7 @@ class Controller:
         Updates PID gains.
     """
 
-    def __init__(self, kp, ki, kd, limit, Ts=0.001):
+    def __init__(self, kp, ki, kd, limit, Ts=0.1):
         self.kp = kp
         self.ki = ki
         self.kd = kd
