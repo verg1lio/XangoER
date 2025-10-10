@@ -1,3 +1,4 @@
+import numpy as np
 class BatteryPack:
     """A Battery Pack object based on a simplified Modified Shepherd model.
 

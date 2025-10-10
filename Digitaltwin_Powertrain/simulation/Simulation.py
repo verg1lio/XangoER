@@ -2,7 +2,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from models.BatteryPack import BatteryPack
 from models.Inversor import Inversor
-from models.PIDController import PIDController
+from models import PIDController as PID
 from models.Tire import Tire
 from models.Transmission import Transmission
 from models.Vehicle import Vehicle
@@ -85,7 +85,7 @@ class Simulation:
         self.max_current = getattr(self.motor, 'max_current', np.inf)
         self.Vdc_default = getattr(self.motor, 'Vdc', 600.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
-        self.speed_ref = getattr(self.motor, 'speed_ref', 0.0)
+        self.speed_ref = getattr(self.motor, 'speed_ref', 471.23)  # rad/s
 
         # precompute inverses used in ODEs
         self.inv_ld = 1.0 / self.ld if self.ld != 0 else 0.0
@@ -118,9 +118,9 @@ class Simulation:
         sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 600.0
 
         # instantiate internal PID controllers used by the integrator
-        self.id_controller = PIDController(kp=id_kp, ki=id_ki, kd=id_kd, limit=id_limit, Ts=self.hp)
-        self.iq_controller = PIDController(kp=iq_kp, ki=iq_ki, kd=iq_kd, limit=iq_limit, Ts=self.hp)
-        self.speed_controller = PIDController(kp=sp_kp, ki=sp_ki, kd=sp_kd, limit=sp_limit, Ts=self.hp)
+        self.id_controller = PID.Controller(kp=id_kp, ki=id_ki, kd=id_kd, limit=id_limit, Ts=self.hp)
+        self.iq_controller = PID.Controller(kp=iq_kp, ki=iq_ki, kd=iq_kd, limit=iq_limit, Ts=self.hp)
+        self.speed_controller = PID.Controller(kp=sp_kp, ki=sp_ki, kd=sp_kd, limit=sp_limit, Ts=self.hp)
 
         # initial conditions and storage
         self.reset_initial_conditions()
@@ -405,11 +405,11 @@ class Simulation:
             raise RuntimeError(f"Simulation solver failed: {e}")
 
         # post-process: reconstruct controller outputs deterministically for logging
-        pid_id_log = PIDController(kp=self.id_controller.kp, ki=self.id_controller.ki,
+        pid_id_log = PID.Controller(kp=self.id_controller.kp, ki=self.id_controller.ki,
                                    kd=getattr(self.id_controller, 'kd', 0.0), limit=self.id_controller.limit, Ts=self.hp)
-        pid_iq_log = PIDController(kp=self.iq_controller.kp, ki=self.iq_controller.ki,
+        pid_iq_log = PID.Controller(kp=self.iq_controller.kp, ki=self.iq_controller.ki,
                                    kd=getattr(self.iq_controller, 'kd', 0.0), limit=self.iq_controller.limit, Ts=self.hp)
-        pid_sp_log = PIDController(kp=self.speed_controller.kp, ki=self.speed_controller.ki,
+        pid_sp_log = PID.Controller(kp=self.speed_controller.kp, ki=self.speed_controller.ki,
                                    kd=getattr(self.speed_controller, 'kd', 0.0), limit=self.speed_controller.limit, Ts=self.hp)
 
         for idx, t in enumerate(sol.t):

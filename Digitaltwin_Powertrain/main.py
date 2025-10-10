@@ -1,32 +1,28 @@
 import dash
-from dash import dcc, html, dash_table
+from dash import dcc, html
 from dash.dependencies import Input, Output, State
-import numpy as np
-from scipy.integrate import solve_ivp
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
-from models import BatteryPack, Inversor, PIDController, Tire, Transmission, Vehicle, Motor
+from models import BatteryPack, Inversor, Tire, Transmission, Vehicle, Motor
 from simulation.Simulation import Simulation
 
 def build_defaults():
-    transmission = Transmission(final_drive_ratio=4.0, efficiency=0.95)
-    vehicle = Vehicle(mass=230.0, wheel_radius=0.16, drag_coeff=0.3,
+    transmission = Transmission.Transmission(final_drive_ratio=4.0, efficiency=0.95)
+    vehicle = Vehicle.Vehicle(mass=230.0, wheel_radius=0.16, drag_coeff=0.3,
                       frontal_area=1.0, rolling_resistance=0.015, road_grade=0.0)
-    battery = BatteryPack(tipo_celula='Li-ion', n_serie=162, n_paralelo=1, soc_inicial=1.0)
-    tire = Tire(pacejka_params=[0.333, 1.627, 1, 4.396, 931.4, 366.4], tire_friction_coef=1.45)
-    inversor = Inversor(eficiencia=0.95, freq_chaveamento=10000)
-
-    # motor params: rs, ld, lq, jm, kf, lambda_m, p, valor_mu
+    battery = BatteryPack.BatteryPack(tipo_celula='Li-ion', n_serie=162, n_paralelo=1, soc_inicial=1.0)
+    tire = Tire.Tire(pacejka_params=[0.333, 1.627, 1, 4.396, 931.4, 366.4], tire_friction_coef=1.45)
+    inversor = Inversor.Inversor(eficiencia=0.95, freq_chaveamento=10000)
     motor = Motor(rs=0.04585, ld=0.00067, lq=0.00172, jm=0.05769, kf=0.1,
                   lambda_m=0.13849, p=10, valor_mu=0.99,
                   TL=False, torque=0.0,
-                  vehicle=vehicle, transmission=transmission, battery=battery, tire=tire)
+                  speed_ref=471.23)
 
     sim = Simulation(motor=motor, vehicle=vehicle, transmission=transmission,
-                     battery=battery, tire=tire, inversor=inversor, tmax=2.0, steps=1000)
+                     battery=battery, tire=tire, inversor=inversor, tmax=10, steps=1000)
     return sim
 
 # ---------------------
@@ -53,7 +49,7 @@ app.layout = html.Div([
         'motor': {'rs': 0.04585, 'ld': 0.00067, 'lq': 0.00067, 'jm': 0.05769,
                   'kf': 0.1, 'lambda_m': 0.13849, 'p': 10, 'valor_mu': 0.95},
         'inversor': {'eficiencia': 0.95, 'freq_chaveamento': 10000},
-        'simulacao': {'tmax': 11, 'velocidade_ref': 471.23},
+        'simulacao': {'tmax': 10, 'velocidade_ref': 471.23},
         'tire': {
             'pacejka_params': [0.333, 1.627, 1, 4.396, 931.4, 366.4],
             'tire_friction_coef': 1.45
@@ -170,7 +166,7 @@ app.layout = html.Div([
                 dbc.CardHeader(html.H5("Simulação")),
                 dbc.CardBody([
                     dbc.Label("Tempo Máximo (s)"),
-                    dbc.Input(id='sim-time', type='number', value=11, step=1),
+                    dbc.Input(id='sim-time', type='number', value=10, step=1),
                     dbc.Label("Velocidade Ref (rad/s)"),
                     dbc.Input(id='speed-ref', type='number', value=471.23, step=1),
                 ])
@@ -475,6 +471,7 @@ def update_parameters(n_clicks, mass, wheel_radius, drag_coeff, frontal_area, ro
         'lambda_m': motor_lambda,
         'p': motor_poles,
         'valor_mu': motor_modulation
+        
     }
 
     current_params['simulacao'] = {
@@ -506,12 +503,12 @@ def run_simulation_once(n_clicks, parameters):
     simulacao_params = parameters['simulacao']
     tire_params = parameters['tire']
 
-    transmission = Transmission(**transmission_params)
-    vehicle = Vehicle(**vehicle_params)
-    battery = BatteryPack(**battery_params)
-    tire = Tire(**tire_params)
+    transmission = Transmission.Transmission(**transmission_params)
+    vehicle = Vehicle.Vehicle(**vehicle_params)
+    battery = BatteryPack.BatteryPack(**battery_params)
+    tire = Tire.Tire(**tire_params)
 
-    motor = Motor(
+    motor = Motor.Motor(
         rs=motor_params['rs'],
         ld=motor_params['ld'],
         lq=motor_params['lq'],
@@ -521,17 +518,19 @@ def run_simulation_once(n_clicks, parameters):
         p=motor_params['p'],
         valor_mu=motor_params['valor_mu'],
         TL=False,
-        torque=0.0,
-        vehicle=vehicle,
-        transmission=transmission,
-        battery=battery,
-        tire=tire
+        torque=0.0 ,
+        speed_ref= simulacao_params['velocidade_ref']
     )
     
-    motor.tmax = simulacao_params['tmax']
-    motor.speed_ref = simulacao_params['velocidade_ref']
-    
-    motor.simulate()
+
+ 
+    sim = Simulation(
+        motor=motor, vehicle=vehicle, transmission=transmission,
+        battery=battery, tire=tire, inversor=Inversor.Inversor(eficiencia=0.95, freq_chaveamento=10000),
+        tmax=simulacao_params['tmax'], steps=1000
+    )
+
+    sim.simulate()
     
     # Gerar todas as figuras
     figures = {

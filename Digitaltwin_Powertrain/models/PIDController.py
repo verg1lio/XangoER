@@ -1,4 +1,5 @@
-class PIDController:
+import numpy as np
+class Controller:
     """A PID controller with anti-windup and output saturation.
 
     This class implements a Proportional-Integral-Derivative (PID) controller 

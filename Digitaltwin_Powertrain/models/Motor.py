@@ -1,5 +1,5 @@
 import numpy as np
-import models.PIDController as PIDController
+from models import PIDController as PID
 from Constants.constants import PI23, RQ23, SQRT3_2
 class Motor:
     """Permanent Magnet Synchronous Motor (PMSM) with Field-Oriented Control (FOC).
@@ -95,7 +95,7 @@ class Motor:
         Computes abc phase currents from dq currents.
     """
 
-    def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu, TL=False, torque=0.0):
+    def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu, TL=False, torque=0.0, speed_ref= 0.0):
         self.pi23 = PI23
         self.rq23 = RQ23
         self.rs = rs
@@ -120,9 +120,9 @@ class Motor:
         self.inv_mC = 1.0 / (self.m * self.C)
 
         # Controllers
-        self.id_controller = PIDController(kp=0.5, ki=100.0, kd = 0, limit=600.0)
-        self.iq_controller = PIDController(kp=0.5, ki=100.0, kd = 0 ,limit=600.0)
-        self.speed_controller = PIDController(kp=10.0, ki=5,kd = 0, limit=600.0)
+        self.id_controller = PID.Controller(kp=0.5, ki=100.0, kd = 0, limit=600.0)
+        self.iq_controller = PID.Controller(kp=0.5, ki=100.0, kd = 0 ,limit=600.0)
+        self.speed_controller = PID.Controller(kp=10.0, ki=5,kd = 0, limit=600.0)
 
         # External torque setup
         self.TL = bool(TL)
@@ -141,7 +141,7 @@ class Motor:
         # References
         self.id_ref = 0.0
         self.iq_ref = 0.0
-        self.speed_ref = 471.23
+        self.speed_ref = speed_ref
 
     def set_external_torque(self, torque):
         """Defines the external torque source.
