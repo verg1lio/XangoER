@@ -262,6 +262,9 @@ class Simulation:
                     Vdc_now = self.battery.calcular_tensao(batt_current_est, soc, Iast, tempo_acumulado) if soc >= 0.0 else self.Vdc_default
                     if hasattr(self.inversor, 'set_Vdc'):
                         self.inversor.set_Vdc(Vdc_now)
+                        # va,vb,vc = self.inversor.source_voltage(self.modulation_index)
+                        # vq_r, vd_r = self.inversor.park_transform(va, vb, vc, theta_e)
+                        
                 except Exception as e:
                     print(f"Erro em bateria: {e}")
                     Vdc_now = self.Vdc_default
