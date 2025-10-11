@@ -85,7 +85,7 @@ class Simulation:
         iq_kd = getattr(iq_proto, 'kd', 0.0) if iq_proto is not None else 0.0
         iq_limit = getattr(iq_proto, 'limit', 600.0) if iq_proto is not None else 600.0
 
-        sp_kp = getattr(sp_proto, 'kp', 5.0) if sp_proto is not None else 5.0
+        sp_kp = getattr(sp_proto, 'kp', 10.0) if sp_proto is not None else 5.0
         sp_ki = getattr(sp_proto, 'ki', 2.0) if sp_proto is not None else 2.0
         sp_kd = getattr(sp_proto, 'kd', 0.1) if sp_proto is not None else 0.1
         sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 600.0
@@ -312,7 +312,7 @@ class Simulation:
             else:
                 if self.battery is not None:
                     dx.extend([dsoc_dt, dIast_dt, dtime_dt])
-
+            #print(f"t={t:.3f}, wm={wm:.2f}")
             return np.array(dx, dtype=float)
             
         except Exception as e:
@@ -329,7 +329,7 @@ class Simulation:
         print(f"🚀 Iniciando simulação: t0={t0}, tf={tf}, steps={self.steps}")
 
         # CORREÇÃO: Reduzir número de pontos para evitar travamento
-        num_points = min(self.steps, 1000)  # Máximo 500 pontos
+        num_points = min(self.steps, 2000)  # Máximo 500 pontos
         t_eval = np.linspace(t0, tf, num_points)
 
         # build initial state vector
@@ -380,11 +380,11 @@ class Simulation:
                 fun=self.combined_edos, 
                 t_span=(t0, tf), 
                 y0=x0,
-                method='RK45', 
+                method='RK23',  # Métoddo mais robusto
                 t_eval=t_eval, 
                 atol=1e-4,  # Relaxado
                 rtol=1e-3,  # Relaxado  
-                max_step=0.1  # Limitar passo máximo
+                max_step=0.01  # Limitar passo máximo
             )
             
             print(f"✅ Integração concluída! {len(sol.t)} pontos calculados")
