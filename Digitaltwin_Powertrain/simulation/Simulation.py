@@ -293,7 +293,7 @@ class Simulation:
             # thermal dynamics (simple copper loss heating)
             i_rms_sq = isd**2 + isq**2
             copper_losses = 3.0 * self.rs * (i_rms_sq / 2.0)
-            d_temp = copper_losses * self.inv_mC
+            d_temp = copper_losses * self.inv_mC 
 
             # battery derivatives
             if self.battery is not None:
@@ -383,7 +383,7 @@ class Simulation:
                 fun=self.combined_edos, 
                 t_span=(t0, tf), 
                 y0=x0,
-                method='RK23',  # Métoddo mais robusto
+                method='RK23',  # Métoddo mais rapido de integração RK23
                 t_eval=t_eval, 
                 atol=1e-4,  # Relaxado
                 rtol=1e-3,  # Relaxado  
