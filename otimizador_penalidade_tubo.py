@@ -971,8 +971,8 @@ def penalidades_tipo_tubo(nodes, elements):
             # propriedades do tubo otimizado
             props_otm = estrutura.obter_propriedades(type_tube_otm)
             d_otm, e_otm = props_otm[2], props_otm[3]
-            A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, 'Circular')
-            I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, 'Circular')[0]
+            A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
+            I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
 
             # comparação com limites mínimos da SAE
             if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
@@ -1123,7 +1123,7 @@ def penalidade_chassi(KT, KF, massa, tensoes, frequencias,W_RIGIDEZ = 2.0,W_MASS
     return fitness
 
 if __name__ == "__main__":
-    nodes = np.array([[-0.181,  0.000,  0.360],                 #00
+    nodes = np.array([[-0.181,  0.000,  0.360],             #00
     [-0.181,  0.000,  0.050],                               #01
     [-0.280,  0.275,  0.240],                               #02
     [-0.285,  0.495,  0.045],                               #03
@@ -1167,8 +1167,8 @@ if __name__ == "__main__":
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 40
-    pop_size = 20
+    max_gen = 400
+    pop_size = 100
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
