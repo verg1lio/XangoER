@@ -682,7 +682,7 @@ def find_new_index(old_index, nodes):
             break
 
     if is_central[old_index]:
-        new_index = (first_central-1)*2 + (old_index-first_central)
+        new_index = (first_central-1) * 2 + (old_index - first_central)
         return new_index
     else:
         new_index = old_index*2
@@ -716,7 +716,7 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        fronthoop_node = nodes[find_new_index(18, nodes)]                          #declara o nó do fronthoop com indice novo
+        fronthoop_node = nodes[35]                          #declara o nó do fronthoop com indice novo
         fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
         if dist_fh_fhb > 0.05:                                                     #condição retirada do regulamento
@@ -737,7 +737,7 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        mainhoop_node = nodes[find_new_index(17, nodes)]                                        #declara o nó do main hoop com indice novo
+        mainhoop_node = nodes[34]                                        #declara o nó do main hoop com indice novo
         mhb_node = nodes[find_new_index(14, nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
         deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
         deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
@@ -923,6 +923,62 @@ def penalidades_geometricas(nodes, elements):
 
     return penalidade
 
+def penalidades_tipo_tubo(nodes, elements):
+
+    penalidade = 0
+
+    mapeamento_chassi = {
+        #Classificação: [elemento1, ..., 'Tubo X]
+        "Front_Bulkhead": [(find_new_index(0, nodes)[0], find_new_index(1, nodes)[0]), (find_new_index(0, nodes)[0], find_new_index(0, nodes)[1]), (find_new_index(1, nodes)[0], find_new_index(1, nodes)[1]), 'Tubo B'],   
+        "Front_Bulkhead_Support": [(find_new_index(0, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(3, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo C'],    
+        "Front_Hoop": [(find_new_index(4, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(5, nodes)[0], 35), 'Tubo A'],                 
+        "Front_Hoop_Bracing": [(find_new_index(0, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo B'],                   
+        "Side_Impact_Structure": [(find_new_index(6, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(6, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(7, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(7, nodes)[0]), 'Tubo B'],                   
+        "Bent/Multi_Upper_Side_Impact_Member": ['Tubo D'],                   
+        "Main_Hoop": [(find_new_index(6, nodes)[0], find_new_index(14, nodes)[0]), (find_new_index(14, nodes)[0], 34), 'Tubo A'],                  
+        "Main_Hoop_Bracing": [(find_new_index(14, nodes)[0], find_new_index(15, nodes)[0]), 'Tubo B'],                  
+        "Main_Hoop_Bracing_Supports": ['Tubo C'],
+        "Driver_Restraint_Harness_Attachment": ['Tubo B'],
+        "Shoulder_Harness_Mounting_Bar": ['Tubo A'],
+        "Shoulder_Harness_Mounting_Bar_Bracing": ['Tubo C'],
+        "Accumulator_Mounting_and_Protection": [(find_new_index(7, nodes)[0], find_new_index(6, nodes)[0]), (find_new_index(6, nodes)[0], find_new_index(8, nodes)[0]), (find_new_index(7, nodes)[0], find_new_index(8, nodes)[0]), (find_new_index(8, nodes)[0], find_new_index(10, nodes)[0]), (find_new_index(8, nodes)[0], find_new_index(9, nodes)[0]), (find_new_index(6, nodes)[0], find_new_index(9, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(10, nodes)[0]), 'Tubo B'],
+        "Component_Protection": ['Tubo C'],
+        "Structural_Tubing": [(find_new_index(10, nodes)[0], find_new_index(11, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(11, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(15, nodes)[0]), (find_new_index(11, nodes)[0], find_new_index(15, nodes)[0]), (find_new_index(15, nodes)[0], find_new_index(12, nodes)[0]), (find_new_index(12, nodes)[0], find_new_index(13, nodes)[0]), (find_new_index(11, nodes)[0], find_new_index(13, nodes)[0]), (find_new_index(13, nodes)[0], find_new_index(15, nodes)[0]), 'Tubo C']
+    }
+
+    tubos_SAE = {
+        #Tubo X : [Diâmetro, Espessura, Área da secção transversal, Momento de Inércia de Área]
+        'Tubo A': [0.025, 0.002, 0.000173, 1.13E-08],   
+        'Tubo B': [0.025, 0.0012, 0.000114, 8.51E-09],
+        'Tubo C': [0.025, 0.0012, 0.000091, 6.70E-09],
+        'Tubo D': [0.035,0.0012, 0.000126, 1.80E-08]
+    }
+
+    estrutura = Estrutura(elements, nodes)
+    type_tube_sae = ''
+    type_tube_otm = ''
+    for element in elements:
+        elemento = (element[0], element[1])          # nós do elemento
+        type_tube_otm = element[2]                   # tipo de tubo otimizado (ex: 'Tubo B')
+
+        for classification in mapeamento_chassi:
+            if elemento in mapeamento_chassi[classification] or tuple(reversed(elemento)) in mapeamento_chassi[classification]:
+                # tipo mínimo exigido pela SAE
+                type_tube_sae = mapeamento_chassi[classification][-1]
+                d_sae, e_sae, A_sae, I_sae = tubos_SAE[type_tube_sae]
+
+            # propriedades do tubo otimizado
+            props_otm = estrutura.obter_propriedades(type_tube_otm)
+            d_otm, e_otm = props_otm[2], props_otm[3]
+            A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
+            I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
+
+            # comparação com limites mínimos da SAE
+            if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
+                penalidade += 10
+                
+    return penalidade
+
 def evaluate(nodes,elements) -> float:
     """
     Avalia o custo de um indivíduo.
@@ -981,6 +1037,7 @@ def evaluate(nodes,elements) -> float:
 
         penalty += penalidade_chassi(KT, KF, massa, von, frequencies)
         penalty += penalidades_geometricas(nodes, elements)
+        penalty += penalidades_tipo_tubo(nodes, elements)
 
         t7 = time.perf_counter()
 
@@ -1082,7 +1139,7 @@ if __name__ == "__main__":
     [-0.293,  1.950,  0.250],                               #15 antigo 16
     [-0.275,  0.270,  0.045],                               #16 antigo 17
     [ 0.000,  1.410,  1.105],                               #17 antigo 15
-    [0,  0.555,  0.550]                                     #18
+    [0.000,  0.555,  0.550]                                     #18
     ])                             
 
     connections = [(0,1)  ,(0,2)  ,(1,2)  ,(0,5)  ,(2,5)  ,(2,4)  ,(2,3)  ,(1,16)  ,(2,16),
@@ -1107,8 +1164,8 @@ if __name__ == "__main__":
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 40
-    pop_size = 20
+    max_gen = 400
+    pop_size = 100
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
