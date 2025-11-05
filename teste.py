@@ -89,7 +89,7 @@ class ChassisDEOptimizer:
 
         self.global_decoded_cache = {}
         
-    def _create_alignment_map(self,exceptions=[15]):
+    def _create_alignment_map(self,exceptions=[17, 18]):
         """
         Cria um dicionário mapeando cada nó central ao nó lateral que ele deve espelhar.
         exceptions não são mapeados.
@@ -662,32 +662,48 @@ class ChassisDEOptimizer:
 
 def find_new_index(old_index, nodes):
     """
-    Calcula o indice do nó após passar pela otimização
-    Retorna o novo indice do nó e do seu espelhado correspondente
-    Caso seja um nó central retorna apenas o novo indice do nó
+    Calcula o indice do nó após passar pela otimização (decodificação).
+    Retorna o novo indice do nó e do seu espelhado (se houver).
     
     Entradas:
-    - old_index: Índice do nó no base nodes
-    - nodes: lista de nós
+    - old_index: Índice do nó no 'base nodes'
+    - nodes: array (N,3) dos 'base nodes'
     Retorno:
-    - new_index: Índice do nó após passar pela otimização
-    - mirrored_index: índice do nó espelhado correspondente
-    - new_central_index: novo index se for um nó central
+    - new_index: Índice do nó em 'nodes_full'
+    - mirrored_index: (Opcional) Índice do nó espelhado em 'nodes_full'
+    - new_central_index: (Opcional) Índice do nó central em 'nodes_full'
     """
     
+    if not isinstance(nodes, np.ndarray):
+        nodes = np.array(nodes)
+        
+    # is_central será um array de 19 booleanos
     is_central = np.isclose(nodes[:, 0], 0.0)
+    
+    first_central = -1 # Inicializa
     for i in range(len(is_central)):
         if is_central[i]:
             first_central = i
             break
+            
+    if first_central == -1:
+         first_central = len(is_central)
+
+    # Validação de índice
+    if old_index >= len(is_central) or old_index < 0:
+        raise IndexError(f"old_index {old_index} está fora dos limites para 'nodes' com tamanho {len(is_central)}")
 
     if is_central[old_index]:
-        new_index = (first_central-1) * 2 + (old_index - first_central)
+        # O novo índice começa DEPOIS que todos os não-centrais foram duplicados
+        # first_central = 17
+        new_index = (first_central * 2) + (old_index - first_central)
         return new_index
     else:
-        new_index = old_index*2
-        mirrored_index = new_index+1
-        return new_index,mirrored_index
+        # Nós não-centrais (índices 0 a 16)
+        new_index = old_index * 2
+        mirrored_index = new_index + 1
+        return new_index, mirrored_index
+
     
 def penalidades_geometricas(nodes, elements):
     '''
@@ -716,7 +732,8 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        fronthoop_node = nodes[35]                          #declara o nó do fronthoop com indice novo
+        idx = find_new_index(18, nodes)
+        fronthoop_node = nodes[idx]                          #declara o nó do fronthoop com indice novo
         fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
         if dist_fh_fhb > 0.05:                                                     #condição retirada do regulamento
@@ -737,7 +754,7 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        mainhoop_node = nodes[34]                                        #declara o nó do main hoop com indice novo
+        mainhoop_node = nodes[find_new_index(17, nodes)]                                        #declara o nó do main hoop com indice novo
         mhb_node = nodes[find_new_index(14, nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
         deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
         deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
@@ -931,11 +948,11 @@ def penalidades_tipo_tubo(nodes, elements):
         #Classificação: [elemento1, ..., 'Tubo X]
         "Front_Bulkhead": [(find_new_index(0, nodes)[0], find_new_index(1, nodes)[0]), (find_new_index(0, nodes)[0], find_new_index(0, nodes)[1]), (find_new_index(1, nodes)[0], find_new_index(1, nodes)[1]), 'Tubo B'],   
         "Front_Bulkhead_Support": [(find_new_index(0, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(3, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo C'],    
-        "Front_Hoop": [(find_new_index(4, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(5, nodes)[0], 35), 'Tubo A'],                 
+        "Front_Hoop": [(find_new_index(4, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(5, nodes)[0], find_new_index(18, nodes)), 'Tubo A'],                 
         "Front_Hoop_Bracing": [(find_new_index(0, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo B'],                   
         "Side_Impact_Structure": [(find_new_index(6, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(6, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(7, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(7, nodes)[0]), 'Tubo B'],                   
         "Bent/Multi_Upper_Side_Impact_Member": ['Tubo D'],                   
-        "Main_Hoop": [(find_new_index(6, nodes)[0], find_new_index(14, nodes)[0]), (find_new_index(14, nodes)[0], 34), 'Tubo A'],                  
+        "Main_Hoop": [(find_new_index(6, nodes)[0], find_new_index(14, nodes)[0]), (find_new_index(14, nodes)[0], find_new_index(17, nodes)), 'Tubo A'],                  
         "Main_Hoop_Bracing": [(find_new_index(14, nodes)[0], find_new_index(15, nodes)[0]), 'Tubo B'],                  
         "Main_Hoop_Bracing_Supports": ['Tubo C'],
         "Driver_Restraint_Harness_Attachment": ['Tubo B'],
@@ -967,15 +984,15 @@ def penalidades_tipo_tubo(nodes, elements):
                 type_tube_sae = mapeamento_chassi[classification][-1]
                 d_sae, e_sae, A_sae, I_sae = tubos_SAE[type_tube_sae]
 
-            # propriedades do tubo otimizado
-            props_otm = estrutura.obter_propriedades(type_tube_otm)
-            d_otm, e_otm = props_otm[2], props_otm[3]
-            A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
-            I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
+                # propriedades do tubo otimizado
+                props_otm = estrutura.obter_propriedades(type_tube_otm)
+                d_otm, e_otm = props_otm[2], props_otm[3]
+                A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
+                I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
 
-            # comparação com limites mínimos da SAE
-            if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
-                penalidade += 10
+                # comparação com limites mínimos da SAE
+                if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
+                    penalidade += 10
                 
     return penalidade
 
