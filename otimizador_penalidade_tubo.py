@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 import time
+from itertools import repeat
+
 
 def init_worker(optimizer_instance):
     """
@@ -89,7 +91,7 @@ class ChassisDEOptimizer:
 
         self.global_decoded_cache = {}
         
-    def _create_alignment_map(self,exceptions=[15]):
+    def _create_alignment_map(self,exceptions=[17, 18]):
         """
         Cria um dicionário mapeando cada nó central ao nó lateral que ele deve espelhar.
         exceptions não são mapeados.
@@ -303,9 +305,10 @@ class ChassisDEOptimizer:
                 initializer=init_worker,
                 initargs=(self,)
             ) as executor:
-                results = list(executor.map(evaluate, nodes_list, elements_list))
+                results = list(executor.map(evaluate, nodes_list, elements_list, repeat(self.base_nodes)))
+
         else:
-            results = [evaluate(nodes_list[i], elements_list[i]) for i in range(len(nodes_list))]
+            results = [evaluate(nodes_list[i], elements_list[i], self.base_nodes) for i in range(len(nodes_list))]
         return results  
       
     def optimize(self):
@@ -356,9 +359,9 @@ class ChassisDEOptimizer:
             t4 = time.time()
             # Avaliação (paralela ou sequencial)
             if executor:
-                results = list(executor.map(evaluate, nodes_list, elems_list))
+                results = list(executor.map(evaluate, nodes_list, elems_list, repeat(self.base_nodes)))
             else:
-                results = [evaluate(n, e) for n, e in zip(nodes_list, elems_list)]
+                results = [evaluate(n, e, b) for n, e, b in zip(nodes_list, elems_list, self.base_nodes)]
             t5 = time.time()
 
             t6 = time.time()
@@ -662,34 +665,50 @@ class ChassisDEOptimizer:
 
 def find_new_index(old_index, nodes):
     """
-    Calcula o indice do nó após passar pela otimização
-    Retorna o novo indice do nó e do seu espelhado correspondente
-    Caso seja um nó central retorna apenas o novo indice do nó
+    Calcula o indice do nó após passar pela otimização (decodificação).
+    Retorna o novo indice do nó e do seu espelhado (se houver).
     
     Entradas:
-    - old_index: Índice do nó no base nodes
-    - nodes: lista de nós
+    - old_index: Índice do nó no 'base nodes'
+    - nodes: array (N,3) dos 'base nodes'
     Retorno:
-    - new_index: Índice do nó após passar pela otimização
-    - mirrored_index: índice do nó espelhado correspondente
-    - new_central_index: novo index se for um nó central
+    - new_index: Índice do nó em 'nodes_full'
+    - mirrored_index: (Opcional) Índice do nó espelhado em 'nodes_full'
+    - new_central_index: (Opcional) Índice do nó central em 'nodes_full'
     """
     
+    if not isinstance(nodes, np.ndarray):
+        nodes = np.array(nodes)
+        
+    # is_central será um array de 19 booleanos
     is_central = np.isclose(nodes[:, 0], 0.0)
+    
+    first_central = -1 # Inicializa
     for i in range(len(is_central)):
         if is_central[i]:
             first_central = i
             break
+            
+    if first_central == -1:
+         first_central = len(is_central)
+
+    # Validação de índice
+    if old_index >= len(is_central) or old_index < 0:
+        raise IndexError(f"old_index {old_index} está fora dos limites para 'nodes' com tamanho {len(is_central)}")
 
     if is_central[old_index]:
-        new_index = (first_central-1) * 2 + (old_index - first_central)
+        # O novo índice começa DEPOIS que todos os não-centrais foram duplicados
+        # first_central = 17
+        new_index = (first_central * 2) + (old_index - first_central)
         return new_index
     else:
-        new_index = old_index*2
-        mirrored_index = new_index+1
-        return new_index,mirrored_index
+        # Nós não-centrais (índices 0 a 16)
+        new_index = old_index * 2
+        mirrored_index = new_index + 1
+        return new_index, mirrored_index
+
     
-def penalidades_geometricas(nodes, elements):
+def penalidades_geometricas(nodes, elements, base_nodes):
     '''
     Define e aplica as penalidades geométricas nos indivíduos do processo de otimização
 
@@ -704,7 +723,7 @@ def penalidades_geometricas(nodes, elements):
     penalidade = 0
 
     # Penalidade em relação ao FH e FHB
-    def penalidade_fh_fhb(nodes):
+    def penalidade_fh_fhb(nodes, base_nodes):
         '''
         Segue a regra F.6.3.4 do regulamento da SAE-2025 que limita a distância máxima entre o ponto mais alto do Front Hoop e o ponto que o conecta ao Front Hoop Bacing
         Distância máxima: 0,05 m
@@ -716,16 +735,17 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        fronthoop_node = nodes[35]                          #declara o nó do fronthoop com indice novo
-        fhb_node = nodes[find_new_index(5, nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
+        idx = find_new_index(18, base_nodes)
+        fronthoop_node = nodes[idx]                          #declara o nó do fronthoop com indice novo
+        fhb_node = nodes[find_new_index(5, base_nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
-        if dist_fh_fhb > 0.05:                                                     #condição retirada do regulamento
+        if dist_fh_fhb > 0.05 or fronthoop_node[2] < fhb_node[2]:                                                     #condição retirada do regulamento
             pen += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                              #aplicação de penalidade
 
         return pen
 
     # Penalidade em relação ao MH e o MHB
-    def penalidade_mh_mhb(nodes):
+    def penalidade_mh_mhb(nodes, base_nodes):
         '''
         Segue a regra F.5.9.4 do regulamento da SAE-2025 que limita a distância máxima entre o ponto mais alto do Main Hoop e o ponto que o conecta ao(s) Main Hoop Bacing(s).
         Distância máxima: 0,16 m
@@ -737,8 +757,8 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        mainhoop_node = nodes[34]                                        #declara o nó do main hoop com indice novo
-        mhb_node = nodes[find_new_index(14, nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
+        mainhoop_node = nodes[find_new_index(17, base_nodes)]                                        #declara o nó do main hoop com indice novo
+        mhb_node = nodes[find_new_index(14, base_nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
         deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
         deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
         deltaz_mh_mhb = mainhoop_node[2] - mhb_node[2]                                          #diferença das coordenadas "z" em ambos os nós
@@ -749,7 +769,7 @@ def penalidades_geometricas(nodes, elements):
         return pen
     
     # Penalidade ângulo entre o Main Hoop e o Main Hoop Bracing
-    def penalidade_angulo_mh_mhb(nodes):
+    def penalidade_angulo_mh_mhb(nodes, base_nodes):
         '''
         Segue a regra F.5.9.5 do regulamento da SAE-2025 que limita o ângulo mínimo entre o Main Hoop e o(s) Main Hoop Bracing(s)
         Ângulo mínimo: 30°
@@ -761,12 +781,12 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        x_mhb = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(15, nodes)[0]][0]                                                                       #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
-        y_mhb = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(15, nodes)[0]][1]                                                                       #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
-        z_mhb = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(15, nodes)[0]][2]                                                                       #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
+        x_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(6, base_nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(6, base_nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(6, base_nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        x_mhb = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(15, base_nodes)[0]][0]                                                                       #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
+        y_mhb = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(15, base_nodes)[0]][1]                                                                       #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
+        z_mhb = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(15, base_nodes)[0]][2]                                                                       #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
         vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                                               #vetor formado pelos nós do elemento da porção do mainhoop analisada
         vetor_mhb = (x_mhb, y_mhb, z_mhb)                                                                                                                       #vetor formado pelos nós do elemento do Main Hoop Bracing
         modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                                          #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
@@ -780,7 +800,7 @@ def penalidades_geometricas(nodes, elements):
         return pen
 
     # Penalidade ângulo com a vertical da parte do Front Hoop que fica acima da Upper Side Impact Structure
-    def penalidade_angulo_vetical_fh(nodes):
+    def penalidade_angulo_vetical_fh(nodes, base_nodes):
         '''
         Segue a regra F.5.7.6 do regulamento da SAE-2025 que limita o ângulo entre a parte do Front Hoop acima da Upper Side Impact Structure e o eixo da vertical 
         Ângulo máximo: 20°
@@ -792,9 +812,9 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        x_porcao_fh = nodes[find_new_index(5, nodes)[0]][0] - nodes[find_new_index(4, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_fh = nodes[find_new_index(5, nodes)[0]][1] - nodes[find_new_index(4, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_fh = nodes[find_new_index(5, nodes)[0]][2] - nodes[find_new_index(4, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        x_porcao_fh = nodes[find_new_index(5, base_nodes)[0]][0] - nodes[find_new_index(4, base_nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_fh = nodes[find_new_index(5, base_nodes)[0]][1] - nodes[find_new_index(4, base_nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_fh = nodes[find_new_index(5, base_nodes)[0]][2] - nodes[find_new_index(4, base_nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
         vetor_porcao_fh = (x_porcao_fh, y_porcao_fh, z_porcao_fh)                                                                      #vetor formado pelos nós que formam a porção do front hoop analisada
         modulo_vetor_porcao_fh = np.sqrt(vetor_porcao_fh[0] ** 2 + vetor_porcao_fh[1] ** 2 + vetor_porcao_fh[2] **2)                   #módulo do vetor formado pelos nós que formam a porção do front hoop analisada
         produto_escalar_porcao_fh_e_vertical = vetor_porcao_fh[2]                                                                      #produto escalar entre o vetor formado pelos nós que formam a porção do front hoop analisada e o versor da vertical
@@ -806,7 +826,7 @@ def penalidades_geometricas(nodes, elements):
         return pen
 
     # Penalidade ângulo com a vertical da parte do Main Hoop que fica acima do ponto que o conecta ao Upper Side Impact Tube 
-    def penalidade_angulo_vertical_mh(nodes):
+    def penalidade_angulo_vertical_mh(nodes, base_nodes):
         '''
         Segue a regra F.5.8.3 do regulamento da SAE-2025 que limita o ângulo entre a parte do Main Hoop que fica acima do ponto que o conecta com o Upper Side Impact Tube com o eixo da vertical
         Ângulo máximo: 10° 
@@ -818,9 +838,9 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        x_porcao_mh = nodes[find_new_index(14, nodes)[0]][0] - nodes[find_new_index(6, nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_mh = nodes[find_new_index(14, nodes)[0]][1] - nodes[find_new_index(6, nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_mh = nodes[find_new_index(14, nodes)[0]][2] - nodes[find_new_index(6, nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        x_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(6, base_nodes)[0]][0]                                          #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(6, base_nodes)[0]][1]                                          #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(6, base_nodes)[0]][2]                                          #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
         vetor_porcao_mh = (x_porcao_mh, y_porcao_mh, z_porcao_mh)                                                                       #vetor formado pelos nós do elemento da porção do mainhoop analisada
         modulo_vetor_porcao_mh = np.sqrt(vetor_porcao_mh[0] ** 2 + vetor_porcao_mh[1] ** 2 + vetor_porcao_mh[2] ** 2 )                  #módulo do vetor formado pelos nós do elemento da porção do mainhoop analisada
         produto_escalar_porcao_mh_e_vertical = vetor_porcao_mh[2]                                                                       #produto escalar do vetor formado pelo elemento da porção do Main Hoop trabalhada com o versor da vertical
@@ -832,7 +852,7 @@ def penalidades_geometricas(nodes, elements):
         return pen
 
     # Penalidade para posição do Upper Side Impact Member
-    def penalidade_posicao_upper_SI_member(nodes):
+    def penalidade_posicao_upper_SI_member(nodes, base_nodes):
         '''
         Segue a regra F.6.4.4 do regulamento da SAE-2025 que define uma zona permitida para a posição do Upper Side Impact Member
         Zona: 265 mm a 320 mm da parte frontal do Lower Side Impact Member que é ligado ao Front Hoop
@@ -844,9 +864,9 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        upper_SI_node_front_z = nodes[find_new_index(4, nodes)[0]][2]
-        upper_SI_node_back_z = nodes[find_new_index(6, nodes)[0]][2]
-        lowest_point_SI_z =  nodes[find_new_index(7, nodes)[0]][2]
+        upper_SI_node_front_z = nodes[find_new_index(4, base_nodes)[0]][2]
+        upper_SI_node_back_z = nodes[find_new_index(6, base_nodes)[0]][2]
+        lowest_point_SI_z =  nodes[find_new_index(7, base_nodes)[0]][2]
         dist_lowestpoint_front_usim = upper_SI_node_front_z - lowest_point_SI_z
         dist_lowestpoint_back_usim = upper_SI_node_back_z - lowest_point_SI_z
 
@@ -857,7 +877,7 @@ def penalidades_geometricas(nodes, elements):
         return pen
     
     # Penalidade de retidão vertical para um elemento definido entre dois nós
-    def penalidade_retidão_vertical (nodes, no1, no2):
+    def penalidade_retidão_vertical (nodes, base_nodes, no1, no2):
         '''
         Esta penalidade tem como função garantir a retidão de qualquer elemento com a vertical. Ou seja, dados os nós das extremidades do elemento, caso o ângulo formado por ele e o eixo da vertical 
         seja diferente de 0°, uma penalidade alta será gerada
@@ -869,9 +889,9 @@ def penalidades_geometricas(nodes, elements):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0 
-        componente_x_vetor = nodes[find_new_index(no1, nodes)[0]][0] - nodes[find_new_index(no2, nodes)[0]][0]                          
-        componente_y_vetor = nodes[find_new_index(no1, nodes)[0]][1] - nodes[find_new_index(no2, nodes)[0]][1]   
-        componente_z_vetor = nodes[find_new_index(no1, nodes)[0]][2] - nodes[find_new_index(no2, nodes)[0]][2]
+        componente_x_vetor = nodes[find_new_index(no1, base_nodes)[0]][0] - nodes[find_new_index(no2, base_nodes)[0]][0]                          
+        componente_y_vetor = nodes[find_new_index(no1, base_nodes)[0]][1] - nodes[find_new_index(no2, base_nodes)[0]][1]   
+        componente_z_vetor = nodes[find_new_index(no1, base_nodes)[0]][2] - nodes[find_new_index(no2, base_nodes)[0]][2]
         vetor_no1_no2 = (componente_x_vetor, componente_y_vetor, componente_z_vetor)
         modulo_vetor_no1_no2 = np.linalg.norm(vetor_no1_no2)
         vertical = np.array([0, 0, 1])                                                                                             #vetor vertical unitario
@@ -911,39 +931,39 @@ def penalidades_geometricas(nodes, elements):
     #    return pen
 
     # Controle das penalidades
-    penalidade += penalidade_fh_fhb(nodes)
-    penalidade += penalidade_mh_mhb(nodes)
-    penalidade += penalidade_angulo_vetical_fh(nodes)
-    penalidade += penalidade_angulo_vertical_mh(nodes)
-    penalidade += penalidade_angulo_mh_mhb(nodes)
-    penalidade += penalidade_posicao_upper_SI_member(nodes)
-    penalidade += penalidade_retidão_vertical(nodes, 0, 1)
-    penalidade += penalidade_retidão_vertical(nodes, 12, 13)
+    penalidade += penalidade_fh_fhb(nodes, base_nodes)
+    penalidade += penalidade_mh_mhb(nodes, base_nodes)
+    penalidade += penalidade_angulo_vetical_fh(nodes, base_nodes)
+    penalidade += penalidade_angulo_vertical_mh(nodes, base_nodes)
+    penalidade += penalidade_angulo_mh_mhb(nodes, base_nodes)
+    penalidade += penalidade_posicao_upper_SI_member(nodes, base_nodes)
+    penalidade += penalidade_retidão_vertical(nodes, base_nodes, 0, 1)
+    penalidade += penalidade_retidão_vertical(nodes, base_nodes, 12, 13)
     #penalidade += penalidade_gabarito_F_z(nodes)
 
     return penalidade
 
-def penalidades_tipo_tubo(nodes, elements):
+def penalidades_tipo_tubo(nodes, elements, base_nodes):
 
     penalidade = 0
 
     mapeamento_chassi = {
         #Classificação: [elemento1, ..., 'Tubo X]
-        "Front_Bulkhead": [(find_new_index(0, nodes)[0], find_new_index(1, nodes)[0]), (find_new_index(0, nodes)[0], find_new_index(0, nodes)[1]), (find_new_index(1, nodes)[0], find_new_index(1, nodes)[1]), 'Tubo B'],   
-        "Front_Bulkhead_Support": [(find_new_index(0, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(2, nodes)[0]), (find_new_index(1, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(16, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(3, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(2, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo C'],    
-        "Front_Hoop": [(find_new_index(4, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(4, nodes)[0]), (find_new_index(5, nodes)[0], 35), 'Tubo A'],                 
-        "Front_Hoop_Bracing": [(find_new_index(0, nodes)[0], find_new_index(5, nodes)[0]), 'Tubo B'],                   
-        "Side_Impact_Structure": [(find_new_index(6, nodes)[0], find_new_index(5, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(6, nodes)[0]), (find_new_index(3, nodes)[0], find_new_index(7, nodes)[0]), (find_new_index(4, nodes)[0], find_new_index(7, nodes)[0]), 'Tubo B'],                   
+        "Front_Bulkhead": [(find_new_index(0, base_nodes)[0], find_new_index(1, base_nodes)[0]), (find_new_index(0, base_nodes)[0], find_new_index(0, base_nodes)[1]), (find_new_index(1, base_nodes)[0], find_new_index(1, base_nodes)[1]), 'Tubo B'],   
+        "Front_Bulkhead_Support": [(find_new_index(0, base_nodes)[0], find_new_index(2, base_nodes)[0]), (find_new_index(1, base_nodes)[0], find_new_index(2, base_nodes)[0]), (find_new_index(1, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(3, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(3, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(4, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(5, base_nodes)[0]), 'Tubo C'],    
+        "Front_Hoop": [(find_new_index(4, base_nodes)[0], find_new_index(5, base_nodes)[0]), (find_new_index(3, base_nodes)[0], find_new_index(4, base_nodes)[0]), (find_new_index(5, base_nodes)[0], find_new_index(18, base_nodes)), 'Tubo A'],                 
+        "Front_Hoop_Bracing": [(find_new_index(0, base_nodes)[0], find_new_index(5, base_nodes)[0]), 'Tubo B'],                   
+        "Side_Impact_Structure": [(find_new_index(6, base_nodes)[0], find_new_index(5, base_nodes)[0]), (find_new_index(4, base_nodes)[0], find_new_index(6, base_nodes)[0]), (find_new_index(3, base_nodes)[0], find_new_index(7, base_nodes)[0]), (find_new_index(4, base_nodes)[0], find_new_index(7, base_nodes)[0]), 'Tubo B'],                   
         "Bent/Multi_Upper_Side_Impact_Member": ['Tubo D'],                   
-        "Main_Hoop": [(find_new_index(6, nodes)[0], find_new_index(14, nodes)[0]), (find_new_index(14, nodes)[0], 34), 'Tubo A'],                  
-        "Main_Hoop_Bracing": [(find_new_index(14, nodes)[0], find_new_index(15, nodes)[0]), 'Tubo B'],                  
+        "Main_Hoop": [(find_new_index(6, base_nodes)[0], find_new_index(14, base_nodes)[0]), (find_new_index(14, base_nodes)[0], find_new_index(17, base_nodes)), 'Tubo A'],                  
+        "Main_Hoop_Bracing": [(find_new_index(14, base_nodes)[0], find_new_index(15, base_nodes)[0]), 'Tubo B'],                  
         "Main_Hoop_Bracing_Supports": ['Tubo C'],
         "Driver_Restraint_Harness_Attachment": ['Tubo B'],
         "Shoulder_Harness_Mounting_Bar": ['Tubo A'],
         "Shoulder_Harness_Mounting_Bar_Bracing": ['Tubo C'],
-        "Accumulator_Mounting_and_Protection": [(find_new_index(7, nodes)[0], find_new_index(6, nodes)[0]), (find_new_index(6, nodes)[0], find_new_index(8, nodes)[0]), (find_new_index(7, nodes)[0], find_new_index(8, nodes)[0]), (find_new_index(8, nodes)[0], find_new_index(10, nodes)[0]), (find_new_index(8, nodes)[0], find_new_index(9, nodes)[0]), (find_new_index(6, nodes)[0], find_new_index(9, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(10, nodes)[0]), 'Tubo B'],
+        "Accumulator_Mounting_and_Protection": [(find_new_index(7, base_nodes)[0], find_new_index(6, base_nodes)[0]), (find_new_index(6, base_nodes)[0], find_new_index(8, base_nodes)[0]), (find_new_index(7, base_nodes)[0], find_new_index(8, base_nodes)[0]), (find_new_index(8, base_nodes)[0], find_new_index(10, base_nodes)[0]), (find_new_index(8, base_nodes)[0], find_new_index(9, base_nodes)[0]), (find_new_index(6, base_nodes)[0], find_new_index(9, base_nodes)[0]), (find_new_index(9, base_nodes)[0], find_new_index(10, base_nodes)[0]), 'Tubo B'],
         "Component_Protection": ['Tubo C'],
-        "Structural_Tubing": [(find_new_index(10, nodes)[0], find_new_index(11, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(11, nodes)[0]), (find_new_index(9, nodes)[0], find_new_index(15, nodes)[0]), (find_new_index(11, nodes)[0], find_new_index(15, nodes)[0]), (find_new_index(15, nodes)[0], find_new_index(12, nodes)[0]), (find_new_index(12, nodes)[0], find_new_index(13, nodes)[0]), (find_new_index(11, nodes)[0], find_new_index(13, nodes)[0]), (find_new_index(13, nodes)[0], find_new_index(15, nodes)[0]), 'Tubo C']
+        "Structural_Tubing": [(find_new_index(10, base_nodes)[0], find_new_index(11, base_nodes)[0]), (find_new_index(9, base_nodes)[0], find_new_index(11, base_nodes)[0]), (find_new_index(9, base_nodes)[0], find_new_index(15, base_nodes)[0]), (find_new_index(11, base_nodes)[0], find_new_index(15, base_nodes)[0]), (find_new_index(15, base_nodes)[0], find_new_index(12, base_nodes)[0]), (find_new_index(12, base_nodes)[0], find_new_index(13, base_nodes)[0]), (find_new_index(11, base_nodes)[0], find_new_index(13, base_nodes)[0]), (find_new_index(13, base_nodes)[0], find_new_index(15, base_nodes)[0]), 'Tubo C']
     }
 
     tubos_SAE = {
@@ -967,19 +987,19 @@ def penalidades_tipo_tubo(nodes, elements):
                 type_tube_sae = mapeamento_chassi[classification][-1]
                 d_sae, e_sae, A_sae, I_sae = tubos_SAE[type_tube_sae]
 
-            # propriedades do tubo otimizado
-            props_otm = estrutura.obter_propriedades(type_tube_otm)
-            d_otm, e_otm = props_otm[2], props_otm[3]
-            A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
-            I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
+                # propriedades do tubo otimizado
+                props_otm = estrutura.obter_propriedades(type_tube_otm)
+                d_otm, e_otm = props_otm[2], props_otm[3]
+                A_otm = estrutura.area_seccao_transversal(d_otm, e_otm, props_otm[6])
+                I_otm = estrutura.momento_inercia_area_e_polar(d_otm, e_otm, props_otm[6])[0]
 
-            # comparação com limites mínimos da SAE
-            if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
-                penalidade += 10
+                # comparação com limites mínimos da SAE
+                if A_otm < A_sae or d_otm < d_sae or e_otm < e_sae or I_otm < I_sae:
+                    penalidade += 10
                 
     return penalidade
 
-def evaluate(nodes,elements) -> float:
+def evaluate(nodes,elements, base_nodes) -> float:
     """
     Avalia o custo de um indivíduo.
 
@@ -1036,8 +1056,8 @@ def evaluate(nodes,elements) -> float:
         t6 = time.perf_counter()
 
         penalty += penalidade_chassi(KT, KF, massa, von, frequencies)
-        penalty += penalidades_geometricas(nodes, elements)
-        penalty += penalidades_tipo_tubo(nodes, elements)
+        penalty += penalidades_geometricas(nodes, elements, base_nodes)
+        penalty += penalidades_tipo_tubo(nodes, elements, base_nodes)
 
         t7 = time.perf_counter()
 
@@ -1164,8 +1184,8 @@ if __name__ == "__main__":
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 40
-    pop_size = 20
+    max_gen = 400
+    pop_size = 100
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
