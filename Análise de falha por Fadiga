@@ -65,6 +65,7 @@ def calcular_dano_miner(carregamentos, a, b, sigma_fadiga):
     return D_total, danos
 
 # Análise do semieixo
+
 def analisar_semieixo(secoes, torque_max, momento_max, material):
     resultados = {}
     sigma_fadiga = 0.5 * (material['limite_resistencia'] / 1e6)
@@ -127,10 +128,12 @@ def plotar_resultados(material, resultados):
     plt.tight_layout()
     plt.show()
 
+# Parâmetros
+
 if __name__ == "__main__":
-    material_propriedades = {
-        'limite_escoamento': 1000e6,  
-        'limite_resistencia': 1200e6,
+    material_propriedades = {    # Aço 4340 temperado e revenido
+        'limite_escoamento': 900e6,  
+        'limite_resistencia': 1000e6,
         'a': 1000.0,  # Coeficiente de escala
         'b': -0.1     # Expoente da curva
     }
@@ -141,7 +144,7 @@ if __name__ == "__main__":
     secoes_semieixo = [
         {'diametro': 30, 'kt_flexao': 1.2, 'kt_torcao': 1.1,
          'entalhe': {'a_neuber':0.08, 'r_mm':1.5}},
-        {'diametro': 25, 'kt_flexao': 2.0, 'kt_torcao': 1.8,
+        {'diametro': 26, 'kt_flexao': 2.0, 'kt_torcao': 1.8,
          'entalhe': {'a_neuber':0.08, 'r_mm':0.4}}
     ]
 
