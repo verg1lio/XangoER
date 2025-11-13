@@ -13,13 +13,13 @@ def build_defaults():
     transmission = Transmission.Transmission(final_drive_ratio=4.0, efficiency=0.95)
     vehicle = Vehicle.Vehicle(mass=230.0, wheel_radius=0.275, drag_coeff=0.7789,
                       frontal_area=0.68, rolling_resistance=0.015, road_grade=0.0)
-    battery = BatteryPack.BatteryPack(tipo_celula='Li-ion', n_serie=162, n_paralelo=1, soc_inicial=1.0)
+    battery = BatteryPack.BatteryPack(tipo_celula='Li-ion', n_serie=264, n_paralelo=1, soc_inicial=1.0)
     tire = Tire.Tire(pacejka_params=[0.333, 1.627, 1, 4.396, 931.4, 366.4], tire_friction_coef=1.45)
     inversor = Inversor.Inversor(eficiencia=0.95, freq_chaveamento=10000)
-    motor = Motor(rs=0.04585, ld=0.00067, lq=0.00172, jm=0.05769, kf=0.1,
-                  lambda_m=0.13849, p=10, valor_mu=0.99,
+    motor = Motor(rs=0.0732, ld=0.000078, lq=0.00172, jm=0.05769, kf=0.1,
+                  lambda_m=0.04748, p=10, valor_mu=0.99,
                   TL=False, torque=0.0,
-                  speed_ref=471.23)
+                  speed_ref=700.23)
 
     sim = Simulation(motor=motor, vehicle=vehicle, transmission=transmission,
                      battery=battery, tire=tire, inversor=inversor, tmax=10, steps=10)
@@ -45,9 +45,9 @@ app.layout = html.Div([
         'vehicle': {'mass': 230, 'wheel_radius': 0.275, 'drag_coeff': 0.7789,
                     'frontal_area': 0.68, 'rolling_resistance': 0.015, 'road_grade': 0},
         'transmission': {'final_drive_ratio': 4.0, 'efficiency': 0.95},
-        'battery': {'tipo_celula': 'Li-ion', 'n_serie': 162, 'n_paralelo': 1, 'soc_inicial': 1.0},
-        'motor': {'rs': 0.04585, 'ld': 0.00067, 'lq': 0.00067, 'jm': 0.05769,
-                  'kf': 0.1, 'lambda_m': 0.13849, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 471.23},
+        'battery': {'tipo_celula': 'Li-ion', 'n_serie': 264, 'n_paralelo': 1, 'soc_inicial': 1.0},
+        'motor': {'rs': 0.0732, 'ld': 0.000078, 'lq': 0.000137, 'jm': 0.05769,
+                  'kf': 0.1, 'lambda_m': 0.04748, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 700.23},
         'inversor': {'eficiencia': 0.95, 'freq_chaveamento': 10000},
         'simulacao': {'tmax': 10},
         'tire': {
@@ -130,7 +130,7 @@ app.layout = html.Div([
                         value='Li-ion'
                     ),
                     dbc.Label("Células em Série"),
-                    dbc.Input(id='n-serie', type='number', value=162, step=1),
+                    dbc.Input(id='n-serie', type='number', value=264, step=1),
                     dbc.Label("Células em Paralelo"),
                     dbc.Input(id='n-paralelo', type='number', value=1, step=1),
                     dbc.Label("SoC Inicial"),
@@ -143,9 +143,9 @@ app.layout = html.Div([
                 dbc.CardHeader(html.H5("Motor")),
                 dbc.CardBody([
                     dbc.Label("Resistência (Ω)"),
-                    dbc.Input(id='motor-rs', type='number', value=0.04585, step=0.0001),
+                    dbc.Input(id='motor-rs', type='number', value=0.0732, step=0.0001),
                     dbc.Label("Indutância d (H)"),
-                    dbc.Input(id='motor-ld', type='number', value=0.00067, step=0.00001),
+                    dbc.Input(id='motor-ld', type='number', value=0.000078, step=0.00001),
                     dbc.Label("Indutância q (H)"),
                     dbc.Input(id='motor-lq', type='number', value=0.00137, step=0.00001),
                     dbc.Label("Inércia (kg.m²)"),
@@ -153,7 +153,7 @@ app.layout = html.Div([
                     dbc.Label("Atrito (N.m.s)"),
                     dbc.Input(id='motor-kf', type='number', value=0.1, step=0.01),
                     dbc.Label("Fluxo (Wb)"),
-                    dbc.Input(id='motor-lambda', type='number', value=0.13849, step=0.0001),
+                    dbc.Input(id='motor-lambda', type='number', value=0.04748, step=0.0001),
                     dbc.Label("Polos"),
                     dbc.Input(id='motor-poles', type='number', value=10, step=1),
                     dbc.Label("Modulação"),
@@ -168,7 +168,7 @@ app.layout = html.Div([
                     dbc.Label("Tempo Máximo (s)"),
                     dbc.Input(id='sim-time', type='number', value=10, step=1),
                     dbc.Label("Velocidade Ref (rad/s)"),
-                    dbc.Input(id='speed-ref', type='number', value=471.23, step=1),
+                    dbc.Input(id='speed-ref', type='number', value=700.23, step=1),
                 ])
             ], style={'marginBottom': '15px'}),
 
@@ -526,7 +526,7 @@ def run_simulation_once(n_clicks, parameters):
     sim = Simulation(
         motor=motor, vehicle=vehicle, transmission=transmission,
         battery=battery, tire=tire, inversor=Inversor(eficiencia=0.95, freq_chaveamento=1000),
-        tmax=simulacao_params['tmax'], steps=2000
+        tmax=simulacao_params['tmax'], steps=1000
     )
 
     sim.simulate()

@@ -139,9 +139,9 @@ class Motor:
 
         # Limits
         self.max_current = 220.0 * np.sqrt(2)
-        self.Vdc = 600
+        self.Vdc = 6000
         self.Vs = (self.valor_mu * self.Vdc) / np.sqrt(3)
-        self.Vlimit = 600
+        self.Vlimit = 6000
 
         # References
         self.id_ref = 0.0
