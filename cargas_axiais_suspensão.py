@@ -1,3 +1,5 @@
+# %matplotlib widget
+
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -11,6 +13,46 @@ def calcular_vetor_unitario(p1, p2):
     if norm == 0:
         return v
     return v / norm
+
+def calcular_comprimento(geometria):
+    
+    BJ_inf = np.array(geometria['BJ_inf'])
+    BJ_sup = np.array(geometria['BJ_sup'])
+    Braço_inf_front = geometria['Braço_inf_front']
+    Braço_inf_tras = geometria['Braço_inf_tras']
+    Braço_sup_front = geometria['Braço_sup_front']
+    Braço_sup_tras = geometria['Braço_sup_tras']
+
+    vet_sup_1 = np.array(Braço_sup_front)-np.array( BJ_sup)
+    vet_sup_2 = np.array(Braço_sup_tras) -np.array(BJ_sup)
+    
+
+    vet_inf_1 = np.array(Braço_inf_front)-np.array( BJ_inf)
+    vet_inf_2 = np.array(Braço_inf_tras) -np.array(BJ_inf)
+
+    vet_inf_1_comp = np.linalg.norm(vet_inf_1)
+    vet_inf_2_comp = np.linalg.norm(vet_inf_2)
+    vet_sup_1_comp = np.linalg.norm(vet_sup_1)
+    vet_sup_2_comp = np.linalg.norm(vet_sup_2)
+    
+    print(f"""
+--------------------------------------------------
+               COMPRIMENTOS DOS BRAÇOS
+--------------------------------------------------
+Comprimento do braço Inferior Frontal (N): {vet_inf_1_comp:.3f} m
+Comprimento do braço Inferior Traseiro (N): {vet_inf_2_comp:.3f} m
+Comprimento do braço Superior Frontal (N): {vet_sup_1_comp:.3f} m
+Comprimento do braço Superior Traseiro (N): {vet_sup_2_comp:.3f} m
+--------------------------------------------------
+""")
+
+    
+    return {
+        "Comprimento do braço Inferior Frontal (N)": vet_inf_1_comp,
+        "Comprimento do braço Inferior Traseiro (N)": vet_inf_2_comp,
+        "Comprimento do braço Superior Frontal (N)": vet_sup_1_comp,
+        "Comprimento do braço Superior Traseiro (N)": vet_sup_2_comp
+    }
 
 def calcular_forcas_carga_vertical(geometria, W_vert_N):
     """
@@ -69,8 +111,7 @@ def calcular_forcas_frenagem(geometria, W_long_N, W_vert_N):
 
     F_top_long = -W_long_N * (h1 / h2)
     F_bottom_long = -W_long_N * ((h1 + h2) / h2)
-    print(F_top_long)
-    print(F_bottom_long)
+    
 
     vet_sup_1 = calcular_vetor_unitario(Braço_sup_front, BJ_sup)
     vet_sup_2 = calcular_vetor_unitario(Braço_sup_tras, BJ_sup)
@@ -181,47 +222,55 @@ def calcular_forcas_aceleracao(geometria, W_long_N, W_vert_N):
         "Braço Superior Traseiro (N)": T_sup[1]
     }
 
-
-
 # Define os pontos fixos da geometria
 geometria_suspensao = {
-    'Braço_sup_front': [-0.302,  1.670,  0.240],
-    'Braço_sup_tras': [-0.293,  1.950,  0.250],
-    'BJ_sup': [0.0, 1.75, 0.25],
-    'Braço_inf_front': [-0.271,  1.665,  0.030],
-    'Braço_inf_tras': [-0.271,  1.835,  0.030],
-    'BJ_inf': [0.0, 1.75, 0.05]
+    'Braço_sup_front': [0.142, 0.319, 0.300],
+    'Braço_sup_tras': [-0.142, 0.319, 0.300],
+    'Braço_inf_front': [0.175, 0.359, 0.100],
+    'Braço_inf_tras': [-0.175, 0.359, 0.100],
 }
 
+
+
+#ponto y do Ball Joint inferior e superior
 p_inf_front = geometria_suspensao['Braço_inf_front']
 p_inf_tras = geometria_suspensao['Braço_inf_tras']
-BJ_inf = geometria_suspensao['BJ_inf']
-
-px = (p_inf_front[0] + p_inf_tras[0]) / 2.0
-py = (p_inf_front[1] + p_inf_tras[1]) / 2.0
-comp_pushrod = 0.400 #tamanho do pushrod em m
-pz = np.sqrt(comp_pushrod**2-(px-BJ_inf[0])**2-(py-BJ_inf[1])**2)+BJ_inf[2]
 
 
-print(f"PONTO Z {px};{py};{pz}")
 
-Top_pushrod = [px, py, pz]
+BJ_inf = [0, 0, 0.100]
+# Adiciona a coordenada calculada ao dicionário de geometria
+geometria_suspensao['BJ_inf'] = BJ_inf
+
+BJ_sup = [0, 0, 0.300]
+# Adiciona a coordenada calculada ao dicionário de geometria
+geometria_suspensao['BJ_sup'] = BJ_sup
+
+#coordenadas do pushrod
+p_inf_front = geometria_suspensao['Braço_inf_front']
+p_inf_tras = geometria_suspensao['Braço_inf_tras']
+
+Top_pushrod = [0, 0.250, 0.433]
 
 # Adiciona a coordenada calculada ao dicionário de geometria
 geometria_suspensao['Top_pushrod'] = Top_pushrod
 
 # Cargas para cada cenário 
-max_carga_vertical = 4500 # N
+max_carga_vertical = 5787 # N
 max_frenagem_long = 6300  # N
 max_frenagem_vert = 4500  # N
-max_curva_lat = 17712       # N
-max_curva_vert = 14760      # N
+max_curva_lat = 5800      # N
+max_curva_vert = 6500     # N
 max_aceleracao_long = 5124  # N
 max_aceleracao_vert = 3416  # N
 
 # --- Cálculo e Impressão dos Resultados ---
 
 print("--- ANÁLISE DE FORÇAS NA SUSPENSÃO ---\n")
+
+
+
+comprimento = calcular_comprimento(geometria_suspensao)
 
 print("CASO 1: Máxima Carga Vertical")
 forcas_vert = calcular_forcas_carga_vertical(geometria_suspensao, max_carga_vertical)
