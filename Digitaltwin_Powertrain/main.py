@@ -22,7 +22,7 @@ def build_defaults():
                   speed_ref=700.23)
 
     sim = Simulation(motor=motor, vehicle=vehicle, transmission=transmission,
-                     battery=battery, tire=tire, inversor=inversor, tmax=10, steps=10)
+                     battery=battery, tire=tire, inversor=inversor, tmax=10, steps=12000)
     return sim
 
 # ---------------------
@@ -526,7 +526,7 @@ def run_simulation_once(n_clicks, parameters):
     sim = Simulation(
         motor=motor, vehicle=vehicle, transmission=transmission,
         battery=battery, tire=tire, inversor=Inversor(eficiencia=0.95, freq_chaveamento=1000),
-        tmax=simulacao_params['tmax'], steps=1000
+        tmax=simulacao_params['tmax'], steps=12000
     )
 
     sim.simulate()

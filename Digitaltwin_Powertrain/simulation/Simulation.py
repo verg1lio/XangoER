@@ -26,7 +26,7 @@ class Simulation:
                  tire: Optional[Tire] = None,
                  inversor: Optional[Inversor] = None,
                  tmax: float = 10.0,
-                 steps: int = 4000):
+                 steps: int = 12000):
         
         # store models
         self.motor = motor
@@ -57,7 +57,7 @@ class Simulation:
         self.max_current = getattr(self.motor, 'max_current', np.inf)
         self.Vdc_default = getattr(self.motor, 'Vdc', 6000.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
-        self.speed_ref = getattr(self.motor, 'speed_ref', 471.23)  # rad/s
+        self.speed_ref = getattr(self.motor, 'speed_ref', 701.23)  # rad/s
 
         # precompute inverses used in ODEs
         self.inv_ld = 1.0 / self.ld if self.ld != 0 else 0.0
@@ -75,20 +75,20 @@ class Simulation:
         sp_proto = getattr(self.motor, 'speed_controller', None)
 
         # CORREÇÃO: Ganhos mais conservadores para evitar instabilidade
-        id_kp = getattr(id_proto, 'kp', 10000) if id_proto is not None else 0.1
-        id_ki = getattr(id_proto, 'ki', 50.0) if id_proto is not None else 10.0
+        id_kp = getattr(id_proto, 'kp', 1) if id_proto is not None else 0.1
+        id_ki = getattr(id_proto, 'ki', 5.0) if id_proto is not None else 10.0
         id_kd = getattr(id_proto, 'kd', 0.0) if id_proto is not None else 0.0
-        id_limit = getattr(id_proto, 'limit', 6000.0) if id_proto is not None else 6000.0
+        id_limit = getattr(id_proto, 'limit', 600.0) if id_proto is not None else 6000.0
 
-        iq_kp = getattr(iq_proto, 'kp', 10000) if iq_proto is not None else 0.1
-        iq_ki = getattr(iq_proto, 'ki', 50.0) if iq_proto is not None else 10.0
+        iq_kp = getattr(iq_proto, 'kp', 1) if iq_proto is not None else 0.1
+        iq_ki = getattr(iq_proto, 'ki', 5.0) if iq_proto is not None else 10.0
         iq_kd = getattr(iq_proto, 'kd', 0.0) if iq_proto is not None else 0.0
-        iq_limit = getattr(iq_proto, 'limit', 6000.0) if iq_proto is not None else 6000.0
+        iq_limit = getattr(iq_proto, 'limit', 600.0) if iq_proto is not None else 6000.0
 
-        sp_kp = getattr(sp_proto, 'kp', 50.0) if sp_proto is not None else 5.0
+        sp_kp = getattr(sp_proto, 'kp', 2.0) if sp_proto is not None else 5.0
         sp_ki = getattr(sp_proto, 'ki', 5) if sp_proto is not None else 2.0
-        sp_kd = getattr(sp_proto, 'kd', 0.1) if sp_proto is not None else 0.1
-        sp_limit = getattr(sp_proto, 'limit', 6000.0) if sp_proto is not None else 6000.0
+        sp_kd = getattr(sp_proto, 'kd', 0) if sp_proto is not None else 0.1
+        sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 6000.0
 
         # instantiate internal PID controllers used by the integrator
         self.id_controller = PID.Controller(kp=id_kp, ki=id_ki, kd=id_kd, limit=id_limit, Ts=self.hp)
@@ -199,7 +199,7 @@ class Simulation:
             # --- Vehicle/tyre related computations ---
             if (self.vehicle is not None) and (self.transmission is not None) and (self.tire is not None):
                 try:
-                    cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission)  if t < 2 else self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission) + 10
+                    cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission)  if t < 2 else self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission)
                     vel_ang_roda = self.transmission.motor_to_wheel_speed(wm)
                     slip = self.tire.SlipRatio(vel_ang_roda, self.vehicle.wheel_radius, vehicle_velocity)
                     Fz = self.vehicle.mass * self.vehicle.g
@@ -208,7 +208,7 @@ class Simulation:
                     traction_force_ideal = wheel_torque_ideal / self.vehicle.wheel_radius
                     traction_force_limited = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max))
                     resistance_force = self.vehicle.calculate_resistance_forces(vehicle_velocity)
-                    resultant_force = traction_force_limited - resistance_force
+                    resultant_force = traction_force_ideal - resistance_force
                     if vehicle_velocity < 0.01 and resultant_force < 0:
                         vehicle_acceleration = 0.0
                     else:
@@ -278,8 +278,8 @@ class Simulation:
             vq = np.clip(vq_unclamped, -Vclamp, Vclamp)
 
             # electrical dynamics (linearized RL)
-            d_isd = (vd - self.rs * isd + we * self.lq * isq) * self.inv_ld
-            d_isq = (vq - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
+            d_isd = (vd_unclamped - self.rs * isd + we * self.lq * isq) * self.inv_ld
+            d_isq = (vq_unclamped - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
             
             # CORREÇÃO: Evitar divisão por zero em iso
             L0 = max(0.1 * (self.ld + self.lq) / 2.0, 1e-6)
@@ -332,7 +332,7 @@ class Simulation:
         print(f"🚀 Iniciando simulação: t0={t0}, tf={tf}, steps={self.steps}")
 
         # CORREÇÃO: Reduzir número de pontos para evitar travamento
-        num_points = min(self.steps, 4000)  # Máximo 500 pontos
+        num_points = min(self.steps, 12000)  # Máximo 500 pontos
         t_eval = np.linspace(t0, tf, num_points)
 
         # build initial state vector
@@ -507,7 +507,7 @@ class Simulation:
             except Exception:
                 is1, is2, is3, fs1, fs2, fs3 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
-            cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission) if t < 2 else self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission) + 10
+            cl = self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission) if t < 2 else self.vehicle.calculate_load_torque(vehicle_velocity, self.transmission) 
             ce = self.torque_constant * isq
 
             # append logs

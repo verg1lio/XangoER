@@ -199,10 +199,7 @@ class BatteryPack:
         term_Iast = term_K * (Iast / 3600)
 
         if corrente >= 0:  # Discharge
-            if corrente < 100 and soc >= 0.0:
-                Vt = self.E0 - self.R * corrente - term_Iast - term_carga + term_exp
-            else:  # Limit max discharge current
-                Vt = self.E0 - self.R * corrente  - term_Iast - term_carga + term_exp
+            Vt = self.E0 - self.R * corrente - term_Iast - term_carga + term_exp
         else:  # Charge
             corrente_abs = abs(corrente)
             denom2 = max(corrente_abs * tempo_acumulado - 0.1 * self.carga_total, 1e-6)

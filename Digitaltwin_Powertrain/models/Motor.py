@@ -125,9 +125,9 @@ class Motor:
         self.inv_mC = 1.0 / (self.m * self.C)
 
         # Controllers
-        self.id_controller = PID.Controller(kp=0.5, ki=100.0, kd = 0, limit=600.0)
-        self.iq_controller = PID.Controller(kp=0.5, ki=100.0, kd = 0 ,limit=600.0)
-        self.speed_controller = PID.Controller(kp=10.0, ki=5,kd = 0, limit=600.0)
+        self.id_controller = PID.Controller(kp=0.5, ki=10.0, kd = 0, limit=600.0)
+        self.iq_controller = PID.Controller(kp=0.5, ki=10.0, kd = 0 ,limit=600.0)
+        self.speed_controller = PID.Controller(kp=1.0, ki=0,kd = 0, limit=600.0)
 
         # External torque setup
         self.TL = bool(TL)
@@ -138,10 +138,10 @@ class Motor:
             self._external_torque = (lambda t, v=v: v)
 
         # Limits
-        self.max_current = 220.0 * np.sqrt(2)
-        self.Vdc = 6000
+        self.max_current = 300.0 * np.sqrt(2)
+        self.Vdc = 600
         self.Vs = (self.valor_mu * self.Vdc) / np.sqrt(3)
-        self.Vlimit = 6000
+        self.Vlimit = 600
 
         # References
         self.id_ref = 0.0
