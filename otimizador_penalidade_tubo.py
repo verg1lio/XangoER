@@ -736,10 +736,10 @@ def penalidades_geometricas(nodes, elements, base_nodes):
         '''
         pen = 0
         idx = find_new_index(18, base_nodes)
-        fronthoop_node = nodes[idx]                          #declara o nó do fronthoop com indice novo
-        fhb_node = nodes[find_new_index(5, base_nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
+        fronthoop_node = nodes[idx]                                                #declara o nó do fronthoop com indice novo
+        fhb_node = nodes[find_new_index(5, base_nodes)[0]]                         #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
-        if dist_fh_fhb > 0.05 or fronthoop_node[2] < fhb_node[2]:                                                     #condição retirada do regulamento
+        if dist_fh_fhb > 0.05 or fronthoop_node[2] < fhb_node[2]:                  #condição retirada do regulamento
             pen += ((dist_fh_fhb - 0.05) ** 2 ) * 1e6                              #aplicação de penalidade
 
         return pen
@@ -949,7 +949,7 @@ def penalidades_tipo_tubo(nodes, elements, base_nodes):
 
     mapeamento_chassi = {
         #Classificação: [elemento1, ..., 'Tubo X]
-        "Front_Bulkhead": [(find_new_index(0, base_nodes)[0], find_new_index(1, base_nodes)[0]), (find_new_index(0, base_nodes)[0], find_new_index(0, base_nodes)[1]), (find_new_index(1, base_nodes)[0], find_new_index(1, base_nodes)[1]), 'Tubo B'],   
+        "Front_Bulkhead": [(find_new_index(0, base_nodes)[0], find_new_index(1, base_nodes)[0]), (find_new_index(0, base_nodes)[0], find_new_index(19, base_nodes)), (find_new_index(1, base_nodes)[0], find_new_index(20, base_nodes)), 'Tubo B'],   
         "Front_Bulkhead_Support": [(find_new_index(0, base_nodes)[0], find_new_index(2, base_nodes)[0]), (find_new_index(1, base_nodes)[0], find_new_index(2, base_nodes)[0]), (find_new_index(1, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(3, base_nodes)[0], find_new_index(16, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(3, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(4, base_nodes)[0]), (find_new_index(2, base_nodes)[0], find_new_index(5, base_nodes)[0]), 'Tubo C'],    
         "Front_Hoop": [(find_new_index(4, base_nodes)[0], find_new_index(5, base_nodes)[0]), (find_new_index(3, base_nodes)[0], find_new_index(4, base_nodes)[0]), (find_new_index(5, base_nodes)[0], find_new_index(18, base_nodes)), 'Tubo A'],                 
         "Front_Hoop_Bracing": [(find_new_index(0, base_nodes)[0], find_new_index(5, base_nodes)[0]), 'Tubo B'],                   
@@ -977,12 +977,21 @@ def penalidades_tipo_tubo(nodes, elements, base_nodes):
     estrutura = Estrutura(elements, nodes)
     type_tube_sae = ''
     type_tube_otm = ''
+    def normaliza(par):
+        return tuple(sorted(par))
+
     for element in elements:
         elemento = (element[0], element[1])          # nós do elemento
         type_tube_otm = element[2]                   # tipo de tubo otimizado (ex: 'Tubo B')
 
         for classification in mapeamento_chassi:
-            if elemento in mapeamento_chassi[classification] or tuple(reversed(elemento)) in mapeamento_chassi[classification]:
+            elemento_norm = normaliza(elemento)
+
+            # obtém apenas os pares (ignorando o 'Tubo X')
+            pares_regiao = [p for p in mapeamento_chassi[classification] if isinstance(p, tuple)]
+            pares_norm = { normaliza(p) for p in pares_regiao }
+
+            if elemento_norm in pares_norm:
                 # tipo mínimo exigido pela SAE
                 type_tube_sae = mapeamento_chassi[classification][-1]
                 d_sae, e_sae, A_sae, I_sae = tubos_SAE[type_tube_sae]
@@ -1159,16 +1168,18 @@ if __name__ == "__main__":
     [-0.293,  1.950,  0.250],                               #15 antigo 16
     [-0.275,  0.270,  0.045],                               #16 antigo 17
     [ 0.000,  1.410,  1.105],                               #17 antigo 15
-    [0.000,  0.555,  0.550]                                     #18
+    [0.000,  0.555,  0.550],                                #18
+    [0.000,  0.000,  0.360],                                #19    
+    [0.000,  0.000,  0.050]                                 #20
     ])                             
 
     connections = [(0,1)  ,(0,2)  ,(1,2)  ,(0,5)  ,(2,5)  ,(2,4)  ,(2,3)  ,(1,16)  ,(2,16),
     (3,7)  ,(3,4)  ,(4,7)  ,(4,6)  ,(5,6)  ,(7,6)  ,(7,8)  ,(6,8)  ,(3,16),
     (6,9)  ,(8,9)  ,(8,10) ,(9,10) ,(9,11) ,(10,11),(11,15),(15,13),
     (11,12),(11,13),(12,13),(12,15),(15,14),(14,17),(14,6) ,(9,15) ,
-    (4,5), (5, 18)]
+    (4,5), (5, 18), (0,19), (1,20)]
 
-    indices = [0,1,3,4,5,6,7,8,11,16,17,18]
+    indices = [0,1,3,4,5,6,7,8,11,16,17,18,19,20]
 
     tubos_fixos = {
     0: 'Tubo A',
@@ -1180,12 +1191,12 @@ if __name__ == "__main__":
     'espelho_5': 'Tubo C',
 }
     
-    connect_with_mirror = [0,1,3,5,6,7,8,10,11,12,13]
+    connect_with_mirror = [3,6,7,8,10,11,12,13]
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 400
-    pop_size = 100
+    max_gen = 200
+    pop_size = 50
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
