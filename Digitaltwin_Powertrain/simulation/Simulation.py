@@ -55,9 +55,9 @@ class Simulation:
         self.torque_constant = (3.0/2.0) * self.p * self.lambda_m
         
         self.max_current = getattr(self.motor, 'max_current', np.inf)
-        self.Vdc_default = getattr(self.motor, 'Vdc', 6000.0)
+        self.Vdc_default = getattr(self.motor, 'Vdc', 600.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
-        self.speed_ref = getattr(self.motor, 'speed_ref', 701.23)  # rad/s
+        self.speed_ref = getattr(self.motor, 'speed_ref', 700.23)  # rad/s
 
         # precompute inverses used in ODEs
         self.inv_ld = 1.0 / self.ld if self.ld != 0 else 0.0
@@ -78,17 +78,17 @@ class Simulation:
         id_kp = getattr(id_proto, 'kp', 1) if id_proto is not None else 0.1
         id_ki = getattr(id_proto, 'ki', 5.0) if id_proto is not None else 10.0
         id_kd = getattr(id_proto, 'kd', 0.0) if id_proto is not None else 0.0
-        id_limit = getattr(id_proto, 'limit', 600.0) if id_proto is not None else 6000.0
+        id_limit = getattr(id_proto, 'limit', 600.0) if id_proto is not None else 600.0
 
         iq_kp = getattr(iq_proto, 'kp', 1) if iq_proto is not None else 0.1
         iq_ki = getattr(iq_proto, 'ki', 5.0) if iq_proto is not None else 10.0
         iq_kd = getattr(iq_proto, 'kd', 0.0) if iq_proto is not None else 0.0
-        iq_limit = getattr(iq_proto, 'limit', 600.0) if iq_proto is not None else 6000.0
+        iq_limit = getattr(iq_proto, 'limit', 600.0) if iq_proto is not None else 600.0
 
         sp_kp = getattr(sp_proto, 'kp', 2.0) if sp_proto is not None else 5.0
         sp_ki = getattr(sp_proto, 'ki', 5) if sp_proto is not None else 2.0
         sp_kd = getattr(sp_proto, 'kd', 0) if sp_proto is not None else 0.1
-        sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 6000.0
+        sp_limit = getattr(sp_proto, 'limit', 600.0) if sp_proto is not None else 600.0
 
         # instantiate internal PID controllers used by the integrator
         self.id_controller = PID.Controller(kp=id_kp, ki=id_ki, kd=id_kd, limit=id_limit, Ts=self.hp)
@@ -278,8 +278,8 @@ class Simulation:
             vq = np.clip(vq_unclamped, -Vclamp, Vclamp)
 
             # electrical dynamics (linearized RL)
-            d_isd = (vd_unclamped - self.rs * isd + we * self.lq * isq) * self.inv_ld
-            d_isq = (vq_unclamped - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
+            d_isd = (vd - self.rs * isd + we * self.lq * isq) * self.inv_ld
+            d_isq = (vq - self.rs * isq - we * (self.ld * isd + self.lambda_m)) * self.inv_lq
             
             # CORREÇÃO: Evitar divisão por zero em iso
             L0 = max(0.1 * (self.ld + self.lq) / 2.0, 1e-6)
