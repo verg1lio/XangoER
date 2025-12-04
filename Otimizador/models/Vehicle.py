@@ -61,13 +61,14 @@ class Vehicle:
         Distance from axle to CG [m].
     """
 
-    def __init__(self, mass, wheel_radius, drag_coeff, frontal_area, rolling_resistance,
+    def __init__(self, mass, wheel_radius,wheel_mass, drag_coeff, frontal_area, rolling_resistance,
                  road_grade=0, environment_density=1.225, 
                  L=None, h=None, dist_cg=None):
         
         # Standard dynamics parameters
         self.mass = mass  # kg
         self.wheel_radius = wheel_radius  # m
+        self.wheel_mass = wheel_mass
         self.drag_coeff = drag_coeff
         self.frontal_area = frontal_area  # m²
         self.rolling_resistance = rolling_resistance
@@ -162,3 +163,61 @@ class Vehicle:
         load_transfer = (self.mass * a * self.h) / self.L
 
         return (Fz_static + load_transfer)/2
+    
+    def calculate_single_wheel_inertia(self, k_factor=0.8):
+        """
+        Método auxiliar para estimar a inércia de uma única roda (J_roda) 
+        usando uma massa estimada e um fator de forma (k).
+        
+        Parameters
+        ----------
+        estimated_wheel_mass : float
+            Massa estimada de uma única roda e pneu [kg].
+        k_factor : float
+            Fator de forma (k) para a inércia. 0.5 (sólido) a 1.0 (anel). 0.8 é um bom meio termo.
+
+        Returns
+        -------
+        float
+            Inércia rotacional de uma roda [kg.m²].
+        """
+        # I = k * m * r^2
+        return k_factor * self.wheel_mass * (self.wheel_radius ** 2)
+    
+    def calculate_reflected_inertia(self, transmission):
+        """
+        Calcula a inércia equivalente do veículo refletida no eixo do motor.
+
+        J_refletido = (J_translação + J_rodas) / (i^2)
+
+        Parameters
+        ----------
+        transmission : Transmission
+            Objeto da transmissão contendo 'final_drive_ratio'.
+        wheel_inertia : float, optional
+            Momento de inércia de UMA roda/pneu [kg.m²]. 
+            Se não fornecido, considera apenas a massa do veículo.
+
+        Returns
+        -------
+        float
+            Inércia da carga vista pelo motor [kg.m²].
+        """
+        # Converte Massa Translacional em Inércia Rotacional (J = m * r²)
+        j_translation = self.mass * (self.wheel_radius ** 2)
+
+        # Calcula J_roda usando a massa estimada
+        j_single_wheel = self.calculate_single_wheel_inertia() 
+        j_wheels = j_single_wheel * 4.0 # Inércia de 4 rodas
+        
+        # Inércia total no eixo da roda (Low speed side)
+        j_load_total = j_translation + j_wheels
+
+        # Reflete para o eixo do motor (High speed side)
+        # DIVIDIMOS pelo quadrado da relação, pois o motor gira mais rápido
+        ratio = transmission.final_drive_ratio
+        
+        if ratio == 0:
+            return 0.0
+            
+        return j_load_total / (ratio ** 2)
