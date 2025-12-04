@@ -33,44 +33,30 @@ class Tire:
         self.pacejka_params = pacejka_params
         self.tire_friction_coef = tire_friction_coef
 
-    def Tire_forces(self, Fz, Ls):
-        """Computes the longitudinal tire force using a simplified Pacejka model.
-
-        Parameters
-        ----------
-        Fz : float
-            Vertical load on the tire [N].
-        Ls : float
-            Slip ratio (dimensionless).
-
-        Returns
-        -------
-        float
-            Longitudinal tire force [N].
+    def Tire_forces(self, Fz, s):
         """
+        Improved longitudinal Pacejka MF model using structured parameters.
+        """
+
         E, Cy, Cx, Cz, c1, c2 = self.pacejka_params
 
-        # Slip stiffness coefficient
-        Cs = c1 * np.sin(2 * np.arctan(Fz / c2))
+        # B vem diretamente do parâmetro c1
+        B = c1
 
-        # Peak factor (friction coefficient × vertical load)
-        D = self.tire_friction_coef * Fz
+        # Cx já é o shape factor C
+        C = Cx
 
-        # Avoid division by zero
-        if (Cx * D) == 0:
-            return 0.0
+        # D = mu * Fz
+        mu = self.tire_friction_coef
+        D = mu * Fz
 
-        # Stiffness factor
-        Bx = Cs / (Cx * D)
-
-        # Pacejka argument
-        arg_arctan = Bx * Ls
-
-        # Longitudinal force (simplified Pacejka "Magic Formula")
-        tire_longitudinal_force = D * np.sin(
-            Cx * np.arctan(arg_arctan - E * (arg_arctan - np.arctan(arg_arctan)))
+        # Magic Formula
+        arg = B * s
+        Fx = D * np.sin(
+            C * np.arctan(arg - E * (arg - np.arctan(arg)))
         )
-        return tire_longitudinal_force
+
+        return Fx
 
     @staticmethod
     def SlipRatio(velocidade_angular, raio_pneu, velocidade_linear, eps=0.1):
