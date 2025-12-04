@@ -50,7 +50,15 @@ class Simulation:
         self.lambda_m = getattr(self.motor, 'lambda_m', 0.0)
         self.jm = getattr(self.motor, 'jm', 1.0)
         self.kf = getattr(self.motor, 'kf', 0.0)
-        
+
+        # Se houver veículo e transmissão, calcula a inércia da massa do carro refletida no eixo do motor
+        if (self.vehicle is not None) and (self.transmission is not None):
+            self.j_reflected = self.vehicle.calculate_reflected_inertia(self.transmission)
+            self.j_total = self.jm + self.j_reflected
+        else:
+            self.j_reflected = 0.0
+            self.j_total = self.jm
+
         # CORREÇÃO: torque_constant calculado corretamente
         self.torque_constant = (3.0/2.0) * self.p * self.lambda_m
         
@@ -62,7 +70,7 @@ class Simulation:
         # precompute inverses used in ODEs
         self.inv_ld = 1.0 / self.ld if self.ld != 0 else 0.0
         self.inv_lq = 1.0 / self.lq if self.lq != 0 else 0.0
-        self.inv_jm = 1.0 / self.jm if self.jm != 0 else 0.0
+        self.inv_jm = 1.0 / self.j_total if self.j_total != 0 else 0.0
 
         # thermal params
         self.m_thermal = getattr(self.motor, 'm', 22.0)
