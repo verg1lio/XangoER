@@ -31,7 +31,8 @@ app.layout = html.Div([
     dcc.Store(id='parameters-store', data={
         'vehicle': {
             'mass': 230, 
-            'wheel_radius': 0.275, 
+            'wheel_radius': 0.275,
+            'wheel_mass': 7.5, 
             'drag_coeff': 0.7789,
             'frontal_area': 0.68, 
             'rolling_resistance': 0.015, 
@@ -47,7 +48,7 @@ app.layout = html.Div([
         'inversor': {'eficiencia': 0.95, 'freq_chaveamento': 10000},
         'simulacao': {'tmax': 10},
         'tire': {
-            'pacejka_params': [-1, 1.627, 1, 4.396, 931.4, 366.4],
+            'pacejka_params': [-0.5,1.0,1.6,0.0,10.0,0.0],
             'tire_friction_coef': 1.45
         }
     }),
@@ -94,6 +95,8 @@ app.layout = html.Div([
                     dbc.Input(id='vehicle-mass', type='number', value=230, step=1),
                     dbc.Label("Raio da Roda (m)"),
                     dbc.Input(id='wheel-radius', type='number', value=0.275, step=0.01),
+                    dbc.Label("Massa da Roda (kg)"),
+                    dbc.Input(id='wheel-mass', type='number', value=7.5, step=0.1),
                     dbc.Label("Coef. de Arrasto"),
                     dbc.Input(id='drag-coeff', type='number', value=0.7789, step=0.01),
                     dbc.Label("Área Frontal (m²)"),
@@ -101,7 +104,6 @@ app.layout = html.Div([
                     dbc.Label("Resistência Rolamento"),
                     dbc.Input(id='rolling-resistance', type='number', value=0.015, step=0.001),
                     
-                    # 2. ATUALIZAÇÃO NO LAYOUT: Inputs de Geometria Veicular
                     html.Hr(),
                     dbc.Label("Entre-eixos L (m)"),
                     dbc.Input(id='vehicle-L', type='number', value=2.6, step=0.01),
@@ -454,10 +456,10 @@ def toggle_sidebar(n_clicks, sidebar_state):
     [Input('apply-params', 'n_clicks')],
     [State('vehicle-mass', 'value'),
      State('wheel-radius', 'value'),
+     State('wheel-mass', 'value'),
      State('drag-coeff', 'value'),
      State('frontal-area', 'value'),
      State('rolling-resistance', 'value'),
-     # 3. ATUALIZAÇÃO NO CALLBACK: Novos Inputs adicionados ao State
      State('vehicle-L', 'value'),
      State('vehicle-h', 'value'),
      State('vehicle-dist-cg', 'value'),
@@ -480,7 +482,7 @@ def toggle_sidebar(n_clicks, sidebar_state):
      State('speed-ref', 'value'),
      State('parameters-store', 'data')]
 )
-def update_parameters(n_clicks, mass, wheel_radius, drag_coeff, frontal_area, rolling_resistance,
+def update_parameters(n_clicks, mass, wheel_radius,wheel_mass, drag_coeff, frontal_area, rolling_resistance,
                       L, h, dist_cg, # Novos argumentos na função
                       final_drive_ratio, transmission_efficiency,
                       battery_type, n_serie, n_paralelo, soc_inicial,
@@ -492,13 +494,14 @@ def update_parameters(n_clicks, mass, wheel_radius, drag_coeff, frontal_area, ro
     current_params['vehicle'] = {
         'mass': mass,
         'wheel_radius': wheel_radius,
+        'wheel_mass': wheel_mass,
         'drag_coeff': drag_coeff,
         'frontal_area': frontal_area,
         'rolling_resistance': rolling_resistance,
         'road_grade': 0,
-        'L': L,              # Salva L
-        'h': h,              # Salva h
-        'dist_cg': dist_cg   # Salva dist_cg
+        'L': L,             
+        'h': h,              
+        'dist_cg': dist_cg   
     }
 
     current_params['transmission'] = {
