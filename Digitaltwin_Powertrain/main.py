@@ -10,7 +10,7 @@ from models import BatteryPack, Inversor, Tire, Transmission, Vehicle, Motor
 from simulation.Simulation import Simulation
 
 def build_defaults():
-    transmission = Transmission.Transmission(final_drive_ratio=4.0, efficiency=0.95)
+    transmission = Transmission.Transmission(final_drive_ratio=2.0, efficiency=0.95)
     vehicle = Vehicle.Vehicle(mass=230.0, wheel_radius=0.275, drag_coeff=0.7789,
                       frontal_area=0.68, rolling_resistance=0.015, road_grade=0.0)
     battery = BatteryPack.BatteryPack(tipo_celula='Li-ion', n_serie=264, n_paralelo=1, soc_inicial=1.0)
@@ -44,7 +44,7 @@ app.layout = html.Div([
     dcc.Store(id='parameters-store', data={
         'vehicle': {'mass': 230, 'wheel_radius': 0.275, 'drag_coeff': 0.7789,
                     'frontal_area': 0.68, 'rolling_resistance': 0.015, 'road_grade': 0},
-        'transmission': {'final_drive_ratio': 4.0, 'efficiency': 0.95},
+        'transmission': {'final_drive_ratio': 2.0, 'efficiency': 0.95},
         'battery': {'tipo_celula': 'Li-ion', 'n_serie': 264, 'n_paralelo': 1, 'soc_inicial': 1.0},
         'motor': {'rs': 0.0732, 'ld': 0.000078, 'lq': 0.000137, 'jm': 0.05769,
                   'kf': 0.1, 'lambda_m': 0.04748, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 700.23},
@@ -112,7 +112,7 @@ app.layout = html.Div([
                 dbc.CardHeader(html.H5("Transmissão")),
                 dbc.CardBody([
                     dbc.Label("Relação Diferencial"),
-                    dbc.Input(id='final-drive-ratio', type='number', value=4.0, step=0.1),
+                    dbc.Input(id='final-drive-ratio', type='number', value=2.0, step=0.1),
                     dbc.Label("Eficiência"),
                     dbc.Input(id='transmission-efficiency', type='number', value=0.95, step=0.01, min=0, max=1),
                 ])

@@ -206,9 +206,9 @@ class Simulation:
                     Fx_max = self.tire.Tire_forces(Fz, slip)
                     wheel_torque_ideal = self.transmission.motor_to_wheel_torque(self.torque_constant * isq)
                     traction_force_ideal = wheel_torque_ideal / self.vehicle.wheel_radius
-                    traction_force_limited = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max))
+                    traction_force_limited =  min(abs(traction_force_ideal), abs(Fx_max)) # * np.sign(traction_force_ideal) 
                     resistance_force = self.vehicle.calculate_resistance_forces(vehicle_velocity)
-                    resultant_force = traction_force_ideal - resistance_force
+                    resultant_force = traction_force_limited - resistance_force
                     if vehicle_velocity < 0.01 and resultant_force < 0:
                         vehicle_acceleration = 0.0
                     else:

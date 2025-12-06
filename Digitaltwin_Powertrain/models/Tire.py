@@ -95,5 +95,5 @@ class Tire:
         """
         v = np.array(velocidade_linear, dtype=float)
         omega = np.array(velocidade_angular, dtype=float)
-        denom = np.where(np.abs(v) < eps, eps, v)  # prevent division by near-zero
+        denom = np.where(v < eps, eps, v)  # prevent division by near-zero
         return (omega * raio_pneu - v) / denom
