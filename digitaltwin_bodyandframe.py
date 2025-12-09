@@ -291,7 +291,7 @@ class Estrutura:
         xi_pts = np.array([0.5 - np.sqrt(3.0/5.0)/2.0, 0.5, 0.5 + np.sqrt(3.0/5.0)/2.0])
         w_pts  = np.array([5.0/18.0, 8.0/18.0, 5.0/18.0])
 
-        Ke = np.zeros((12,12), dtype=float)
+        Ke = lil_matrix((self.num_dofs, self.num_dofs), dtype=np.float64)
 
         for xi, w in zip(xi_pts, w_pts):
             B = self.calcular_B_Elementar(element, xi=xi)  
@@ -356,20 +356,21 @@ class Estrutura:
         ])
         
         # Matriz de Massa Elementar
-        m_e= np.array([
-                [156 * d3, 0, 0, 22 * L_e * d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3, 0, 0],
-                [0,2*d1, 0, 0, 0, 0, 0, d1, 0, 0, 0, 0],
-                [0, 0, 156 * d3, 0, 0, 22 * L_e* d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3],
-                [22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0],
-                [0, 0, 0, 0, 2*d2, 0, 0, 0, 0, 0, d2, 0],
-                [0, 0, 22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3],
-                [54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156* d3, 0, 0, -22 * L_e * d3, 0, 0],
-                [0, d1, 0, 0, 0, 0, 0, 2*d1, 0, 0, 0, 0],
-                [0, 0, 54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156 * d3, 0, 0, -22 * L_e * d3],
-                [-13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0],
-                [0, 0, 0, 0, d2, 0, 0, 0, 0, 0, 2*d2, 0],
-                [0, 0, -13 * L_e * d3, 0, 0,-3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3]
-            ])
+        m_e = np.array([
+            # u_x1,    u_y1,    u_z1,             theta_x1,        theta_y1, theta_z1,            u_x2,     u_y2,    u_z2,             theta_x2,        theta_y2, theta_z2
+            [156*d3,     0,       0,                0,                0,      22*L_e*d3,        54*d3,      0,       0,                0,                0,      -13*L_e*d3],   # u_x1
+            [0,         2*d1,    0,                0,                0,      0,                0,          d1,      0,                0,                0,      0],          # u_y1
+            [0,         0,       156*d3,           22*L_e*d3,        0,      0,                0,          0,       54*d3,            -13*L_e*d3,       0,      0],          # u_z1
+            [0,         0,       22*L_e*d3,        4*L_e**2*d3,      0,      0,                0,          0,       13*L_e*d3,        -3*L_e**2*d3,     0,      0],          # theta_x1
+            [0,         0,       0,                0,                2*d2,   0,                0,          0,       0,                0,                d2,     0],          # theta_y1
+            [22*L_e*d3, 0,       0,                0,                0,      4*L_e**2*d3,      13*L_e*d3,  0,       0,                0,                0,      -3*L_e**2*d3], # theta_z1
+            [54*d3,     0,       0,                0,                0,      13*L_e*d3,        156*d3,     0,       0,                0,                0,      -22*L_e*d3],  # u_x2
+            [0,         d1,      0,                0,                0,      0,                0,          2*d1,    0,                0,                0,      0],          # u_y2
+            [0,         0,       54*d3,            13*L_e*d3,        0,      0,                0,          0,       156*d3,           -22*L_e*d3,       0,      0],          # u_z2
+            [0,         0,       -13*L_e*d3,       -3*L_e**2*d3,     0,      0,                0,          0,       -22*L_e*d3,       4*L_e**2*d3,      0,      0],          # theta_x2
+            [0,         0,       0,                0,                d2,     0,                0,          0,       0,                0,                2*d2,   0],          # theta_y2
+            [-13*L_e*d3,0,       0,                0,                0,      -3*L_e**2*d3,     -22*L_e*d3, 0,       0,                0,                0,      4*L_e**2*d3]   # theta_z2
+        ])
         return k_e,m_e
 
     def construir_T(self,coord1, coord2):
@@ -704,7 +705,7 @@ class Estrutura:
         I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
         k = 0.9  
         alfa = 12.0 * E * I / (k * G * A * L_e**2)
-        beta = 1.0 / (1.0 - alfa)        
+        beta = 1.0 / (1.0 + alfa)        
         # Funções consistentes (uma vez só!)
         p = self.funcoes_de_forma(xi, L_e,alfa,beta)
         invL = 1.0 / L_e
@@ -724,37 +725,37 @@ class Estrutura:
 
         B = np.zeros((6,12))
         # order [u1,v1,w1,theta_x1,theta_y1,theta_z1, u2,v2,w2,theta_x2,theta_y2,theta_z2]
-        B[0,1] = dN1_dy
-        B[0,7] = dN2_dy
+    # Linha 0: epsilon_y = v' (Axial) - CORRETO
+        B[0, 1] = dN1_dy
+        B[0, 7] = dN2_dy
 
-        # kappa_x (theta_x' from w/phi family)
-        B[1,2] = dG1_dy
-        B[1,3] = dG3_dy
-        B[1,8] = dG2_dy
-        B[1,9] = dG4_dy
+        # Linha 1: kappa_x = +d(theta_x)/dy = +d(Gw)/dy = -d(Gv)/dy --- (CORREÇÃO)
+        B[1, 2] = -dG1_dy  
+        B[1, 3] = -dG3_dy  
+        B[1, 8] = -dG2_dy  
+        B[1, 9] = -dG4_dy  
 
-        # kappa_z = - theta_z'
-        B[2,0] =  (dG1_dy)
-        B[2,5] =  (dG3_dy)
-        B[2,6] =  (dG2_dy)
-        B[2,11] = ( dG4_dy)
+        # Linha 2: kappa_z = -d(theta_z)/dy = -d(Gv)/dy
+        B[2, 0] = -dG1_dy  
+        B[2, 5] = -dG3_dy  
+        B[2, 6] = -dG2_dy  
+        B[2, 11] = -dG4_dy 
 
-        # gamma_xy = u' - theta_z
-        B[3,0] = dH1_dy - G1
-        B[3,5] = dH3_dy - G3
-        B[3,6] = dH2_dy - G2
-        B[3,11] = dH4_dy - G4
+        # Linha 3: gamma_xy = u' - theta_z = dHv' - Gv (Correto como estava)
+        B[3, 0] = dH1_dy - G1
+        B[3, 5] = dH3_dy - G3
+        B[3, 6] = dH2_dy - G2
+        B[3, 11] = dH4_dy - G4
 
-        # gamma_yz = w' + theta_x
-        B[4,2] = dH1_dy - G1
-        B[4,3] = dH3_dy - G3
-        B[4,8] = dH2_dy - G2
-        B[4,9] = dH4_dy - G4
+        # Linha 4: gamma_yz = w' + theta_x = dHv' - Gv (Correto como estava)
+        B[4, 2] = dH1_dy - G1
+        B[4, 3] = dH3_dy - G3
+        B[4, 8] = dH2_dy - G2
+        B[4, 9] = dH4_dy - G4
 
-        # torsion theta_y'
-        B[5,4] = dN1_dy
-        B[5,10] = dN2_dy
-        
+        # Linha 5: kappa_y = theta_y' (Torção) - CORRETO
+        B[5, 4] = dN1_dy
+        B[5, 10] = dN2_dy
         return B
 
     def compute_strain(self, displacements):
@@ -1350,7 +1351,7 @@ class Estrutura:
 
             return tubo_final
     
-    def create_step(self,nome="chassi"):
+    def create_step_complete(self,nome="chassi"):
         """
         Create a .STEP file with the entire tubular structure    
 
@@ -1624,4 +1625,6 @@ Referências
 [9] ZIENKIEWICZ, O. C.; TAYLOR, R. L.; ZHU, J. Z. The Finite Element Method for Solid and Structural Mechanics. 6. ed. Oxford: Butterworth-Heinemann, 2005.
 
 [10] EER, Ferdinand P.; JOHNSTON Jr., E. Russell; DEWOLF, John T.; MAZUREK, David F. Resistência dos Materiais. 7. ed. São Paulo: McGraw-Hill Brasil, 2016.
+
+[11] LUO, Y. An efficient 3D Timoshenko beam element with consistent shape functions. Advances in Theoretical and Applied Mechanics, v. 1, n. 3, p. 95-106, out. 2008.
 """
