@@ -1,5 +1,5 @@
 import numpy as np
-from Estrutura_Tipada import Estrutura
+from digitaltwin_bodyandframe import Estrutura
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import traceback
