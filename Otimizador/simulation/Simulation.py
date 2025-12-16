@@ -38,9 +38,10 @@ class Simulation:
 
         # simulation time configuration - REDUZIDO PARA TESTE
         self.tmax = float(tmax)
-        self.steps = int(steps)
-        # conservative controller update timestep used inside combined_edos
-        self.hp = self.tmax / float(self.steps) if self.steps > 0 else 1e-3
+
+        self.hp = 1e-4  
+        
+        self.steps = int(self.tmax / self.hp)
 
         # extract motor parameters safely with defaults
         self.p = getattr(self.motor, 'p', 1)
@@ -224,7 +225,7 @@ class Simulation:
                     
                     # Passo A: Estimativa inicial usando peso estático (a = 0)
                     # CORREÇÃO: Usar self.vehicle e não Vehicle
-                    Fz_estatico = self.vehicle.LoadTransfer(0.0) 
+                    Fz_estatico = self.vehicle.calculate_load_transfer(0.0) 
                     Fx_max_est = self.tire.Tire_forces(Fz_estatico, slip)
                     
                     # Limita a força preliminar
@@ -233,7 +234,7 @@ class Simulation:
                     a_estimated = force_result_est / self.vehicle.mass
                     
                     # Passo B: Refinamento com a aceleração estimada
-                    Fz = self.vehicle.LoadTransfer(a_estimated)
+                    Fz = self.vehicle.calculate_load_transfer(a_estimated)
                     Fx_max = self.tire.Tire_forces(Fz, slip)
                     
                     # Cálculo Final
@@ -412,15 +413,15 @@ class Simulation:
             
             # CORREÇÃO: Método mais robusto e tolerâncias relaxadas
             sol = solve_ivp(
-                fun=self.combined_edos, 
-                t_span=(t0, tf), 
-                y0=x0,
-                method='RK23',  # Métoddo mais rapido de integração RK23
-                t_eval=t_eval, 
-                atol=1e-4,  # Relaxado
-                rtol=1e-3,  # Relaxado  
-                max_step=0.01  # Limitar passo máximo
-            )
+            fun=self.combined_edos, 
+            t_span=(t0, tf), 
+            y0=x0,
+            method='RK23',
+            t_eval=t_eval, 
+            atol=1e-4,
+            rtol=1e-3,
+            max_step=self.hp  # <--- Importante: impede passos gigantes que instabilizam o PID
+        )
             
             print(f"✅ Integração concluída! {len(sol.t)} pontos calculados")
             
@@ -590,13 +591,13 @@ class Simulation:
                 # --- MESMA LÓGICA DE ITERAÇÃO DO ODE ---
                 
                 # 1. Estimativa Estática
-                Fz_est = self.vehicle.LoadTransfer(0.0)
+                Fz_est = self.vehicle.calculate_load_transfer(0.0)
                 Fx_max_est = self.tire.Tire_forces(Fz_est, slip)
                 tf_est = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max_est))
                 a_est = (tf_est - resistance_force) / self.vehicle.mass
 
                 # 2. Cálculo Real com Transferência de Carga
-                Fz = self.vehicle.LoadTransfer(a_est) # CORRIGIDO: self.vehicle.LoadTransfer
+                Fz = self.vehicle.calculate_load_transfer(a_est) # CORRIGIDO: self.vehicle.LoadTransfer
                 Fx_max = self.tire.Tire_forces(Fz, slip)
 
                 traction_force_limitada = np.sign(traction_force_ideal) * min(abs(traction_force_ideal), abs(Fx_max))
