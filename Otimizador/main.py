@@ -30,18 +30,18 @@ app.layout = html.Div([
     # 1. ATUALIZAÇÃO NO STORE: Adicionados L, h, dist_cg
     dcc.Store(id='parameters-store', data={
         'vehicle': {
-            'mass': 230, 
+            'mass': 240, 
             'wheel_radius': 0.275,
-            'wheel_mass': 7.5, 
+            'wheel_mass': 5.0, 
             'drag_coeff': 0.7789,
             'frontal_area': 0.68, 
             'rolling_resistance': 0.015, 
             'road_grade': 0,
-            'L': 2.6,       # Entre-eixos padrão
-            'h': 0.5,       # Altura CG padrão
-            'dist_cg': 1.3  # Distância CG padrão
+            'L': 1.5,       # Entre-eixos padrão
+            'h': 0.28,       # Altura CG padrão
+            'dist_cg': 0.6  # Distância CG padrão
         },
-        'transmission': {'final_drive_ratio': 4.0, 'efficiency': 0.95},
+        'transmission': {'final_drive_ratio': 4.0, 'axle_inertia': 0.0015, 'diff_inertia' : 0.012, 'efficiency': 0.95},
         'battery': {'tipo_celula': 'Li-ion', 'n_serie': 264, 'n_paralelo': 1, 'soc_inicial': 1.0},
         'motor': {'rs': 0.00706, 'ld': 0.0000965, 'lq': 0.0000965, 'jm': 0.02521,
                   'kf': 0.1, 'lambda_m': 0.04748, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 700.23},
@@ -92,11 +92,11 @@ app.layout = html.Div([
                 dbc.CardHeader(html.H5("Veículo")),
                 dbc.CardBody([
                     dbc.Label("Massa (kg)"),
-                    dbc.Input(id='vehicle-mass', type='number', value=230, step=1),
+                    dbc.Input(id='vehicle-mass', type='number', value=240, step=1),
                     dbc.Label("Raio da Roda (m)"),
                     dbc.Input(id='wheel-radius', type='number', value=0.275, step=0.01),
                     dbc.Label("Massa da Roda (kg)"),
-                    dbc.Input(id='wheel-mass', type='number', value=7.5, step=0.1),
+                    dbc.Input(id='wheel-mass', type='number', value=5.0, step=0.1),
                     dbc.Label("Coef. de Arrasto"),
                     dbc.Input(id='drag-coeff', type='number', value=0.7789, step=0.01),
                     dbc.Label("Área Frontal (m²)"),
@@ -106,11 +106,11 @@ app.layout = html.Div([
                     
                     html.Hr(),
                     dbc.Label("Entre-eixos L (m)"),
-                    dbc.Input(id='vehicle-L', type='number', value=2.6, step=0.01),
+                    dbc.Input(id='vehicle-L', type='number', value=1.5, step=0.01),
                     dbc.Label("Altura do CG h (m)"),
-                    dbc.Input(id='vehicle-h', type='number', value=0.5, step=0.01),
+                    dbc.Input(id='vehicle-h', type='number', value=0.28, step=0.01),
                     dbc.Label("Dist.x CG (m)"),
-                    dbc.Input(id='vehicle-dist-cg', type='number', value=1.3, step=0.01),
+                    dbc.Input(id='vehicle-dist-cg', type='number', value=0.6, step=0.01),
                 ])
             ], style={'marginBottom': '15px'}),
 
@@ -118,8 +118,12 @@ app.layout = html.Div([
             dbc.Card([
                 dbc.CardHeader(html.H5("Transmissão")),
                 dbc.CardBody([
-                    dbc.Label("Relação Diferencial"),
+                    dbc.Label("Relação Final"),
                     dbc.Input(id='final-drive-ratio', type='number', value=4.0, step=0.1),
+                    dbc.Label("Inércia Semi-Eixo"),
+                    dbc.Input(id='axle_inertia', type='number', value=0.0015, step=0.1),
+                    dbc.Label("Inérica Diferencial"),
+                    dbc.Input(id='diff_inertia', type='number', value= 0.012, step=0.1),
                     dbc.Label("Eficiência"),
                     dbc.Input(id='transmission-efficiency', type='number', value=0.95, step=0.01, min=0, max=1),
                 ])
@@ -465,6 +469,8 @@ def toggle_sidebar(n_clicks, sidebar_state):
      State('vehicle-dist-cg', 'value'),
      
      State('final-drive-ratio', 'value'),
+     State('axle_inertia', 'value'),
+     State('diff_inertia', 'value'),
      State('transmission-efficiency', 'value'),
      State('battery-type', 'value'),
      State('n-serie', 'value'),
@@ -484,7 +490,7 @@ def toggle_sidebar(n_clicks, sidebar_state):
 )
 def update_parameters(n_clicks, mass, wheel_radius,wheel_mass, drag_coeff, frontal_area, rolling_resistance,
                       L, h, dist_cg, # Novos argumentos na função
-                      final_drive_ratio, transmission_efficiency,
+                      final_drive_ratio, axle_inertia, diff_inertia,transmission_efficiency,
                       battery_type, n_serie, n_paralelo, soc_inicial,
                       motor_rs, motor_ld, motor_lq, motor_jm, motor_kf, motor_lambda, motor_poles, motor_modulation,
                       sim_time, speed_ref, current_params):
@@ -506,6 +512,8 @@ def update_parameters(n_clicks, mass, wheel_radius,wheel_mass, drag_coeff, front
 
     current_params['transmission'] = {
         'final_drive_ratio': final_drive_ratio,
+        'axle_inertia' : axle_inertia,
+        'diff_inertia': diff_inertia,
         'efficiency': transmission_efficiency
     }
 
