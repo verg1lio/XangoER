@@ -125,7 +125,7 @@ class Vehicle:
         motor_torque = transmission.wheel_to_motor_torque(wheel_torque)
         return motor_torque
     
-    def LoadTransfer(self,a):
+    def calculate_load_transfer(self,a):
         """
         Calcula a força vertical dinâmica (Fz) considerando a transferência de carga longitudinal.
 
@@ -163,61 +163,58 @@ class Vehicle:
         load_transfer = (self.mass * a * self.h) / self.L
 
         return (Fz_static + load_transfer)/2
-    
-    def calculate_single_wheel_inertia(self, k_factor=0.8):
-        """
-        Método auxiliar para estimar a inércia de uma única roda (J_roda) 
-        usando uma massa estimada e um fator de forma (k).
         
-        Parameters
-        ----------
-        estimated_wheel_mass : float
-            Massa estimada de uma única roda e pneu [kg].
-        k_factor : float
-            Fator de forma (k) para a inércia. 0.5 (sólido) a 1.0 (anel). 0.8 é um bom meio termo.
-
-        Returns
-        -------
-        float
-            Inércia rotacional de uma roda [kg.m²].
-        """
-        # I = k * m * r^2
-        return k_factor * self.wheel_mass * (self.wheel_radius ** 2)
-    
     def calculate_reflected_inertia(self, transmission):
         """
-        Calcula a inércia equivalente do veículo refletida no eixo do motor.
+        Calcula a inércia total da carga (veículo + rodas + transmissão) refletida no eixo do motor.
+        
+        Aplica o conceito de conservação de energia cinética, onde a massa translacional
+        do veículo é convertida em uma inércia rotacional equivalente.
 
-        J_refletido = (J_translação + J_rodas) / (i^2)
+        Fórmula:
+        J_refletido = (J_translacao + J_rotacional_rodas + J_transmissao_lenta) / N^2
+
+        Onde:
+        - J_translacao = Massa_Total * Raio_Pneu^2
+        - N = Relação de transmissão total (Gear Ratio)
 
         Parameters
         ----------
         transmission : Transmission
-            Objeto da transmissão contendo 'final_drive_ratio'.
-        wheel_inertia : float, optional
-            Momento de inércia de UMA roda/pneu [kg.m²]. 
-            Se não fornecido, considera apenas a massa do veículo.
-
+            Objeto contendo 'final_drive_ratio', 'diff_inertia' e 'axle_inertia'.
+        
         Returns
         -------
         float
-            Inércia da carga vista pelo motor [kg.m²].
+            Inércia equivalente total vista pelo eixo do motor [kg.m²].
         """
-        # Converte Massa Translacional em Inércia Rotacional (J = m * r²)
+
+        N = transmission.final_drive_ratio
+        
+        # Inércia Translacional Equivalente 
+        # Representa a massa do carro como se fosse um grande volante de inércia acoplado às rodas.
+      
         j_translation = self.mass * (self.wheel_radius ** 2)
 
-        # Calcula J_roda usando a massa estimada
-        j_single_wheel = self.calculate_single_wheel_inertia() 
-        j_wheels = j_single_wheel * 4.0 # Inércia de 4 rodas
-        
-        # Inércia total no eixo da roda (Low speed side)
-        j_load_total = j_translation + j_wheels
+        # Inércia Rotacional das Rodas
+        # k = fator de forma (0.8 é uma boa aproximação para conjunto pneu+roda)
 
-        # Reflete para o eixo do motor (High speed side)
-        # DIVIDIMOS pelo quadrado da relação, pois o motor gira mais rápido
-        ratio = transmission.final_drive_ratio
+        k = 0.8
+        j_wheel_single = k * self.wheel_mass * (self.wheel_radius ** 2)
         
-        if ratio == 0:
-            return 0.0
-            
-        return j_load_total / (ratio ** 2)
+        # Consideramos as 4 rodas do veículo para a inércia rotacional
+        j_wheels_rotational = 4 * j_wheel_single
+
+        # Inércia dos Componentes da Transmissão 
+
+        j_drivetrain_low_speed = transmission.diff_inertia + (2 * transmission.axle_inertia)
+
+        # Soma Total na Roda 
+        # Aqui somamos todas as inércias que giram na velocidade da roda
+        j_total_at_wheel = j_translation + j_wheels_rotational + j_drivetrain_low_speed
+
+        # Reflexão para o Motor 
+       
+        j_reflected = j_total_at_wheel / (N ** 2)
+
+        return j_reflected
