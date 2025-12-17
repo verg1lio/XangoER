@@ -517,112 +517,116 @@ class Estrutura:
         
         return displacements
     
-    def funcoes_de_forma(self, xi, L, alpha, beta):
-        """
-        Funções de forma consistentes para pares de flexão Timoshenko 3D
-        (u,ψ) e (w,φ), válidas quando Ix = Iz.
-        """
-        # H (as in paper) -- note H3,H4 include factor L in definition
-        H1 = beta*(2*xi**3 - 3*xi**2 + alpha*xi + 1.0 - alpha)                  #Correto
-        H2 = beta*(-2*xi**3 + 3*xi**2 - alpha*xi)                               #Correto
-        H3 = L*beta*(xi**3 + (alpha/2.0 - 2.0)*xi**2 + (1.0 - alpha/2.0)*xi)    #Correto
-        H4 = L*beta*(xi**3 - (1.0 + alpha/2.0)*xi**2 + (alpha/2.0)*xi)          #Correto
-        # G (paper) - note G1,G2 have 1/L factor
-        G1 = (6.0*beta/L)*(xi**2 - xi)                                          #correto
-        G2 = (6.0*beta/L)*(-xi**2 + xi)                                         #correto
-        G3 = beta*(3*xi**2 + (alpha - 4.0)*xi + 1.0 - alpha)                    #correto
-        G4 = beta*(3*xi**2 - (alpha + 2.0)*xi)                                  #correto
-
-        # Derivadas
-        dH1_dxi = beta*(6*xi**2 - 6*xi + alpha)                                 #Correto
-        dH2_dxi = beta*(-6*xi**2 + 6*xi - alpha)                                #Correto
-        dH3_dxi = L*beta*(3*xi**2 + (alpha - 4.0)*xi + 1.0 - alpha/2.0)         #Correto
-        dH4_dxi = L*beta*(3*xi**2 - (alpha + 2.0)*xi + alpha/2.0)               #Correto
-        dG1_dxi = (6.0*beta/L)*(2*xi - 1.0)
-        dG2_dxi = (6.0*beta/L)*(1.0 - 2*xi)
-        dG3_dxi = beta*(6*xi + (alpha - 4.0))
-        dG4_dxi = beta*(6*xi - (alpha + 2.0))
-
-        return {
-            'H1':H1,'H2':H2,'H3':H3,'H4':H4,
-            'G1':G1,'G2':G2,'G3':G3,'G4':G4,
-            'dH1_dxi':dH1_dxi,'dH2_dxi':dH2_dxi,'dH3_dxi':dH3_dxi,'dH4_dxi':dH4_dxi,
-            'dG1_dxi':dG1_dxi,'dG2_dxi':dG2_dxi,'dG3_dxi':dG3_dxi,'dG4_dxi':dG4_dxi
-        }
+def funcoes_de_forma(self, xi, L, alpha, beta):
+    """
+    Funções de forma consistentes para pares de flexão Timoshenko 3D
+    (u,ψ) e (w,φ), válidas quando Ix = Iz.
+    Beta deve ser beta = 1 / (1 + alfa), e as funções de forma devem ser consistentes com essa formulação
+    """
+    # Funções H
+    # Condições de contorno: H1(0) = 1, H2(1) = 1, H3(0) = 1 e H4(1) = 1.
+    H1 = beta*(2*xi**3 - 3*xi**2 + alpha*xi + (1.0 + alpha))                # Deslocamento no nó 1
+    H2 = beta*(-2*xi**3 + 3*xi**2 + alpha*xi)                               # Deslocamento no nó 2
+    H3 = L*beta*(xi**3 - (2.0 + alpha/2.0)*xi**2 + (1.0 + alpha/2.0)*xi)    # Rotação no nó 1
+    H4 = L*beta*(xi**3 - (1.0 - alpha/2.0)*xi**2 - (alpha/2.0)*xi)          # Rotação no nó 2
     
-    def calcular_B_Elementar(self, element,xi=0.5):
-        """
-        Retorna a matriz B (matriz deformação-deslocamento) para um elemento de viga de Timoshenko 3D
-        com 6 graus de liberdade por nó (2 nós por elemento),
-        onde a direção axial é o eixo Y. A torção é a última linha.
+    # Funções G
+    G1 = (6.0*beta/L)*(xi**2 - xi)                                          # Influência do deslocamento H1 na rotação
+    G2 = (6.0*beta/L)*(-xi**2 + xi)                                         # Influência do deslocamento H2 na rotação
+    G3 = beta*(3*xi**2 - (4.0 + alpha)*xi + (1.0 + alpha))                  # Influência da rotação H3 na rotação
+    G4 = beta*(3*xi**2 - (2.0 - alpha)*xi)                                  # Influência da rotação H4 na rotação
 
-        Args:
-            xi (float): Coordenada normalizada ao longo da viga (y/L), variando de 0 a 1.
+    # Derivadas
+    dH1_dxi = beta*(6*xi**2 - 6*xi - alpha)                                 
+    dH2_dxi = beta*(-6*xi**2 + 6*xi + alpha)                                
+    dH3_dxi = L*beta*(3*xi**2 - (4.0 + alpha)*xi + (1.0 + alpha/2.0))         
+    dH4_dxi = L*beta*(3*xi**2 - (2.0 - alpha)*xi - (alpha/2.0))               
 
-        Returns:
-            numpy.ndarray: A matriz B 6x12.
-        """  
+    dG1_dxi = (6.0*beta/L)*(2*xi - 1.0)
+    dG2_dxi = (6.0*beta/L)*(1.0 - 2*xi)
+    dG3_dxi = beta*(6*xi - (4.0 + alpha))
+    dG4_dxi = beta*(6*xi - (2.0 - alpha))
 
-        # Parâmetros do elemento
+    return {
+        'H1':H1,'H2':H2,'H3':H3,'H4':H4,
+        'G1':G1,'G2':G2,'G3':G3,'G4':G4,
+        'dH1_dxi':dH1_dxi,'dH2_dxi':dH2_dxi,'dH3_dxi':dH3_dxi,'dH4_dxi':dH4_dxi,
+        'dG1_dxi':dG1_dxi,'dG2_dxi':dG2_dxi,'dG3_dxi':dG3_dxi,'dG4_dxi':dG4_dxi
+    }
+   
+def calcular_B_Elementar(self, element,xi=0.5):
+    """
+    Retorna a matriz B (matriz deformação-deslocamento) para um elemento de viga de Timoshenko 3D
+    com 6 graus de liberdade por nó (2 nós por elemento),
+    onde a direção axial é o eixo Y. A torção é a última linha.
 
-        E, G, dimension, e, rho, poisson, shape = self.obter_propriedades(element[2])
-        L_e = self.calcular_comprimento(element)
-        A = self.area_seccao_transversal(dimension, e, shape)
-        I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
-        k = 0.9  
-        alfa = 12.0 * E * I / (k * G * A * L_e**2)
-        beta = 1.0 / (1.0 + alfa)        
-        # Funções consistentes (uma vez só!)
-        p = self.funcoes_de_forma(xi, L_e,alfa,beta)
-        invL = 1.0 / L_e
-        # convert derivatives to d/dy exactly once:
-        dH1_dy = p['dH1_dxi'] * invL
-        dH2_dy = p['dH2_dxi'] * invL
-        dH3_dy = p['dH3_dxi'] * invL
-        dH4_dy = p['dH4_dxi'] * invL
-        dG1_dy = p['dG1_dxi'] * invL
-        dG2_dy = p['dG2_dxi'] * invL
-        dG3_dy = p['dG3_dxi'] * invL
-        dG4_dy = p['dG4_dxi'] * invL
-        G1 = p['G1']; G2 = p['G2']; G3 = p['G3']; G4 = p['G4']
+    Args:
+        xi (float): Coordenada normalizada ao longo da viga (y/L), variando de 0 a 1.
 
-        dN1_dy = -1.0 / L_e
-        dN2_dy = 1.0 / L_e
+    Returns:
+        numpy.ndarray: A matriz B 6x12.
+    """  
 
-        B = np.zeros((6,12))
-        # order [u1,v1,w1,theta_x1,theta_y1,theta_z1, u2,v2,w2,theta_x2,theta_y2,theta_z2]
-        B[0,1] = dN1_dy
-        B[0,7] = dN2_dy
+    # Parâmetros do elemento
 
-        # kappa_x (theta_x' from w/phi family)
-        B[1,2] = dG1_dy
-        B[1,3] = dG3_dy
-        B[1,8] = dG2_dy
-        B[1,9] = dG4_dy
+    E, G, dimension, e, rho, poisson, shape = self.obter_propriedades(element[2])
+    L_e = self.calcular_comprimento(element)
+    A = self.area_seccao_transversal(dimension, e, shape)
+    I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
+    k = 0.9  
+    alfa = 12.0 * E * I / (k * G * A * L_e**2)
+    beta = 1.0 / (1.0 + alfa)        
+    # Funções consistentes (uma vez só!)
+    p = self.funcoes_de_forma(xi, L_e,alfa,beta)
+    invL = 1.0 / L_e
+    # convert derivatives to d/dy exactly once:
+    dH1_dy = p['dH1_dxi'] * invL
+    dH2_dy = p['dH2_dxi'] * invL
+    dH3_dy = p['dH3_dxi'] * invL
+    dH4_dy = p['dH4_dxi'] * invL
+    dG1_dy = p['dG1_dxi'] * invL
+    dG2_dy = p['dG2_dxi'] * invL
+    dG3_dy = p['dG3_dxi'] * invL
+    dG4_dy = p['dG4_dxi'] * invL
+    G1 = p['G1']; G2 = p['G2']; G3 = p['G3']; G4 = p['G4']
 
-        # kappa_z = - theta_z'
-        B[2,0] =  (dG1_dy)
-        B[2,5] =  (dG3_dy)
-        B[2,6] =  (dG2_dy)
-        B[2,11] = ( dG4_dy)
+    dN1_dy = -1.0 / L_e
+    dN2_dy = 1.0 / L_e
 
-        # gamma_xy = u' - theta_z
-        B[3,0] = dH1_dy - G1
-        B[3,5] = dH3_dy - G3
-        B[3,6] = dH2_dy - G2
-        B[3,11] = dH4_dy - G4
+    B = np.zeros((6,12))
+    # order [u1,v1,w1,theta_x1,theta_y1,theta_z1, u2,v2,w2,theta_x2,theta_y2,theta_z2]
+    B[0,1] = dN1_dy
+    B[0,7] = dN2_dy
 
-    # gamma_yz = w' + theta_x
-        B[4,2] = dH1_dy - G1
-        B[4,3] = dH3_dy - G3
-        B[4,8] = dH2_dy - G2
-        B[4,9] = dH4_dy - G4
+    # kappa_x (theta_x' from w/phi family)
+    B[1,2] = dG1_dy
+    B[1,3] = dG3_dy
+    B[1,8] = dG2_dy
+    B[1,9] = dG4_dy
 
-        # torsion theta_y'
-        B[5,4] = dN1_dy
-        B[5,10] = dN2_dy
-            
-        return B
+    # kappa_z = - theta_z'
+    B[2,0] =  (dG1_dy)
+    B[2,5] =  (dG3_dy)
+    B[2,6] =  (dG2_dy)
+    B[2,11] = ( dG4_dy)
+
+    # gamma_xy = u' - theta_z
+    B[3,0] = dH1_dy - G1
+    B[3,5] = dH3_dy - G3
+    B[3,6] = dH2_dy - G2
+    B[3,11] = dH4_dy - G4
+
+   # gamma_yz = w' + theta_x
+    B[4,2] = dH1_dy - G1
+    B[4,3] = dH3_dy - G3
+    B[4,8] = dH2_dy - G2
+    B[4,9] = dH4_dy - G4
+
+    # torsion theta_y'
+    B[5,4] = dN1_dy
+    B[5,10] = dN2_dy
+        
+    return B
 
     def compute_strain(self, displacements):
         """
@@ -738,7 +742,7 @@ class Estrutura:
             sigma_flex_z = Mz * c / I       # Flexão em torno de z
             tau_shear_x = Vx / (k * A)      # Cisalhamento em x
             tau_shear_z = Vz / (k * A)      # Cisalhamento em z
-            tau_torcao_max = T * r / J          # Torção axial
+            tau_torcao_max = T * r / J      # Torção axial
 
             # Calculando a tensão normal devido à flexão máxima no eixo y
             M_comb_max = np.sqrt(Mx**2 + Mz**2)
@@ -1045,4 +1049,5 @@ def plot_interativo_matrizes_K(resultados):
 k_diffs = calcular_diferencas_matrizes_K(estrutura)
 
 # Exibindo os resultados
+
 plot_interativo_matrizes_K(k_diffs)
