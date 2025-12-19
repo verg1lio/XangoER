@@ -19,7 +19,7 @@ def build_defaults():
     motor = Motor(rs=0.0732, ld=0.000078, lq=0.00172, jm=0.05769, kf=0.1,
                   lambda_m=0.04748, p=10, valor_mu=0.99,
                   TL=False, torque=0.0,
-                  speed_ref=700.23)
+                  speed_ref=700.23 * (30 / 3.14) )
 
     sim = Simulation(motor=motor, vehicle=vehicle, transmission=transmission,
                      battery=battery, tire=tire, inversor=inversor, tmax=10, steps=12000)
@@ -47,7 +47,7 @@ app.layout = html.Div([
         'transmission': {'final_drive_ratio': 2.0, 'efficiency': 0.95},
         'battery': {'tipo_celula': 'Li-ion', 'n_serie': 264, 'n_paralelo': 1, 'soc_inicial': 1.0},
         'motor': {'rs': 0.0732, 'ld': 0.000078, 'lq': 0.000137, 'jm': 0.05769,
-                  'kf': 0.1, 'lambda_m': 0.04748, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 700.23},
+                  'kf': 0.1, 'lambda_m': 0.04748, 'p': 10, 'valor_mu': 0.95, 'velocidade_ref': 700.23 * (30 / 3.14) },
         'inversor': {'eficiencia': 0.95, 'freq_chaveamento': 10000},
         'simulacao': {'tmax': 10},
         'tire': {
@@ -167,8 +167,8 @@ app.layout = html.Div([
                 dbc.CardBody([
                     dbc.Label("Tempo Máximo (s)"),
                     dbc.Input(id='sim-time', type='number', value=10, step=1),
-                    dbc.Label("Velocidade Ref (rad/s)"),
-                    dbc.Input(id='speed-ref', type='number', value=700.23, step=1),
+                    dbc.Label("Velocidade Ref (RPM)"),
+                    dbc.Input(id='speed-ref', type='number', value=700.23 * (30 / 3.14)  , step=1),
                 ])
             ], style={'marginBottom': '15px'}),
 

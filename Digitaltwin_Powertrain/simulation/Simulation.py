@@ -57,7 +57,7 @@ class Simulation:
         self.max_current = getattr(self.motor, 'max_current', np.inf)
         self.Vdc_default = getattr(self.motor, 'Vdc', 600.0)
         self.modulation_index = getattr(self.motor, 'valor_mu', 1.0)
-        self.speed_ref = getattr(self.motor, 'speed_ref', 700.23)  # rad/s
+        self.speed_ref = getattr(self.motor, 'speed_ref', 700.23 *(30 / np.pi)  ) # Convert RPM to rad/s
 
         # precompute inverses used in ODEs
         self.inv_ld = 1.0 / self.ld if self.ld != 0 else 0.0

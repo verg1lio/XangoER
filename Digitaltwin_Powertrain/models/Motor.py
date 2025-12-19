@@ -125,9 +125,11 @@ class Motor:
         self.inv_mC = 1.0 / (self.m * self.C)
 
         # Controllers
-        self.id_controller = PID.Controller(kp=0.5, ki=10.0, kd = 0, limit=600.0)
-        self.iq_controller = PID.Controller(kp=0.5, ki=10.0, kd = 0 ,limit=600.0)
-        self.speed_controller = PID.Controller(kp=1.0, ki=0,kd = 0, limit=600.0)
+        self.id_controller = PID.Controller(kp=0.156, ki=146.4, kd=0, limit=600.0)
+        self.iq_controller = PID.Controller(kp=2.74, ki=146.4, kd=0, limit=600.0)
+        self.speed_controller = PID.Controller(kp=5.77, ki=25.0, kd=0, limit=150.0)
+        
+        
 
         # External torque setup
         self.TL = bool(TL)
@@ -146,7 +148,7 @@ class Motor:
         # References
         self.id_ref = 0.0
         self.iq_ref = 0.0
-        self.speed_ref = speed_ref
+        self.speed_ref = speed_ref * (30 / 3.14)   # Convert RPM to rad/s
 
     def set_external_torque(self, torque):
         """Defines the external torque source.
@@ -197,7 +199,7 @@ class Motor:
         else:
             return -200.0
 
-    def field_oriented_control(self, isd, isq, wm, dt):
+    def field_oriented_control(self, isd, isq, wm, dt, control='direct'):
         """Executes the Field-Oriented Control (FOC) algorithm.
 
         Parameters
@@ -227,7 +229,7 @@ class Motor:
         speed_error = self.speed_ref - wm
         torque_ref = self.speed_controller.update(speed_error, dt)
 
-        iq_ref = torque_ref / self.torque_constant if self.torque_constant != 0 else 0.0
+        iq_ref = torque_ref / self.torque_constant if self.torque_constant != 0 and control != 'direct' else 150
         id_ref = 0.0
 
         if abs(iq_ref) > self.max_current:
