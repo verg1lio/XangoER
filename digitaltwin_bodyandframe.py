@@ -170,6 +170,63 @@ class Estrutura:
                 'Side': float(row['Side(m)']) if 'Side(m)' in row else None
             }
 
+    def calcular_centro_de_massa(self):
+    
+        soma_massa = 0.0
+        soma_massa_pos = np.zeros(3)
+
+        for element in self.elements:
+            node1, node2, tube_type = element
+
+            # Coordenadas dos nós
+            p1 = np.array(self.nodes[node1])
+            p2 = np.array(self.nodes[node2])
+
+            # Comprimento do elemento
+            L = np.linalg.norm(p2 - p1)
+
+            # Propriedades do tubo (vindas do CSV)
+            E, G, dimension, espessura, densidade, poisson, shape = self.obter_propriedades(tube_type)
+
+            # Área da seção transversal
+            A = self.area_seccao_transversal(dimension, espessura, shape)
+
+            # Massa do elemento
+            massa_elemento = densidade * A * L
+
+            # Centro geométrico do tubo (meio do elemento)
+            centro_elemento = 0.5 * (p1 + p2)
+
+            # Acumulação
+            soma_massa += massa_elemento
+            soma_massa_pos += massa_elemento * centro_elemento
+
+        if soma_massa == 0:
+            raise ValueError("Massa total da estrutura é zero. Verifique os dados.")
+
+        centro_massa = soma_massa_pos / soma_massa
+
+        return centro_massa, soma_massa
+    
+    def adicionar_massas_concentradas(self, centro_massa_estrutura, massa_estrutura, massas_concentradas):
+
+        soma_massa = massa_estrutura
+        soma_massa_pos = massa_estrutura * np.array(centro_massa_estrutura)
+
+        for item in massas_concentradas:
+            m = item['massa']
+            pos = np.array(item['posicao'])
+
+            soma_massa += m
+            soma_massa_pos += m * pos
+
+        if soma_massa == 0:
+            raise ValueError("Massa total é zero. Verifique os dados.")
+
+        centro_massa_total = soma_massa_pos / soma_massa
+
+        return centro_massa_total, soma_massa
+
     def obter_propriedades(self, tube_name):
         """
         Gets tube properties from csv file
@@ -307,10 +364,49 @@ class Estrutura:
         K_e= t.T @ Ke @ t
         return K_e
 
+    def shear_correction_factor(self, dimension, e, poisson, shape):
+        """
+        Calcula o fator de correção de cisalhamento (kappa) para vigas de Timoshenko.
+        
+        Parâmetros:
+            dimension : float
+                Dimensão externa (diâmetro externo ou lado externo)
+            e : float
+                Espessura da parede
+            poisson : float
+                Coeficiente de Poisson do material
+            shape : str
+                'circular' ou 'quadrado'
+        
+        Retorno:
+            kappa : float
+                Fator de correção de cisalhamento
+        """
+
+        if shape.lower() == 'circular':
+            # Tubo circular oco
+            kappa = (6 * (1 + poisson)) / (7 + 6 * poisson)
+
+        elif shape.lower() == 'square':
+            # Tubo quadrado oco (Cowper, 1966)
+            b = dimension
+            t = e
+            beta = (b - 2 * t) / b
+
+            kappa = (
+                10 * (1 + poisson) * (1 - beta**2)**2
+            ) / (
+                12 + 11 * beta**2 + 10 * poisson * (1 - beta**2)**2
+            )
+
+        else:
+            raise ValueError("Forma de seção inválida. Use 'circular' ou 'quadrado'.")
+
+        return kappa
+
 # ---------------------
 # FUNÇÕES PRNICIPAIS
 # ---------------------
-
     def element(self, element):
         """
         Computes the element stiffness and mass matrices.
@@ -325,7 +421,7 @@ class Estrutura:
 
         A = self.area_seccao_transversal(dimension, e, shape)
         I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
-        kappa=0.9                                          #Fator de correção para shear 
+        kappa= self.shear_correction_factor(dimension,e,poisson,shape)                                         #Fator de correção para shear 
         L_e = self.calcular_comprimento(element)
         Phi = (12 * E * I) / (kappa * G * A * L_e**2)
 
@@ -356,21 +452,20 @@ class Estrutura:
         ])
         
         # Matriz de Massa Elementar
-        m_e = np.array([
-            # u_x1,    u_y1,    u_z1,             theta_x1,        theta_y1, theta_z1,            u_x2,     u_y2,    u_z2,             theta_x2,        theta_y2, theta_z2
-            [156*d3,     0,       0,                0,                0,      22*L_e*d3,        54*d3,      0,       0,                0,                0,      -13*L_e*d3],   # u_x1
-            [0,         2*d1,    0,                0,                0,      0,                0,          d1,      0,                0,                0,      0],          # u_y1
-            [0,         0,       156*d3,           22*L_e*d3,        0,      0,                0,          0,       54*d3,            -13*L_e*d3,       0,      0],          # u_z1
-            [0,         0,       22*L_e*d3,        4*L_e**2*d3,      0,      0,                0,          0,       13*L_e*d3,        -3*L_e**2*d3,     0,      0],          # theta_x1
-            [0,         0,       0,                0,                2*d2,   0,                0,          0,       0,                0,                d2,     0],          # theta_y1
-            [22*L_e*d3, 0,       0,                0,                0,      4*L_e**2*d3,      13*L_e*d3,  0,       0,                0,                0,      -3*L_e**2*d3], # theta_z1
-            [54*d3,     0,       0,                0,                0,      13*L_e*d3,        156*d3,     0,       0,                0,                0,      -22*L_e*d3],  # u_x2
-            [0,         d1,      0,                0,                0,      0,                0,          2*d1,    0,                0,                0,      0],          # u_y2
-            [0,         0,       54*d3,            13*L_e*d3,        0,      0,                0,          0,       156*d3,           -22*L_e*d3,       0,      0],          # u_z2
-            [0,         0,       -13*L_e*d3,       -3*L_e**2*d3,     0,      0,                0,          0,       -22*L_e*d3,       4*L_e**2*d3,      0,      0],          # theta_x2
-            [0,         0,       0,                0,                d2,     0,                0,          0,       0,                0,                2*d2,   0],          # theta_y2
-            [-13*L_e*d3,0,       0,                0,                0,      -3*L_e**2*d3,     -22*L_e*d3, 0,       0,                0,                0,      4*L_e**2*d3]   # theta_z2
-        ])
+        m_e= np.array([
+                [156 * d3, 0, 0, 22 * L_e * d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3, 0, 0],
+                [0,2*d1, 0, 0, 0, 0, 0, d1, 0, 0, 0, 0],
+                [0, 0, 156 * d3, 0, 0, 22 * L_e* d3, 0, 0, 54 * d3, 0, 0, -13 * L_e * d3],
+                [22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0],
+                [0, 0, 0, 0, 2*d2, 0, 0, 0, 0, 0, d2, 0],
+                [0, 0, 22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0, 13 * L_e * d3, 0, 0, -3 * L_e**2 * d3],
+                [54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156* d3, 0, 0, -22 * L_e * d3, 0, 0],
+                [0, d1, 0, 0, 0, 0, 0, 2*d1, 0, 0, 0, 0],
+                [0, 0, 54 * d3, 0, 0, 13 * L_e * d3, 0, 0, 156 * d3, 0, 0, -22 * L_e * d3],
+                [-13 * L_e * d3, 0, 0, -3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3, 0, 0],
+                [0, 0, 0, 0, d2, 0, 0, 0, 0, 0, 2*d2, 0],
+                [0, 0, -13 * L_e * d3, 0, 0,-3 * L_e**2 * d3, 0, 0, -22 * L_e * d3, 0, 0, 4 * L_e**2 * d3]
+            ])
         return k_e,m_e
 
     def construir_T(self,coord1, coord2):
@@ -429,7 +524,7 @@ class Estrutura:
         for node in nodes:                                          # Laço para selecionar cada nó que será engastado
             for dof in dofs:                                        # Laço para selecionar quais graus de liberdade serão fixados
                 index = node * self.num_dofs_per_node + dof         # Identificação da entrada da matriz que precisa ser restringida pelo engaste        
-                self.K_global[index, index] = 10**9                # Um valor suficientemente grande para simular um engaste 
+                self.K_global[index, index] = 10**20                # Um valor suficientemente grande para simular um engaste 
 
     def matrizes_global(self):
         """
@@ -488,133 +583,7 @@ class Estrutura:
         #lt.show()
 
         return self.K_global,self.M_global
-
-    def shape_fun(self, F_flexao1=1000, F_flexao2=1000, F_axial=1000,F_torcao=1000): 
-        """
-        Calculates deformations and stiffness of elements under loads.
-        Inputs:
-            - F_flex1: array of point bending forces.
-            - F_flex2: array of distributed bending forces.
-            - F_axial: array of axial forces.
-            - F_torsion: array of torsion forces.
-        Outputs:
-            - Arrays of torsion, deformations, and stiffness (bending and torsional).
-        """
-        #E = 2.1e11  	#Modulo de Young (Pa)
-        #I = 1.6667e-5 	#Momento de inercia (m^4)
-        #G = 81.2e9  	#Modulo de shear (Pa)
-        #A= 0.0125	    #Área da seção do elemento (m^2)	
-        #J = I/2     	#Momento polar de inércia (m^4)
-        KF_total = 0
-        KT_total = 0
-        KF_elements = []
-        KT_elements = [] 
-        torcao, deformacao, flexao1, flexao2, flexao3 = [], [], [], [], []
-        for element in self.elements:
-            d = self.obter_propriedades(element[2])[2]         #Diâmetro do Tubo (m)
-            e = self.obter_propriedades(element[2])[3]         #Espessura do Tubo (m)
-            E = self.obter_propriedades(element[2])[0]         #Modulo de Young (Pa)      
-            G = self.obter_propriedades(element[2])[1]         #Modulo de shear (Pa)
-            A = self.area_seccao_transversal(d, e)             #Área da seção do elemento (m^2)
-            I = self.momento_inercia_area_e_polar(d,e)[0]      #Momento de inercia (m^4)
-            J = self.momento_inercia_area_e_polar(d,e)[1]      #Momento polar de inércia (m^4)
-            L_e = self.calcular_comprimento(element)
-            # Equação de torsão
-            torcao_val = (F_torcao * L_e) / (G * J)         #Fonte[1]
-            torcao.append(torcao_val)
-            # Equação  para deformação axial
-            deformacao_val = (F_axial* L_e / (A * E))       #Fonte[2]
-            deformacao.append(deformacao_val)
-            # Equação para flexão
-            flexao_val1 = (F_flexao1*L_e**3)/(48 * E * I)      #Fonte[3.1] (carga pontual no meio do elemento biapoiado)
-            flexao_val2 = (5*F_flexao2*L_e**4)/(384 * E * I)   #Fonte[3.2] (carga distribuída ao longo de todo o elemento biapoiado)
-            flexao_val3 = flexao_val1 + flexao_val2            #Fonte[3.3] (tentativa de carregamento misto)
-            flexao1.append(flexao_val1)
-            flexao2.append(flexao_val2)
-            flexao3.append(flexao_val3)
-
-            # Rigidez flexional
-            KF = E * I / L_e
-            # Rigidez torsional
-            KT = G * J / L_e
-
-            KF_total += KF
-            KT_total += KT
-
-            KF_elements.append(KF)
-            KT_elements.append(KT)
-            
-        return (np.array(torcao), np.array(deformacao), np.array(flexao1), 
-            np.array(flexao2), np.array(flexao3), KF_total, KT_total, KF_elements, KT_elements)
-
-    def modal_analysis(self):
-        """
-        Performs modal analysis to compute natural frequencies and mode shapes.
-        Inputs: None.
-        Outputs:
-            - eigenvalues: eigenvalues (squared natural frequencies).
-            - eigenvectors: eigenvectors (mode shapes).
-            - frequencies: natural frequencies (Hz).
-        """
-        # Convert to CSR if not already
-        K = self.K_global.tocsr()
-        M = self.M_global.tocsr()
-    
-        # Use shift-invert mode for finding smallest eigenvalues
-        eigenvalues, eigenvectors = eigsh(K, k=self.num_modes, M=M, sigma=0, which='LA')
-    
-        # Frequências naturais (raiz quadrada dos autovalores)
-        frequencies = np.sqrt(eigenvalues) / (2 * np.pi)
-    
-        return eigenvalues, eigenvectors, frequencies
-
-    def compute_Kf_Kt(self, lfNode, lrNode, rfNode, rrNode, lcNode, rcNode):
-            """
-            Calculates
-            Inputs:
-            - lfNode: Left front suspension node index
-            - lrNode: Left rear suspension node index
-            - rfNode: Right front suspension node index
-            - rrNode: Right rear suspension node index
-            - lcNode: Left central node index
-            - rcNode: Right central node index
-            Outputs:
-            - Kt: Torsional stiffness of the chassis
-            - Kf: Beaming stiffness of the chassis
-            """
-            #Start Kt simulation
-            F_global_1 = np.zeros(self.K_global.shape[0])
-            F_global_1[2+lfNode*6] = 250                                                                  #Forças aplicadas nos nós onde estaria a suspensão dianteira (nodes 8 e 9)
-            F_global_1[2+rfNode*6] = -250                                                                #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
-            
-            fixed_nodes_1=[lrNode, rrNode]                                                                #Fixação dos nós onde estaria a suspensão traseira
-            fixed_dofs_1=[(node*6+i) for node in fixed_nodes_1 for i in range(6)]                           #Lista com os dofs fixados
-            
-            displacements = self.static_analysis( F_global_1, fixed_dofs_1)                                 #Calcula os displacements com as condições de contorno aplicadas acima
-            mi1=np.abs(displacements[lfNode*6+2])                                                       #displacement do nó 9 em módulo
-            mi2=np.abs(displacements[rfNode*6+2])                                                            #displacement do nó 8 em módulo
-            L = np.abs(self.nodes[lfNode][0] - self.nodes[rfNode][0])                                   #Distancia entre o nó 8 e 9
-            alpha= np.degrees(np.atan((mi1+mi2)/(L)))                                                   #Ângulo de torção do chassi após aplicação do torque
-            tau = (np.abs(F_global_1[2+rfNode*6]))*(L)                                                    #Cálculo do torque aplicado
-            
-            Kt = tau/alpha
-
-            #Start Kf simulation
-            F_global = np.zeros(self.K_global.shape[0])
-            F = 5000                                                                                #Módulo da força que vai gerar a flexão
-            F_global[2+lcNode*6] = -F/2                                                             #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
-            F_global[2+rcNode*6] = -F/2                                                             #Sinal negativo por conta da direção de aplicação da força
-            
-            fixed_nodes=[rfNode, lfNode, rrNode, lrNode]                                            #Fixação dos nós onde estaria a suspensão dianteira e traseira
-            fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]                       #Lista com os dofs fixados
-            
-            displacements = self.static_analysis(F_global, fixed_dofs)                              #Calcula os displacements com as condições de contorno aplicadas acima
-            dY=np.abs(displacements[2+lcNode*6])                                                    #Deslocamento em Y de um dos nós onde foi aplicado a força
-
-            Kf=F/dY
-
-            return Kt, Kf
-         
+        
     def static_analysis(self, F_global, fixed_dofs):
         """
         Perform static analysis by solving Ku = F with boundary conditions.
@@ -650,32 +619,35 @@ class Estrutura:
         
         return displacements
     
-    def funcoes_de_forma(self, xi, L,alpha, beta):
+    def funcoes_de_forma(self, xi, L, alpha, beta):
         """
         Funções de forma consistentes para pares de flexão Timoshenko 3D
         (u,ψ) e (w,φ), válidas quando Ix = Iz.
+        Beta deve ser beta = 1 / (1 + alfa), e as funções de forma devem ser consistentes com essa formulação
         """
-        # H (as in paper) -- note H3,H4 include factor L in definition
-        H1 = beta*(2*xi**3 - 3*xi**2 + alpha*xi + 1.0 - alpha)                  #Correto
-        H2 = beta*(-2*xi**3 + 3*xi**2 - alpha*xi)                               #Correto
-        H3 = L*beta*(xi**3 + (alpha/2.0 - 2.0)*xi**2 + (1.0 - alpha/2.0)*xi)    #Correto
-        H4 = L*beta*(xi**3 - (1.0 + alpha/2.0)*xi**2 + (alpha/2.0)*xi)          #Correto
-        # G (paper) - note G1,G2 have 1/L factor
-        G1 = (6.0*beta/L)*(xi**2 - xi)                                          #correto
-        G2 = (6.0*beta/L)*(-xi**2 + xi)                                         #correto
-        G3 = beta*(3*xi**2 + (alpha - 4.0)*xi + 1.0 - alpha)                    #correto
-        G4 = beta*(3*xi**2 - (alpha + 2.0)*xi)                                  #correto
+        # Funções H
+        # Condições de contorno: H1(0) = 1, H2(1) = 1, H3(0) = 1 e H4(1) = 1.
+        H1 = beta*(2*xi**3 - 3*xi**2 + alpha*xi + (1.0 + alpha))                # Deslocamento no nó 1
+        H2 = beta*(-2*xi**3 + 3*xi**2 + alpha*xi)                               # Deslocamento no nó 2
+        H3 = L*beta*(xi**3 - (2.0 + alpha/2.0)*xi**2 + (1.0 + alpha/2.0)*xi)    # Rotação no nó 1
+        H4 = L*beta*(xi**3 - (1.0 - alpha/2.0)*xi**2 - (alpha/2.0)*xi)          # Rotação no nó 2
+        
+        # Funções G
+        G1 = (6.0*beta/L)*(xi**2 - xi)                                          # Influência do deslocamento H1 na rotação
+        G2 = (6.0*beta/L)*(-xi**2 + xi)                                         # Influência do deslocamento H2 na rotação
+        G3 = beta*(3*xi**2 - (4.0 + alpha)*xi + (1.0 + alpha))                  # Influência da rotação H3 na rotação
+        G4 = beta*(3*xi**2 - (2.0 - alpha)*xi)                                  # Influência da rotação H4 na rotação
 
         # Derivadas
-        dH1_dxi = beta*(6*xi**2 - 6*xi + alpha)                                 #Correto
-        dH2_dxi = beta*(-6*xi**2 + 6*xi - alpha)                                #Correto
-        dH3_dxi = L*beta*(3*xi**2 + (alpha - 4.0)*xi + 1.0 - alpha/2.0)         #Correto
-        dH4_dxi = L*beta*(3*xi**2 - (alpha + 2.0)*xi + alpha/2.0)               #Correto
+        dH1_dxi = beta*(6*xi**2 - 6*xi - alpha)                                 
+        dH2_dxi = beta*(-6*xi**2 + 6*xi + alpha)                                
+        dH3_dxi = L*beta*(3*xi**2 - (4.0 + alpha)*xi + (1.0 + alpha/2.0))         
+        dH4_dxi = L*beta*(3*xi**2 - (2.0 - alpha)*xi - (alpha/2.0))               
 
         dG1_dxi = (6.0*beta/L)*(2*xi - 1.0)
         dG2_dxi = (6.0*beta/L)*(1.0 - 2*xi)
-        dG3_dxi = beta*(6*xi + (alpha - 4.0))
-        dG4_dxi = beta*(6*xi - (alpha + 2.0))
+        dG3_dxi = beta*(6*xi - (4.0 + alpha))
+        dG4_dxi = beta*(6*xi - (2.0 - alpha))
 
         return {
             'H1':H1,'H2':H2,'H3':H3,'H4':H4,
@@ -683,7 +655,7 @@ class Estrutura:
             'dH1_dxi':dH1_dxi,'dH2_dxi':dH2_dxi,'dH3_dxi':dH3_dxi,'dH4_dxi':dH4_dxi,
             'dG1_dxi':dG1_dxi,'dG2_dxi':dG2_dxi,'dG3_dxi':dG3_dxi,'dG4_dxi':dG4_dxi
         }
-   
+    
     def calcular_B_Elementar(self, element,xi=0.5):
         """
         Retorna a matriz B (matriz deformação-deslocamento) para um elemento de viga de Timoshenko 3D
@@ -703,7 +675,7 @@ class Estrutura:
         L_e = self.calcular_comprimento(element)
         A = self.area_seccao_transversal(dimension, e, shape)
         I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
-        k = 0.9  
+        k = self.shear_correction_factor(dimension,e,poisson,shape)                                         #Fator de correção para shear  
         alfa = 12.0 * E * I / (k * G * A * L_e**2)
         beta = 1.0 / (1.0 + alfa)        
         # Funções consistentes (uma vez só!)
@@ -725,37 +697,37 @@ class Estrutura:
 
         B = np.zeros((6,12))
         # order [u1,v1,w1,theta_x1,theta_y1,theta_z1, u2,v2,w2,theta_x2,theta_y2,theta_z2]
-    # Linha 0: epsilon_y = v' (Axial) - CORRETO
-        B[0, 1] = dN1_dy
-        B[0, 7] = dN2_dy
+        B[0,1] = dN1_dy
+        B[0,7] = dN2_dy
 
-        # Linha 1: kappa_x = +d(theta_x)/dy = +d(Gw)/dy = -d(Gv)/dy --- (CORREÇÃO)
-        B[1, 2] = -dG1_dy  
-        B[1, 3] = -dG3_dy  
-        B[1, 8] = -dG2_dy  
-        B[1, 9] = -dG4_dy  
+        # kappa_x (theta_x' from w/phi family)
+        B[1,2] = dG1_dy
+        B[1,3] = dG3_dy
+        B[1,8] = dG2_dy
+        B[1,9] = dG4_dy
 
-        # Linha 2: kappa_z = -d(theta_z)/dy = -d(Gv)/dy
-        B[2, 0] = -dG1_dy  
-        B[2, 5] = -dG3_dy  
-        B[2, 6] = -dG2_dy  
-        B[2, 11] = -dG4_dy 
+        # kappa_z = - theta_z'
+        B[2,0] =  (dG1_dy)
+        B[2,5] =  (dG3_dy)
+        B[2,6] =  (dG2_dy)
+        B[2,11] = ( dG4_dy)
 
-        # Linha 3: gamma_xy = u' - theta_z = dHv' - Gv (Correto como estava)
-        B[3, 0] = dH1_dy - G1
-        B[3, 5] = dH3_dy - G3
-        B[3, 6] = dH2_dy - G2
-        B[3, 11] = dH4_dy - G4
+        # gamma_xy = u' - theta_z
+        B[3,0] = dH1_dy - G1
+        B[3,5] = dH3_dy - G3
+        B[3,6] = dH2_dy - G2
+        B[3,11] = dH4_dy - G4
 
-        # Linha 4: gamma_yz = w' + theta_x = dHv' - Gv (Correto como estava)
-        B[4, 2] = dH1_dy - G1
-        B[4, 3] = dH3_dy - G3
-        B[4, 8] = dH2_dy - G2
-        B[4, 9] = dH4_dy - G4
+        # gamma_yz = w' + theta_x
+        B[4,2] = dH1_dy - G1
+        B[4,3] = dH3_dy - G3
+        B[4,8] = dH2_dy - G2
+        B[4,9] = dH4_dy - G4
 
-        # Linha 5: kappa_y = theta_y' (Torção) - CORRETO
-        B[5, 4] = dN1_dy
-        B[5, 10] = dN2_dy
+        # torsion theta_y'
+        B[5,4] = dN1_dy
+        B[5,10] = dN2_dy
+            
         return B
 
     def compute_strain(self, displacements):
@@ -810,13 +782,13 @@ class Estrutura:
         # Construct constitutive matrix (isotropic 3D elasticity)
         for i in range(len(self.elements)):
             element=self.elements[i]
-            E, G, dimension, e, rho, nu, shape = self.obter_propriedades(element[2])
+            E, G, dimension, e, rho, poisson, shape = self.obter_propriedades(element[2])
             L_e = self.calcular_comprimento(element)
             A = self.area_seccao_transversal(dimension, e, shape)
             I, J = self.momento_inercia_area_e_polar(dimension, e, shape)
-            k=0.9
+            k= self.shear_correction_factor(dimension,e,poisson,shape)                                         #Fator de correção para shear
             """
-            lambda_ = (E * nu) / ((1 + nu) * (1 - 2 * nu))
+            lambda_ = (E * poisson) / ((1 + poisson) * (1 - 2 * poisson))
             C = np.array([
                 [lambda_ + 2*G  , lambda_       , lambda_       ,   0,  0,  0],
                 [lambda_        , lambda_ + 2*G , lambda_       ,   0,  0,  0],
@@ -835,7 +807,7 @@ class Estrutura:
             
             strain=strains[i]
         
-            esforco = np.dot(D,strain)
+            esforco = np.dot(D, strain)
             esforcos.append(esforco)
         return esforcos
 
@@ -851,6 +823,7 @@ class Estrutura:
             sigma (ndarray): Tensões reais [σ_axial, σ_flex_x, σ_flex_z, τ_cis_x, τ_cis_z, τ_torção]
         """
         tensoes=[]
+        componentes=[]
         # Propriedades do tubo
         for i in range(len(self.elements)):
             element=self.elements[i]
@@ -860,24 +833,52 @@ class Estrutura:
 
             D_ext = dimension  # Diâmetro externo
             r = D_ext / 2
-            c = r  # fibra extrema para flexão
-            k = 0.9  # fator de shear
+            c = r  # Fibra extrema para flexão
+            k = self.shear_correction_factor(dimension,e,poisson,shape)
 
             N, Mx, Mz, Vx, Vz, T = esforcos[i]
 
-            sigma_axial = N / A
-            sigma_flex_x = Mx * c / I
-            sigma_flex_z = Mz * c / I
-            tau_shear_x = Vx / (k * A)
-            tau_shear_z = Vz / (k * A)
-            tau_torcao = T * r / J
-            sigma_yy = sigma_axial + sigma_flex_x + sigma_flex_z
-            sigma_xx = 0
-            sigma_zz = 0
-            tensao=np.array([sigma_xx,sigma_yy,sigma_zz,tau_shear_x,tau_shear_z,tau_torcao])
-            tensoes.append(tensao)
-        return tensoes
+            # Tensões reais
+            sigma_axial = N / A             # Normal axial em y
+            sigma_flex_x = Mx * c / I       # Flexão em torno de x
+            sigma_flex_z = Mz * c / I       # Flexão em torno de z
+            tau_shear_x = Vx / (k * A)      # Cisalhamento em x
+            tau_shear_z = Vz / (k * A)      # Cisalhamento em z
+            tau_torcao_max = T * r / J      # Torção axial
 
+            # Calculando a tensão normal devido à flexão máxima no eixo y
+            M_comb_max = np.sqrt(Mx**2 + Mz**2)
+            sigma_flex_max = M_comb_max * c / I
+            
+            # Calculando a tensão normal máxima no eixo y
+            sigma_yy_max = sigma_axial + sigma_flex_max
+            
+            # Calculando as tensões transversais por efeito poisson (seção simétrica nos dois eixos)
+            sigma_xx = -poisson * sigma_yy_max
+            sigma_zz = -poisson * sigma_yy_max
+
+            # Calculando a tensão de cisalhamento cortante combinado máxima
+            V_res = np.sqrt(Vx**2 + Vz**2)
+            tau_V_res_max = V_res / (k * A)
+
+            # Análise do cisalhamento resultante
+            # Tensão cisalhante cortante máxima p/ tubo oco ocorre:
+                # - no linha média da espessura (centro da parede)
+                # - para espessuras pequenas, é aproximadamente igual ao longo da espessura da parede
+            
+            # Tensão cisalhante torcional é máxima quanto r = r_ext, e mínima quando r = r_int
+
+            # Cálculo da tensão de cisalhamento total máxima
+            tau_res_max = np.sqrt(tau_V_res_max**2 + tau_torcao_max**2)
+
+            tensao=np.array([sigma_xx,sigma_yy_max,sigma_zz,tau_res_max])
+            tensoes.append(tensao)
+
+            componente = np.array([sigma_axial, sigma_flex_x, sigma_flex_z, tau_shear_x, tau_shear_z, tau_torcao_max])
+            componentes.append(componente)
+
+        return tensoes, componentes
+    
     def compute_von_mises(self, stresses):
         """
         Compute von Mises stress for all elements.
@@ -890,13 +891,13 @@ class Estrutura:
         """
         von_mises_stresses = []
         for stress in stresses:
-            sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx = stress
+            sigma_xx, sigma_yy, sigma_zz, tau_res = stress
             von_mises = np.sqrt(
                 0.5 * (
                     (sigma_xx - sigma_yy)**2 +
                     (sigma_yy - sigma_zz)**2 +
                     (sigma_zz - sigma_xx)**2 +
-                    6 * (tau_xy**2 + tau_yz**2 + tau_zx**2)
+                    6 * (tau_res**2)
                 )
             )
             von_mises_stresses.append(von_mises/10**6)
@@ -1241,184 +1242,212 @@ class Estrutura:
 # ---------------------
 # DEFS DE EXPORTAÇÃO
 # ---------------------
-
     def tubo_oco(self, p1, p2, tube_type):
             """
-            Create a hollow tube using cadquerry commands
+            Create a hollow tube using cadquerry commands with intersection fix.
 
             Parameters:
                 -p1: int (start node of the element)
                 -p2: int (end node of the element)
                 -tube_type: string (Type of the tube)
             """
+
             # Scale input nodes (which are in meters) to millimeters
             p1_mm = p1 * 1000
             p2_mm = p2 * 1000
 
             vec = p2_mm - p1_mm # Vector in millimeters
-            length = np.linalg.norm(vec)
-            if length < 1e-6:
-                print(f"AVISO: Tubo entre {p1_mm} (mm) e {p2_mm} (mm) tem comprimento zero. Será ignorado.")
+            original_length = np.linalg.norm(vec)
+
+            if original_length < 1e-6:
+                print(f"AVISO: Tubo entre {p1_mm} e {p2_mm} tem comprimento zero. Será ignorado.")
                 return None
+
+            overlap = 5.0 # 5mm de penetração em cada ponta
             
-            # Use obter_propriedades to get the dimensions specific to this tube_type
-            # These are read in meters from CSV, then converted to mm
-            E, G, dimension_m, thickness_m, rho, poisson, shape = self.obter_propriedades(tube_type)
+            # O comprimento final considera a extensão em ambas as extremidades
+            final_length = original_length + (2 * overlap)
+
+            # Vetor normalizado para cálculos de direção
+            vec_normalized = vec / original_length 
+
+            # Obter propriedades
+            try:
+                E, G, dimension_m, thickness_m, rho, poisson, shape = self.obter_propriedades(tube_type)
+            except Exception as e:
+                print(f"❌ Erro ao obter propriedades para {tube_type}: {e}")
+                return None
+
             d = dimension_m * 1000  # Convert outer dimension to mm
             e = thickness_m * 1000  # Convert thickness to mm
 
-            print(f"\n--- DEBUG TUBO_OCO (dentro da classe) ---")
-            print(f"    Processando P1_mm={p1_mm} e P2_mm={p2_mm}") # Print scaled points
-            print(f"    Tipo de Tubo: {tube_type}, Forma: {shape}, Comprimento: {length:.4f}mm") 
-            print(f"    Dimensões (d, e) OBTIDAS: d={d:.4f}mm, e={e:.4f}mm") 
+            print(f"\n--- DEBUG TUBO_OCO ---")
+            print(f"    Tipo: {tube_type}, Forma: {shape}")
+            print(f"    Comprimento Original: {original_length:.2f}mm -> Comprimento C/ Overlap: {final_length:.2f}mm")
 
             outer_shape_workplane = None
             inner_shape_workplane = None
 
+            # Definição da Forma 2D
             if shape == "Circular":
                 outer_radius = d / 2
                 inner_radius = outer_radius - e
-                print(f"    Circular: Raio Externo={outer_radius:.4f}mm, Raio Interno={inner_radius:.4f}mm")
                 if inner_radius <= 0:
-                    print(f"❌ ERRO GEOMÉTRICO: Raio interno ({inner_radius:.4f}mm) <= 0 para tubo circular. Verifique 'd' e 'e'.")
+                    print(f"❌ ERRO GEOMÉTRICO: Raio interno ({inner_radius:.4f}mm) <= 0.")
                     return None
                 outer_shape_workplane = cq.Workplane("XY").circle(outer_radius)
                 inner_shape_workplane = cq.Workplane("XY").circle(inner_radius)
+            
             elif shape == 'Square':
-                # For square, 'd' is the side length
                 outer_side = d
                 inner_side = d - 2*e
-                print(f"    Quadrado: Lado Externo={outer_side:.4f}mm, Lado Interno={inner_side:.4f}mm")
                 if inner_side <= 0:
-                    print(f"❌ ERRO GEOMÉTRICO: Lado interno ({inner_side:.4f}mm) <= 0 para tubo quadrado. Verifique 'd' e 'e'.")
+                    print(f"❌ ERRO GEOMÉTRICO: Lado interno ({inner_side:.4f}mm) <= 0.")
                     return None
                 outer_shape_workplane = cq.Workplane("XY").rect(outer_side, outer_side)
                 inner_shape_workplane = cq.Workplane("XY").rect(inner_side, inner_side)
+            
             else:
                 print(f"Erro: Forma de tubo '{shape}' não suportada.")
                 return None
                 
-            # Extrude para criar sólidos com o comprimento ajustado
-            outer_solid = outer_shape_workplane.extrude(length)
-            inner_solid = inner_shape_workplane.extrude(length)
+            # --- CORREÇÃO 2: Extrusão com comprimento estendido ---
+            # Usamos final_length em vez de length
+            outer_solid = outer_shape_workplane.extrude(final_length)
+            inner_solid = inner_shape_workplane.extrude(final_length)
             
-            print(f"    DEBUG tubo_oco: Tipo de outer_solid após extrude: {type(outer_solid)}")
-            print(f"    DEBUG tubo_oco: outer_solid.val().isValid(): {outer_solid.val().isValid()}") 
-            print(f"    DEBUG tubo_oco: Tipo de inner_solid após extrude: {type(inner_solid)}")
-            print(f"    DEBUG tubo_oco: inner_solid.val().isValid(): {inner_solid.val().isValid()}") 
+            # Operação de Corte (Cut)
+            tubo_oco_result = outer_solid.cut(inner_solid)
 
-            # Perform the cut operation to create the hollow tube
-            tubo_oco_result = outer_solid.cut(inner_solid) # Use a new variable name for clarity
-            print(f"    DEBUG tubo_oco: Tipo de 'tubo_oco_result' após cut: {type(tubo_oco_result)}")
-            print(f"    DEBUG tubo_oco: tubo_oco_result.val().isValid() após cut: {tubo_oco_result.val().isValid()}") 
-
-            # If cut results in an invalid object, return None early
             if not tubo_oco_result.val().isValid(): 
-                print(f"❌ ERRO: Objeto 'tubo_oco_result' inválido após operação de corte para {tube_type} entre {p1_mm} e {p2_mm}.")
+                print(f"❌ ERRO: Objeto inválido após operação de corte.")
                 return None
 
+            # --- CORREÇÃO 3: Posicionamento Ajustado ---
+            # Calculamos onde o tubo deve começar. 
+            # Como aumentamos o tamanho, recuamos o ponto de início na direção oposta do vetor.
+            start_point_adjusted = p1_mm - (vec_normalized * overlap)
 
-            # Apply rotation and translation to position the tube correctly in 3D space
+            # Rotação e Translação
             z_axis = np.array([0, 0, 1])
-            
-            # Ensure length is not zero to avoid division by zero
-            if length < 1e-9: # very small length
-                print(f"AVISO: Comprimento do tubo muito pequeno ({length:.4e}mm), rotação/translação podem ser imprecisas.")
-                # Para comprimento zero, apenas translade para o ponto p1_mm. Sem offset de sobreposição.
-                tubo_final = tubo_oco_result.translate(tuple(p1_mm)) 
-            else:
-                vec_normalized = vec / length # Use `length` (magnitude of vec) for normalization
-                axis = np.cross(z_axis, vec_normalized)
-                axis_length = np.linalg.norm(axis)
+            axis = np.cross(z_axis, vec_normalized)
+            axis_length = np.linalg.norm(axis)
 
-                # Calcula o ponto de início ajustado para compensar a sobreposição adicionada.
-                # O tubo efetivamente começa um pouco "antes" de p1_mm.
-                adjusted_p1_mm = p1_mm - (vec_normalized)
+            tubo_final = None
 
-                if axis_length < 1e-6: # If vector is aligned with Z-axis, no rotation needed
-                    tubo_final = tubo_oco_result.translate(tuple(adjusted_p1_mm))
+            if axis_length < 1e-6: 
+                # Se o tubo já está alinhado com Z (vertical)
+                # Se o vetor aponta para baixo (0,0,-1), o produto escalar será -1
+                dot_product = np.dot(z_axis, vec_normalized)
+                if dot_product > 0:
+                    # Aponta para cima, apenas translada
+                    tubo_final = tubo_oco_result.translate(tuple(start_point_adjusted))
                 else:
-                    angle = np.degrees(np.arccos(np.dot(z_axis, vec_normalized)))
-                    tubo_final = tubo_oco_result.rotate((0, 0, 0), tuple(axis / axis_length), angle).translate(tuple(adjusted_p1_mm))
-            # --- FIM DA MODIFICAÇÃO PARA SOBREPOSIÇÃO INTENCIONAL ---
+                    # Aponta para baixo, rotaciona 180 graus (ou espelha) e translada
+                    # O jeito mais seguro no CadQuery para 180 puro é rotacionar em torno de X ou Y
+                    tubo_final = tubo_oco_result.rotate((0,0,0), (1,0,0), 180).translate(tuple(start_point_adjusted))
+            else:
+                angle = np.degrees(np.arccos(np.dot(z_axis, vec_normalized)))
+                tubo_final = tubo_oco_result.rotate((0, 0, 0), tuple(axis / axis_length), angle).translate(tuple(start_point_adjusted))
             
-            print(f"    DEBUG tubo_oco: Tipo de 'tubo_final' após rotate+translate: {type(tubo_final)}")
-            print(f"    DEBUG tubo_oco: tubo_final.val().isValid(): {tubo_final.val().isValid()}") 
-
             if not tubo_final.val().isValid(): 
-                print(f"❌ ERRO: Objeto 'tubo_final' inválido após rotação/translação para {tube_type} entre {p1_mm} e {p2_mm}.")
+                print(f"❌ ERRO: Objeto inválido após rotação/translação.")
                 return None
 
             return tubo_final
     
-    def create_step_complete(self,nome="chassi"):
+    def create_step_complete(self, nome="chassi"):
         """
         Create a .STEP file with the entire tubular structure    
 
-        Parameters: 
-            - nome: string (Name of the file)       
+        Parameters:
 
+            - nome: string (Name of the file)      
         Outputs:
-            - .STEP file 
+
+            - .STEP file
         """
 
-        todos_tubos_validos = [] # Lista para armazenar apenas as TopoDS_Shapes válidas
+        todos_tubos_validos = [] 
+        
+        print(f"\n--- INICIANDO GERAÇÃO DA ESTRUTURA ({len(self.elements)} elementos) ---")
+
         for i, element in enumerate(self.elements):
             node_a, node_b, tube_type = element
             p1 = self.nodes[node_a]
             p2 = self.nodes[node_b]
 
-            print(f"\n--- Processando Elemento {i+1}/{len(self.elements)}: {tube_type} entre Nó {node_a} e Nó {node_b} ---")
-            tubo = self.tubo_oco(p1, p2, tube_type) # Retorna um Workplane
+            # Cria o tubo já com a sobreposição correta
+            tubo = self.tubo_oco(p1, p2, tube_type)
 
             if tubo and tubo.val() and tubo.val().isValid():
-                # Rotacionar o tubo antes de adicioná-lo à lista para combinação
-                tubo_rotacionado = tubo.rotate((0, 0, 0), (1, 0, 0), -90)
-                if tubo_rotacionado.val() and tubo_rotacionado.val().isValid():
-                    todos_tubos_validos.append(tubo_rotacionado.val()) # Adiciona a TopoDS_Shape subjacente
-                    print(f"  ✅ Tubo {tube_type} (Elemento {i+1}) rotacionado e marcado para união.")
-                else:
-                    print(f"❌ AVISO: Tubo {tube_type} (Elemento {i+1}) tornou-se inválido APÓS a rotação. Será ignorado na união.")
+                # --- ATENÇÃO: Rotação Individual Removida ---
+                # O tubo_oco já alinha o tubo do ponto A ao ponto B.
+                # Rotacionar aqui individualmente costuma "desmontar" a estrutura.
+                # Se precisar rotacionar o chassi todo, faça isso no final (na variável 'estrutura').
+                
+                todos_tubos_validos.append(tubo.val())
             else:
-                print(f"  AVISO: Tubo {tube_type} (Elemento {i+1}) não foi criado, é None, ou é inválido. Será ignorado na união.")
+                print(f"❌ AVISO: Falha ao criar geometria para o Elemento {i+1} ({tube_type}).")
 
         if not todos_tubos_validos:
-            print("\n❌ ERRO FINAL: Nenhuma estrutura válida pôde ser criada para união.")
+            print("\n❌ ERRO FINAL: Nenhum tubo válido gerado.")
             return
 
-        # Tentar a união de todos os sólidos de uma vez
+        print(f"\nTentando unir {len(todos_tubos_validos)} tubos...")
+
+        estrutura = None
+        
+        # 1. Tenta a união booleana (Sólido Único)
         try:
-            temp_workplane = cq.Workplane("XY").add(todos_tubos_validos)
+            # Cria um Workplane com todos os objetos
+            temp_workplane = cq.Workplane("XY")
             
-            # *** ALTERAÇÃO AQUI: Adicione o parâmetro 'tol' à chamada combine() ***
-   
-            estrutura = temp_workplane.combine(tol=5e-1)
-            #estrutura = cq.Compound.makeCompound(todos_tubos_validos)
+            # Adiciona todos os objetos ao workplane. 
+            # Dica: Adicionar um por um pode ser lento, mas o .add() aceita lista.
+            for t in todos_tubos_validos:
+                temp_workplane = temp_workplane.add(t)
+
+            # --- MUDANÇA CRÍTICA AQUI ---
+            # Removemos o tol=5e-1. Com o overlap físico, a união deve ser exata.
+            # Se falhar, usamos combine(glue=True) que é mais rápido para peças que apenas se tocam,
+            # mas como temos interseção, o combine() padrão é o correto.
+            estrutura = temp_workplane.combine()
+            
+            # Validação pós-união
             if not estrutura.val() or not estrutura.val().isValid():
-                print(f"\n❌ ERRO UNION FINAL: A estrutura combinada resultou em um objeto inválido após .combine().")
-                # Fallback: se a união falhou, talvez volte para o Compound para garantir exportação,
-                # ou avise o usuário que a união total não foi possível.
-                print("Tentando exportar como um Compound em vez de um único sólido devido à falha na união.")
-                estrutura = cq.Compound.makeCompound(todos_tubos_validos) # Use o Compound como fallback
-                if not estrutura.isValid():
-                    print(f"❌ ERRO GRAVE: O Compound de fallback também é inválido!")
-                    return
-            else:
-                print("\n✅ Todos os tubos foram unidos em um único sólido com sucesso!")
+                raise Exception("Resultado do combine() é inválido.")
+            
+            print("\n✅ SUCESSO: Todos os tubos fundidos em um único sólido perfeito!")
 
         except Exception as ex:
-            print(f"\n❌ ERRO GRAVE ao tentar combinar todos os tubos em um único sólido: {ex}")
-            print("Tentando exportar como um Compound em vez de um único sólido devido à falha na união.")
-            estrutura = cq.Compound.makeCompound(todos_tubos_validos) # Use o Compound como fallback
-            if not estrutura.isValid():
-                print(f"❌ ERRO GRAVE: O Compound de fallback também é inválido!")
+            print(f"\n⚠️ FALHA NA UNIÃO BOOLEANA: {ex}")
+            print("ℹ️  Motivo provável: Geometria complexa ou auto-interseção excessiva.")
+            print("👉  Alternando para modo 'Compound' (vários sólidos agrupados, visualmente idêntico).")
+            
+            # 2. Fallback para Compound (Saco de peças)
+            try:
+                estrutura = cq.Compound.makeCompound(todos_tubos_validos)
+                if not estrutura.isValid():
+                    print("❌ ERRO GRAVE: Nem o Compound pôde ser criado.")
+                    return
+            except Exception as e_comp:
+                print(f"❌ ERRO CRÍTICO no Fallback: {e_comp}")
                 return
 
+        # 3. Exportação
         try:
-            exporters.export(estrutura, f"{nome}.step") # Nome diferente para não sobrescrever
-            print(f"\n✅ STEP file '{nome}.step' generated!")
+            # Se você precisar rotacionar O CHASSI INTEIRO (ex: Z-up para Y-up), faça aqui:
+            # estrutura = estrutura.rotate((0,0,0), (1,0,0), -90)
+            
+            nome_arquivo = f"{nome}.step"
+            exporters.export(estrutura, nome_arquivo)
+            print(f"\n💾 ARQUIVO SALVO: {nome_arquivo}")
         except Exception as ex:
-            print(f"\n❌ ERRO ao exportar arquivo STEP '{nome}.step': {ex}")
+            print(f"\n❌ ERRO DE EXPORTAÇÃO: {ex}")
+
+        # (Opcional) Visualização com Matplotlib mantém-se igual...
+        # ...
         # Visualização 3D (This part plots lines from your nodes/elements data, not the 3D solids from CadQuery)
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
@@ -1444,7 +1473,91 @@ class Estrutura:
 
         plt.tight_layout()
         plt.show()
-    
+
+    def create_step_esboco(self, nome_arquivo="chassi_esboço.step", visualizar=True):
+            """
+            Gera o arquivo STEP da estrutura para CAD e plota a visualização 3D interativa.
+
+            Parâmetros:
+                nome_arquivo (str): Nome do arquivo .step a ser salvo.
+                visualizar (bool): Se True, exibe o gráfico 3D ao final.
+            """
+            
+            # ------------------------------------------------------------
+            # 1. GERAÇÃO DO ARQUIVO STEP (CADQUERY)
+            # ------------------------------------------------------------
+            # Converter m -> mm para o CAD
+            nodes_mm = self.nodes * 1000.0  # m → mm
+
+            wp = cq.Workplane("XY")
+
+            for element in self.elements:
+                i = int(element[0])
+                j = int(element[1])
+
+                p1 = tuple(nodes_mm[i])
+                p2 = tuple(nodes_mm[j])
+
+                wp = wp.add(cq.Edge.makeLine(p1, p2))
+
+            # ⚠️ FORÇAR UM SHAPE ÚNICO
+            wireframe = wp.combine()
+
+            exporters.export(
+                wireframe,
+                nome_arquivo,
+                exportType="STEP",
+                tolerance=1e-6
+            )
+
+            print(f"✅ STEP gerado corretamente: {nome_arquivo}")
+            # ------------------------------------------------------------
+            # 2. PLOTAGEM (MATPLOTLIB)
+            # ------------------------------------------------------------
+            if visualizar:
+                fig = plt.figure(figsize=(12, 9))
+                ax = fig.add_subplot(111, projection='3d')
+
+                # Plotagem dos Nós
+                # self.nodes[:, 0] = X, [:, 1] = Y, [:, 2] = Z
+                ax.scatter(self.nodes[:, 0], self.nodes[:, 1], self.nodes[:, 2], c='red', s=45)
+
+                # Adicionar rótulos (IDs) aos nós
+                for i, (x, y, z) in enumerate(self.nodes):
+                    ax.text(x, y, z, f'{i}', fontsize=9)
+
+                # Plotagem das Conexões (Elementos)
+                for element in self.elements:
+                    start = int(element[0])
+                    end = int(element[1])
+                    
+                    ax.plot(
+                        [self.nodes[start, 0], self.nodes[end, 0]],
+                        [self.nodes[start, 1], self.nodes[end, 1]],
+                        [self.nodes[start, 2], self.nodes[end, 2]],
+                        color='black', linewidth=2
+                    )
+
+                # Ajuste de aspecto e exibição
+                # Tenta manter a proporção real dos eixos
+                try:
+                    ax.set_box_aspect([1, 1, 1]) 
+                    # Ou use limites automáticos para "equal" se a versão do matplotlib suportar
+                    max_range = np.array([self.nodes[:,0].max()-self.nodes[:,0].min(), 
+                                        self.nodes[:,1].max()-self.nodes[:,1].min(), 
+                                        self.nodes[:,2].max()-self.nodes[:,2].min()]).max() / 2.0
+                    mid_x = (self.nodes[:,0].max()+self.nodes[:,0].min()) * 0.5
+                    mid_y = (self.nodes[:,1].max()+self.nodes[:,1].min()) * 0.5
+                    mid_z = (self.nodes[:,2].max()+self.nodes[:,2].min()) * 0.5
+                    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+                except:
+                    # Fallback para o aspecto fixo do seu código original caso o cálculo acima falhe
+                    ax.set_box_aspect([1, 3, 2])
+
+                plt.show() 
+
     def Mesh(self):
         """
         Generates a `.geo` file for the structure mesh in GMSH.
@@ -1574,7 +1687,7 @@ F_global = np.zeros(K_global.size)  # Force vector
 #F_global[2+8*6] = -100
 #F_global[2+9*6] = 100
 #fixed_dofs = []
-F_global[1*6+2] = 100
+F_global[15*6+2] = 100
 fixed_dofs = [0,1,2,3,4,5]
 # Perform deformation analysis
 displacements = estrutura.static_analysis(F_global, fixed_dofs)
