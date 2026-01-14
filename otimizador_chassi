@@ -36,12 +36,13 @@ class ChassisDEOptimizer:
         base_nodes: np.ndarray,
         base_connections: list,
         mandatory_indices: list,
+        fixed_nodes: list = None,
         pop_size: int = 50,
         F: float = 0.6,
         CR: float = 0.8,
         max_generations: int = 200,
         radius_mand: float = 0.03,
-        radius_opt: float = 0.10,
+        radius_opt: float = 0.06,
         use_parallel: bool = True,
         n_workers: int = None,
         tubos_fixos: dict = None,
@@ -74,6 +75,8 @@ class ChassisDEOptimizer:
         self.n_extra_espelhos = len(self.connect_with_mirror)
         self.total_tubes = self.n_tubes + self.n_extra_espelhos
 
+        self.fixed_indices = set(fixed_nodes) if fixed_nodes else set()
+
         self.pop_size = pop_size
         self.F = F
         self.CR = CR
@@ -91,10 +94,24 @@ class ChassisDEOptimizer:
 
         self.global_decoded_cache = {}
         
-    def _create_alignment_map(self,exceptions=[17, 18]):
+    def _create_alignment_map(self,exceptions=[]):
         """
-        Cria um dicionário mapeando cada nó central ao nó lateral que ele deve espelhar.
-        exceptions não são mapeados.
+        Gera um mapeamento hierárquico associando nós centrais aos seus nós periféricos conectados.
+
+        Este método varre a lista de conexões base (`base_connections`) para identificar
+        relacionamentos diretos onde um nó é classificado como central (`is_central`) e o
+        outro não. O resultado agrupa os nós periféricos sob seus respectivos nós centrais.
+
+        Args:
+            exceptions (list[int], optional): Lista de índices de nós centrais que devem ser
+                excluídos do mapeamento, mesmo que possuam conexões válidas.
+                O padrão é [18, 19].
+
+        Returns:
+            dict[int, list[int]]: Um dicionário representando o mapa de alinhamento, onde:
+                - As chaves (int) são os índices dos nós centrais.
+                - Os valores (list[int]) são listas contendo os índices dos nós não-centrais
+                conectados a cada chave.
         """
         alignment_map = {}
         central_nodes = [i for i in range(self.n) if self.is_central[i]]
@@ -107,8 +124,20 @@ class ChassisDEOptimizer:
 
     def apply_central_alignment(self, coords: np.ndarray) -> np.ndarray:
         """
-        Força nós centrais a terem o mesmo Y e Z dos nós laterais conectados.
-        Para múltiplas conexões, usa a média das coordenadas.
+        Aplica um alinhamento geométrico aos nós centrais, ajustando suas coordenadas com base na média dos vizinhos laterais.
+
+        Este método reposiciona os nós identificados no mapa de alinhamento (`self.central_alignment_map`).
+        Para cada nó central, as coordenadas Y e Z são redefinidas como a média aritmética das coordenadas
+        correspondentes dos nós laterais conectados. A coordenada X é explicitamente forçada para 0.0,
+        alinhando o nó ao plano de simetria central.
+
+        Args:
+            coords (np.ndarray): Matriz de coordenadas de entrada com dimensão (N, 3),
+                onde as colunas representam as coordenadas X, Y e Z, respectivamente.
+
+        Returns:
+            np.ndarray: Uma nova matriz de coordenadas (cópia da original) contendo as
+            posições atualizadas dos nós centrais, mantendo os nós não listados no mapa inalterados.
         """
         aligned_coords = coords.copy()
         
@@ -121,16 +150,32 @@ class ChassisDEOptimizer:
     
     def enforce_bounds(self, coords: np.ndarray) -> np.ndarray:
         """
-        Aplica limites de deslocamento e arredonda as coordenadas.
+            Aplica restrições geométricas de deslocamento máximo e fixação de nós, retornando coordenadas válidas.
 
-        Entrada:
-        - coords: array (n,3) de floats (proposta de deslocamento).
-        Saída:
-        - adjusted: array (n,3) de floats, cada deslocamento limitado a radius_mand ou radius_opt
-          e arredondado para 3 casas decimais.
-        """
+            Este método valida as coordenadas propostas comparando-as com as posições originais (`self.base_nodes`).
+            A aplicação de limites segue uma lógica hierárquica:
+
+            1. Nós Fixos (`fixed_indices`): São ignorados pelo cálculo de raio e rigidamente redefinidos para sua posição original.
+            2. Nós Centrais (`is_central`): O deslocamento é calculado e limitado apenas no plano 2D (eixos Y e Z), forçando o eixo X em 0.0.
+            3. Demais Nós: O deslocamento é calculado e limitado no espaço 3D (esférico).
+
+            Se o deslocamento (delta) exceder o raio permitido (`radius_mand` para nós obrigatórios ou `radius_opt` para opcionais),
+            o vetor é normalizado e reescalado para o limite do raio.
+
+            Args:
+                coords (np.ndarray): Matriz (n, 3) contendo as coordenadas propostas para a nova configuração.
+
+            Returns:
+                np.ndarray: Uma nova matriz (n, 3) com as coordenadas ajustadas, garantindo que nenhum nó
+                viole seus limites de deslocamento ou restrições de plano, arredondada para 3 casas decimais.
+            """
         adjusted = coords.copy()
         for i in range(self.n):
+            # Se o nó for fixo, reseta para a posição original
+            if i in self.fixed_indices:
+                adjusted[i] = self.base_nodes[i]
+                continue # Pula para o próximo nó, ignorando raio e validação
+
             orig = self.base_nodes[i]
 
             if self.is_central[i]:
@@ -146,33 +191,55 @@ class ChassisDEOptimizer:
                 r = self.radius_mand if i in self.mandatory else self.radius_opt
                 if dist > r:
                     adjusted[i] = orig + (delta / dist) * r
+        
         adjusted[self.is_central, 0] = 0.0
         return np.round(adjusted, 3)
 
-    def validate_min_distance(self, coords: np.ndarray, min_dist: float = 0.10) -> bool:
+    def validate_min_distance(self, coords: np.ndarray, min_dist: float = 0.12) -> bool:
         """
-        Verifica se todas as distâncias entre pares de nós são maiores ou iguais a uma distância mínima.
-        Vetorizado usando pdist.
+            Valida a restrição de proximidade física entre todos os pares únicos de nós.
 
-        Parâmetros:
-        - coords: np.ndarray (N, 3), coordenadas dos nós.
-        - min_dist: float, distância mínima permitida.
+            Este método utiliza `scipy.spatial.distance.pdist` para calcular eficientemente a
+            distância euclidiana entre todos os pares possíveis de coordenadas (cálculo vetorizado).
+            Sua função é garantir a integridade estrutural, evitando que nós fiquem excessivamente
+            próximos ou sobrepostos.
 
-        Retorno:
-        - bool: True se válido, False se algum par violar a distância mínima.
-        """
+            Args:
+                coords (np.ndarray): Matriz de coordenadas (N, 3) contendo as posições atuais dos nós.
+                min_dist (float, optional): O limiar mínimo de separação euclidiana permitido entre
+                    quaisquer dois nós. O padrão é 0.12.
+
+            Returns:
+                bool: Retorna `True` se a distância entre *todos* os pares de nós for maior ou
+                igual a `min_dist`. Retorna `False` se houver pelo menos uma violação (colisão).
+            """
         return np.all(pdist(coords) >= min_dist)
  
     def decode_individual(self, x: np.ndarray):
         """
-        Converte um vetor genotípico em nós completos e lista de elementos.
+            Decodifica o vetor de decisão (genótipo) para gerar a geometria completa e a topologia da estrutura (fenótipo).
 
-        Entrada:
-        - x: array (dim_coords+dim_tubes,) de floats.
-        Saída:
-        - nodes_full: array (N,3) de floats com nós de ambos os lados.
-        - elements: lista de tuplas (i, j, perfil), com índices nos nodes_full.
-        """
+            Este método realiza três operações principais:
+            1. **Processamento Geométrico:** Extrai as coordenadas, aplica restrições de limites (`enforce_bounds`)
+            e alinhamento (`apply_central_alignment`).
+            2. **Expansão de Simetria:** Gera a estrutura completa espelhando nós não-centrais no eixo X (inversão de sinal).
+            Cria um mapeamento entre os índices originais e os índices expandidos (nós reais e virtuais/espelhados).
+            
+            3. **Atribuição de Elementos:** Define a conectividade e os perfis dos tubos.
+            - Converte variáveis contínuas em índices discretos para seleção de `tipos_tubos`.
+            - Gerencia conexões entre Central-Central, Lateral-Lateral (duas conexões) e Central-Lateral.
+            - Adiciona conexões de reforço transversais (`connect_with_mirror`) entre um nó e seu par espelhado.
+
+            Args:
+                x (np.ndarray): Vetor 1D de floats contendo todas as variáveis de otimização.
+                    A primeira parte (`:dim_coords`) corresponde às coordenadas, e a segunda
+                    parte (`dim_coords:`) corresponde às variáveis de seleção de tubos.
+
+            Returns:
+                tuple: Uma tupla contendo:
+                    - **nodes_full (np.ndarray):** Matriz (M, 3) com as coordenadas de todos os nós da estrutura completa (original + espelhada).
+                    - **elements (list[tuple]):** Lista de tuplas onde cada tupla representa um elemento finito no formato `(nó_origem, nó_destino, perfil_do_tubo)`.
+            """
         coords = x[:self.dim_coords].reshape((self.n, 3))
         coords = self.enforce_bounds(coords)
         coords = self.apply_central_alignment(coords)
@@ -230,6 +297,24 @@ class ChassisDEOptimizer:
         return nodes_full, elements
 
     def decode_population(self, pop):
+        """
+        Decodifica um lote de indivíduos (população), utilizando memoização para performance e filtragem de validade geométrica.
+
+        Este método itera sobre a população de vetores de decisão. Para evitar cálculos redundantes em otimizações iterativas,
+        ele utiliza um hash dos bytes do vetor (`x.tobytes()`) como chave para consultar ou atualizar um cache global
+        (`self.global_decoded_cache`).
+
+        O método também atua como um filtro de viabilidade: após decodificar (`decode_individual`), ele valida a geometria
+        (`validate_min_distance`). Se o indivíduo violar a distância mínima, ele é descartado e não incluído no retorno.
+
+        Args:
+            pop (iterable[np.ndarray]): Uma coleção (geralmente uma lista ou matriz numpy) de vetores de decisão (genótipos) a serem processados.
+
+        Returns:
+            list[tuple]: Uma lista contendo apenas os indivíduos válidos e decodificados. Cada item é uma tupla `(nodes, elements)`.
+            
+            Nota: O comprimento da lista retornada pode ser menor que o da população de entrada (`pop`), pois indivíduos geometricamente inválidos são ignorados.
+        """
         decoded = []
         for x in pop:
             key = hash(x.tobytes())
@@ -243,11 +328,23 @@ class ChassisDEOptimizer:
    
     def initialize_individual(self) -> np.ndarray:
         """
-        Gera um indivíduo válido.
+            Gera de maneira aleatoria um candidato inicial (indivíduo) que satisfaz todas as restrições geométricas.
 
-        Saída:
-        - x: array (dim,) de floats, contendo coords arredondadas e tube_vars iniciais.
-        """
+            Este método emprega uma estratégia de 'amostragem por rejeição' para garantir a validade inicial:
+            1. Perturbação Geométrica Gera deslocamentos aleatórios a partir dos nós base.
+            - Aplica uma distribuição uniforme volumétrica (usando a raiz cúbica `**(1/3)`) para evitar
+                agrupamento de pontos no centro da esfera de busca.
+            - Zera o deslocamento em X para nós centrais.
+            2. Aplicação de Restrições Executa `enforce_bounds` e `apply_central_alignment` para corrigir a geometria.
+            3. Inicialização de Variáveis: Sorteia valores uniformes para os tipos de tubos.
+            4. Validação: Decodifica o indivíduo e verifica colisões (`validate_min_distance`).
+            
+            O processo repete indefinidamente (loop `while True`) até que um indivíduo válido seja gerado.
+
+            Returns:
+                np.ndarray: Um vetor 1D (genótipo) concatenado, contendo as coordenadas linearizadas
+                seguidas pelas variáveis de seleção de tubos.
+            """
         while True:
             deltas = np.random.normal(size=(self.n, 3))
             deltas[self.is_central, 0] = 0.0
@@ -263,6 +360,24 @@ class ChassisDEOptimizer:
                 return x
 
     def initialize_population(self):
+        """
+            Gera, decodifica e avalia a população inicial do algoritmo de otimização.
+
+            Este método constrói a primeira geração de indivíduos garantindo a diversidade genotípica :
+            utiliza um conjunto (`set`) de hashes para assegurar que não existam indivíduos duplicados (clones)
+            na população inicial.
+
+            O fluxo de execução é:
+            1. Geração: Cria indivíduos iterativamente via `initialize_individual` até atingir `self.pop_size`.
+            2. Decodificação em Lote: Converte toda a população de vetores (genótipos) em estruturas físicas (fenótipos).
+            3. Avaliação Paralela: Submete as estruturas à simulação física/análise estrutural (`parallel_evaluate`).
+            4. Extração de Fitness: Isola os valores da função objetivo dos resultados da avaliação.
+
+            Returns:
+                tuple: Uma tupla contendo dois arrays numpy:
+                    - pop (np.ndarray):Matriz (pop_size, dimensão_genoma) com os vetores de decisão.
+                    - fitness (np.ndarray):Vetor (pop_size,) com os valores de aptidão (score) correspondentes a cada indivíduo.
+            """
         pop = []
         seen = set()
         while len(pop) < self.pop_size:
@@ -280,6 +395,33 @@ class ChassisDEOptimizer:
         return pop, fitness
 
     def mutate_and_crossover(self, pop):
+        """
+            Gera a população de vetores de teste (Trial Vectors) aplicando operadores de Mutação e Cruzamento da Evolução Diferencial.
+
+            Este método implementa a estratégia **DE/rand/1/bin**:
+            1. Mutação: Para cada indivíduo alvo (i), seleciona aleatoriamente três vetores distintos (a, b, c) da população
+            e cria um vetor mutante ($V$) seguindo a fórmula:
+            V = X_a + F * (X_b - X_c)
+            Onde F (`self.F`) é o fator de escala diferencial.
+            
+            2. Restrição Geométrica: Força explicitamente que as coordenadas X dos nós centrais no vetor mutante sejam 0.0,
+            mantendo a consistência com as restrições do problema antes mesmo do cruzamento.
+
+            3.Cruzamento (Crossover Binomial): Combina o vetor mutante (V) com o pai (X_i) para formar o vetor de teste (U),
+            baseado na taxa de cruzamento CR (`self.CR`). Garante que pelo menos um gene venha do mutante (`j_rand`).
+
+            4. Validação:
+            - Verifica se o vetor de teste é muito similar ao pai (evita estagnação).
+            - Decodifica e verifica colisões geométricas (`validate_min_distance`).
+            - Se inválido, o pai é mantido na posição correspondente em `new_pop`.
+
+            Args:
+                pop (np.ndarray): População atual de vetores de decisão (Genótipos).
+
+            Returns:
+                np.ndarray: Uma nova matriz contendo os vetores de teste (candidatos) para os índices onde
+                a geração foi bem-sucedida e válida, ou os vetores originais onde a geração falhou.
+            """
         new_pop = pop.copy()
         for i in range(self.pop_size):
             a, b, c = np.random.choice(np.delete(np.arange(self.pop_size), i), 3, replace=False)
@@ -299,6 +441,27 @@ class ChassisDEOptimizer:
         return new_pop
     
     def parallel_evaluate(self, nodes_list, elements_list):
+        """
+            Organiza a avaliação computacional da população, distribuindo as simulações entre múltiplos processos (CPU-bound).
+
+            Este método gerencia a execução da função de análise estrutural (`evaluate`) para uma lista de candidatos.
+            Ele suporta dois modos de operação baseados na flag `self.use_parallel`:
+            
+            1. Modo Paralelo (Multiprocessing):
+            - Utiliza `ProcessPoolExecutor` para criar um pool de trabalhadores.
+            - Inicializa cada processo operário com `init_worker` (útil para carregar dados estáticos pesados apenas uma vez por processo, evitando overhead de serialização).
+            - Mapeia a função `evaluate` através das listas de nós e elementos de forma assíncrona.
+            
+            2. Modo Serial:
+            - Executa as avaliações sequencialmente em um loop (útil para depuração/debugging ou quando o overhead do paralelismo não compensa).
+
+            Args:
+                nodes_list (list[np.ndarray]): Lista contendo as matrizes de coordenadas (nós) para cada indivíduo da população.
+                elements_list (list[list[tuple]]): Lista correspondente contendo a topologia (conexões e perfis) de cada indivíduo.
+            Returns:
+                list: Uma lista contendo os resultados brutos retornados pela função `evaluate` para cada indivíduo.
+                A ordem dos resultados corresponde à ordem das listas de entrada.
+            """
         if self.use_parallel:
             with ProcessPoolExecutor(
                 max_workers=self.n_workers,
@@ -313,15 +476,38 @@ class ChassisDEOptimizer:
       
     def optimize(self):
         """
-        Executa o loop principal de otimização, com avaliação paralela.
+            Executa o ciclo de vida completo do algoritmo de Otimização por Evolução Diferencial (DE).
 
-        Retorna:
-        - best_solution: tupla (nodes, elements)
-        - best_cost: float
-        - best_mass, best_KT, best_KF: métricas físicas
-        - history: dicionário com histórico da evolução
-        - duration: float (tempo total em segundos)
-        """
+            Este método atua como o motor principal da classe, coordenando a evolução da população ao longo das gerações.
+            O fluxo de execução segue as seguintes etapas:
+            
+            1. Inicialização Cria a população inicial e instancia o pool de processos (`ProcessPoolExecutor`) 
+            para paralelismo persistente (evitando o overhead de recriar processos a cada geração).
+            2.Loop Evolutivo Para cada geração:
+            - Variação Gera candidatos via `mutate_and_crossover`.
+            - Decodificação Transforma genótipos em fenomênos estruturais (`decode_population`).
+            - Avaliação Distribui a análise física (FEA) entre os workers (`parallel_evaluate`).
+            - Seleção Aplica a seleção determinística/gulosa: o filho substitui o pai apenas se possuir 
+                fitness menor ou igual (minimização).
+            
+
+        [Image of Differential Evolution flow chart]
+
+            3. Monitoramento Registra métricas estatísticas (Média, Melhores, Desvio Padrão) e métricas 
+            físicas (Massa, Rigidez KT/KF) no histórico.
+            4. Convergência Verifica se o desvio padrão da aptidão da população caiu abaixo do limiar (0.02) 
+            por um número definido de gerações (`convergence_threshold`), interrompendo o loop prematuramente se a população estagnar.
+
+            Returns:
+                tuple: Uma tupla contendo os resultados finais e metadados da execução:
+                    - best_solution (tuple): A topologia vencedora no formato `(nodes, elements)`.
+                    - best_cost (float): O valor da função objetivo da melhor solução.
+                    - best_mass (float): Massa da melhor estrutura encontrada.
+                    - best_KT (float): Rigidez torcional da melhor estrutura.
+                    - best_KF (float): Rigidez à flexão da melhor estrutura.
+                    - history (dict): Dicionário contendo a evolução temporal de todas as métricas rastreadas (listas de floats).
+                    - duration (float): Tempo total de execução em segundos.
+            """
         print("Otimização Iniciada")
         pop, fit = self.initialize_population()
 
@@ -443,7 +629,7 @@ class ChassisDEOptimizer:
 
         Entrada:
         - individuo: tupla (nodes, elements)
-        - save_path: caminho opcional para salvar a imagem
+        - save_path: caminho para salvar a imagem
 
         Saída:
         - exibe o plot e/ou salva a imagem se o caminho for fornecido.
@@ -475,42 +661,76 @@ class ChassisDEOptimizer:
 
     def plot_metrics(self, history, save_path=None, show=True):
         """
-        Gera gráfico de evolução das métricas: massa, rigidez torcional e flexional.
+        Gera gráficos de evolução das métricas em painéis separados para maior clareza.
+        - Painel 1: Massa vs. Rigidez Torcional (KT)
+        - Painel 2: Massa vs. Rigidez Flexional (KF)
 
         Entradas:
         - history: dict com as listas 'best_mass', 'best_KT', 'best_KF'.
-        - save_path: caminho opcional para salvar o PNG.
+        - save_path: caminho para salvar o PNG.
         - show: bool, se True exibe o plot.
         """
-        plt.figure(figsize=(10, 6))
+        # Cria uma figura com 2 subplots (2 linhas, 1 coluna), compartilhando o eixo X
+        fig, (ax1, ax3) = plt.subplots(
+            nrows=2, 
+            ncols=1, 
+            figsize=(12, 10), 
+            sharex=True
+        )
+        
         gens = range(len(history['best_mass']))
         
-        # Configura eixo primário (massa)
-        ax1 = plt.gca()
-        ax1.plot(gens, history['best_mass'], 'b-', linewidth=2, label='Massa (kg)')
-        ax1.set_xlabel('Geração')
-        ax1.set_ylabel('Massa (kg)', color='b')
-        ax1.tick_params(axis='y', labelcolor='b')
+        # --- GRÁFICO 1: Massa vs. Rigidez Torcional (KT) ---
         
-        # Configura eixo secundário (rigidezes)
+        ax1.set_title('Evolução: Massa vs. Rigidez Torcional (KT)', fontsize=14)
+        
+        # Eixo esquerdo (ax1) para a Massa
+        color_mass = 'b'
+        ax1.set_ylabel('Massa (kg)', color=color_mass, fontsize=12)
+        line1 = ax1.plot(gens, history['best_mass'], color=color_mass, linestyle='-', linewidth=2, label='Massa (kg)')
+        ax1.tick_params(axis='y', labelcolor=color_mass)
+        ax1.grid(True, linestyle='--', alpha=0.6)
+        
+        # Eixo direito (ax2) para a Rigidez Torcional (KT)
         ax2 = ax1.twinx()
-        ax2.plot(gens, history['best_KT'], 'r-', linewidth=2, label='Rigidez Torcional (KT)')
-        ax2.plot(gens, history['best_KF'], 'g-', linewidth=2, label='Rigidez Flexional (KF)')
-        ax2.set_ylabel('Rigidez (N·m/rad ou N/m)', color='r')
-        ax2.tick_params(axis='y', labelcolor='r')
+        color_kt = 'r'
+        ax2.set_ylabel('Rigidez Torcional (N·m/rad)', color=color_kt, fontsize=12)
+        line2 = ax2.plot(gens, history['best_KT'], color=color_kt, linestyle='-', linewidth=2, label='Rigidez Torcional (KT)')
+        ax2.tick_params(axis='y', labelcolor=color_kt)
         
-        plt.title('Evolução das Métricas do Melhor Indivíduo')
+        # Junta as legendas do primeiro gráfico
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='best')
+
+        # --- GRÁFICO 2: Massa vs. Rigidez Flexional (KF) ---
         
-        # Unificar legendas
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+        ax3.set_title('Evolução: Massa vs. Rigidez Flexional (KF)', fontsize=14)
         
-        plt.grid(True)
-        plt.tight_layout()
+        # Eixo esquerdo (ax3) para a Massa
+        ax3.set_ylabel('Massa (kg)', color=color_mass, fontsize=12)
+        line3 = ax3.plot(gens, history['best_mass'], color=color_mass, linestyle='-', linewidth=2, label='Massa (kg)')
+        ax3.tick_params(axis='y', labelcolor=color_mass)
+        ax3.grid(True, linestyle='--', alpha=0.6)
+
+        # Eixo direito (ax4) para a Rigidez Flexional (KF)
+        ax4 = ax3.twinx()
+        color_kf = 'g'
+        ax4.set_ylabel('Rigidez Flexional (N/m)', color=color_kf, fontsize=12)
+        line4 = ax4.plot(gens, history['best_KF'], color=color_kf, linestyle='-', linewidth=2, label='Rigidez Flexional (KF)')
+        ax4.tick_params(axis='y', labelcolor=color_kf)
+        
+        # Junta as legendas do segundo gráfico
+        lines_2 = line3 + line4
+        labels_2 = [l.get_label() for l in lines_2]
+        ax3.legend(lines_2, labels_2, loc='best')
+
+        # Configurações finais da figura
+        plt.xlabel('Geração', fontsize=12)
+        fig.tight_layout(pad=3.0) # Adiciona espaçamento para evitar sobreposição de títulos
         
         if save_path:
-            plt.savefig(save_path)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Gráfico de métricas salvo em: {save_path}")
         
         if show:
@@ -524,7 +744,7 @@ class ChassisDEOptimizer:
 
         Entradas:
         - history: dict com 'best_fit', 'avg_fit', 'std_dev'.
-        - save_path: caminho opcional para salvar o PNG.
+        - save_path: caminho para salvar o PNG.
         - show: bool, se True exibe o plot.
         """
         plt.figure(figsize=(10, 6))
@@ -668,17 +888,28 @@ class ChassisDEOptimizer:
 
 def find_new_index(old_index, nodes):
     """
-    Calcula o indice do nó após passar pela otimização (decodificação).
-    Retorna o novo indice do nó e do seu espelhado (se houver).
-    
-    Entradas:
-    - old_index: Índice do nó no 'base nodes'
-    - nodes: array (N,3) dos 'base nodes'
-    Retorno:
-    - new_index: Índice do nó em 'nodes_full'
-    - mirrored_index: (Opcional) Índice do nó espelhado em 'nodes_full'
-    - new_central_index: (Opcional) Índice do nó central em 'nodes_full'
-    """
+        Calcula o mapeamento de índices entre o modelo base (reduzido) e o modelo final (expandido/espelhado).
+
+        Esta função determina a nova posição de um nó na lista global `nodes_full` baseada na lógica de expansão de simetria:
+        1. **Nós Laterais:** São duplicados. O índice original $i$ se torna $2i$ (original) e $2i+1$ (espelho).
+        2. **Nós Centrais:** São únicos e deslocados. Eles são posicionados após todos os pares de nós laterais terem sido alocados.
+
+        **Nota Importante:** A lógica assume que o array `nodes` de entrada está ordenado de forma que todos os nós laterais
+        aparecem antes dos nós centrais.
+
+        Args:
+            old_index (int): O índice do nó na lista de nós base (antes da expansão).
+            nodes (list | np.ndarray): Matriz (N, 3) contendo as coordenadas dos nós base. Usada para identificar
+                quais nós são centrais (X ≈ 0.0).
+
+        Returns:
+            int | tuple: 
+                - Se o nó for **central**: Retorna um único `int` (`new_index`).
+                - Se o nó for **lateral**: Retorna uma tupla `(new_index, mirrored_index)`.
+
+        Raises:
+            IndexError: Se `old_index` estiver fora dos limites do array `nodes`.
+        """
     
     if not isinstance(nodes, np.ndarray):
         nodes = np.array(nodes)
@@ -737,7 +968,7 @@ def penalidades_geometricas(nodes, elements, base_nodes):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        idx = find_new_index(18, base_nodes)
+        idx = find_new_index(19, base_nodes)
         fronthoop_node = nodes[idx]                          #declara o nó do fronthoop com indice novo
         fhb_node = nodes[find_new_index(5, base_nodes)[0]]                              #declara o nó de um front hoop bracing com indice novo
         dist_fh_fhb = abs(fronthoop_node[2] - fhb_node[2])                         #declara a distância no eixo z entre esses dois nós 
@@ -759,7 +990,7 @@ def penalidades_geometricas(nodes, elements, base_nodes):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        mainhoop_node = nodes[find_new_index(17, base_nodes)]                                        #declara o nó do main hoop com indice novo
+        mainhoop_node = nodes[find_new_index(18, base_nodes)]                                        #declara o nó do main hoop com indice novo
         mhb_node = nodes[find_new_index(14, base_nodes)[0]]                                          #declara o nó do main hoop bracing com indice novo não espelhado
         deltax_mh_mhb = mainhoop_node[0] - mhb_node[0]                                          #diferença das coordenadas "x" em ambos os nós
         deltay_mh_mhb = mainhoop_node[1] - mhb_node[1]                                          #diferença das coordenadas "y" em ambos os nós
@@ -783,9 +1014,9 @@ def penalidades_geometricas(nodes, elements, base_nodes):
         - pen: valor desta penalidade acumulada, especificamente
         '''
         pen = 0
-        x_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(6, base_nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        y_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(6, base_nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
-        z_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(6, base_nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        x_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(7, base_nodes)[0]][0]                                                                  #coordenada x do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        y_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(7, base_nodes)[0]][1]                                                                  #coordenada y do vetor formado pelos nós do elemento da porção do mainhoop analisada
+        z_porcao_mh = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(7, base_nodes)[0]][2]                                                                  #coordenada z do vetor formado pelos nós do elemento da porção do mainhoop analisada
         x_mhb = nodes[find_new_index(14, base_nodes)[0]][0] - nodes[find_new_index(15, base_nodes)[0]][0]                                                                       #coordenada x do vetor formado pelos nós do elemento do Main Hoop Bracing
         y_mhb = nodes[find_new_index(14, base_nodes)[0]][1] - nodes[find_new_index(15, base_nodes)[0]][1]                                                                       #coordenada y do vetor formado pelos nós do elemento do Main Hoop Bracing
         z_mhb = nodes[find_new_index(14, base_nodes)[0]][2] - nodes[find_new_index(15, base_nodes)[0]][2]                                                                       #coordenada z do vetor formado pelos nós do elemento do Main Hoop Bracing
@@ -946,6 +1177,33 @@ def penalidades_geometricas(nodes, elements, base_nodes):
     return penalidade
 
 def penalidades_tipo_tubo(nodes, elements, mapeamento_chassi, tubos_SAE):
+    """
+    Verifica a conformidade normativa dos tubos do chassi em relação ao regulamento (ex: Formula SAE).
+
+    Esta função cruza a geometria otimizada com um mapa de requisitos regionais. Para cada elemento da estrutura,
+    ela identifica a qual subsistema ele pertence (ex: Santo Antônio Principal, Impacto Lateral) e verifica se
+    o perfil de tubo escolhido pelo otimizador atende aos requisitos mínimos de geometria e inércia exigidos
+    para aquela zona específica.
+
+    O processo de validação segue a lógica:
+    1. Identificação Regional: Para cada elemento (conexão entre nó A e B), busca sua classificação no `mapeamento_chassi`.    
+    2. Recuperação de Regra: Identifica o "Tubo Padrão SAE" exigido para aquela região.
+    3. Cálculo de Propriedades: Calcula Área (A), Diâmetro Externo (d), Espessura (e) e Momento de Inércia (I)
+       tanto para o tubo proposto (otimizado) quanto para o tubo de referência (SAE).
+    4. Comparação: Aplica uma penalidade fixa ("Hard Penalty") se o tubo proposto for inferior ao exigido em
+       qualquer uma das quatro métricas físicas.
+
+    Args:
+        nodes (np.ndarray): Matriz de coordenadas dos nós.
+        elements (list): Lista de elementos contendo a conectividade e o identificador do perfil (ex: 'Tubo B').
+        mapeamento_chassi (dict): Dicionário que mapeia regiões do chassi (chaves) para listas de conexões de nós (valores)
+            e o tipo de tubo mandatório (último item da lista).
+        tubos_SAE (dict): Banco de dados com as propriedades físicas mínimas dos tubos normatizados.
+
+    Returns:
+        int: Valor acumulado da penalidade. Cada violação de regra adiciona 10 pontos ao custo total.
+    """
+    
     if isinstance(mapeamento_chassi, str):
         print("CRITICAL ERROR: 'mapeamento_chassi' is a string!")
         print(f"Value content: {mapeamento_chassi}")
@@ -978,20 +1236,43 @@ def penalidades_tipo_tubo(nodes, elements, mapeamento_chassi, tubos_SAE):
 
 def evaluate(nodes, elements, base_nodes, tubos_SAE) -> float:
     """
-    Avalia o custo de um indivíduo.
+        Executa a simulação física completa (FEA) de um indivíduo e calcula sua aptidão (fitness).
 
-    Entrada:
-    - nodes
-    - elements
-    Saída:
-    - float, valor de penalidade (fitness).
+        Esta função atua como uma interface entre o algoritmo de otimização e o solver de Elementos Finitos (`Estrutura`).
+        Ela submete a geometria proposta a casos de carga estáticos e calcula métricas de desempenho.
 
-    Processo:
-    1. Decodifica para nodes e elements.
-    2. Checa distância mínima.
-    3. Monta e analisa pela classe Estrutura (FEA).
-    4. Calcula penalidade via penalidade_chassi.
-    """
+        O fluxo de avaliação consiste em:
+        1. Instanciação do Modelo Cria o objeto `Estrutura` com a topologia fornecida.
+        2. Montagem de Matrizes Calcula as matrizes globais de Rigidez (K) e Massa (M).
+        3. Definição de Cargas (Caso Estático)
+        - Identifica os nós de suporte de carga (ex: fixação do banco/piloto) usando `find_new_index` 
+        - Aplica uma carga vertical distribuída 
+        4. Solução do Sistema Resolve $K \cdot u = F$ para obter os deslocamentos.
+        5. Pós-Processamento
+        - Calcula tensões (Von Mises).
+        - Calcula a massa total.
+        - Calcula Rigidez à Torção (K_T) e Flexão (K_F) baseada nos deslocamentos dos nós de suspensão .
+        
+        6. Cálculo de Penalidade: Soma as penalidades de desempenho (massa excessiva, baixa rigidez) e 
+        violações de restrições (diâmetro de tubos inválidos, falha de tensão).
+
+        Args:
+            nodes (np.ndarray): Matriz de coordenadas (N, 3) do indivíduo decodificado.
+            elements (list[tuple]): Lista de conectividade e perfis dos tubos.
+            base_nodes (np.ndarray): Geometria de referência para mapeamento de índices.
+            tubos_SAE (dict/list): Banco de dados de propriedades materiais e seções transversais.
+
+        Returns:
+            tuple: Uma tupla contendo:
+                - penalty (float): O valor final da função objetivo (fitness) a ser minimizado.
+                - massa (float): Massa total da estrutura (kg).
+                - KT (float): Rigidez Torcional (Nm/deg).
+                - KF (float): Rigidez à Flexão (N/mm).
+
+        Raises:
+            Exception: Captura qualquer erro numérico do solver (ex: matriz singular) e retorna
+            valores de penalidade extremos (`1e9`) para descartar o indivíduo falho.
+        """
     try:
         t0 = time.perf_counter()
 
@@ -1033,7 +1314,7 @@ def evaluate(nodes, elements, base_nodes, tubos_SAE) -> float:
         t6 = time.perf_counter()
 
         penalty += penalidade_chassi(KT, KF, massa, von, frequencies)
-        penalty += penalidades_geometricas(nodes, elements, base_nodes)
+        #penalty += penalidades_geometricas(nodes, elements, base_nodes)
         penalty += penalidades_tipo_tubo(nodes, elements, mapeamento_chassi, tubos_SAE)
 
         t7 = time.perf_counter()
@@ -1049,33 +1330,57 @@ def evaluate(nodes, elements, base_nodes, tubos_SAE) -> float:
         #- Total:         {t7 - t0:.4f}s
         #""",end="\r")
 
-        return (penalty+massa), massa, KT, KF
+        return (penalty), massa, KT, KF
 
     except Exception:
         traceback.print_exc()
         return 1e9, 1e9, 0.0, 0.0
 
-def penalidade_chassi(KT, KF, massa, tensoes, frequencias,W_RIGIDEZ = 1.5,W_MASSA = 2.5,W_TENSAO = 5.0,W_FREQUENCIA = 10.0):
+def penalidade_chassi(KT, KF, massa, tensoes, frequencias,W_RIGIDEZ = 1.5,W_MASSA = 5.5,W_TENSAO = 5.0,W_FREQUENCIA = 10.0):
     """
-    Calcula penalidade total do chassi.
+        Calcula a função de penalidade composta (custo) baseada no desempenho físico da estrutura.
 
-    Entradas:
-    - KT, KF: floats de rigidezes.
-    - massa: float.
-    - tensoes: array de floats.
-    - frequencias: array de frequencias naturais.
-    Saída:
-    - penalidade_total: float.
-    """
+        Esta função implementa o método de "Soft Constraints" (Restrições Suaves), onde violações dos limites de projeto
+        são convertidas em valores positivos adicionados à aptidão (fitness). Quanto maior a violação, maior a penalidade,
+        pressionando o otimizador a corrigir o design.
+
+        A função agrega quatro tipos de penalidades:
+        1. Rigidez (KT/KF):
+        - KT (Torcional): Penalidade Exponencial. Alta sensibilidade para garantir rigidez torcional mínima.
+        - KF (Flexional): Penalidade Logarítmica. Crescimento mais suave, permitindo exploração próxima ao limite.
+        
+        
+
+        2. Massa: Define uma "janela de alvo" (22kg a 25kg). Penaliza exponencialmente tanto chasssis
+        muito leves (possivelmente frágeis/ilegais) quanto muito pesados.
+
+        3. Tensão (Von Mises): Penaliza se a tensão máxima em qualquer elemento exceder o limite de escoamento/admissível
+        (250 MPa).
+
+        4. Vibração (Ressonância): Penaliza frequências naturais que caiam dentro de uma banda de 10% ao redor
+        da frequência de excitação do motor (aprox. 80Hz). A penalidade cresce quadraticamente conforme a frequência
+        se aproxima do pico de 80Hz.
+
+        Args:
+            KT (float): Rigidez Torcional calculada (Nm/deg).
+            KF (float): Rigidez Flexional calculada (N/mm ou N/m, dependendo da escala).
+            massa (float): Massa total da estrutura (kg).
+            tensoes (np.ndarray): Array contendo as tensões máximas de Von Mises em cada elemento.
+            frequencias (list | np.ndarray): As primeiras frequências naturais (modos de vibrar).
+            W_... (float): Pesos (Weights) para calibrar a importância relativa de cada penalidade.
+
+        Returns:
+            float: O valor acumulado de penalidade (`fitness`). Se for 0.0, o chassi cumpre todos os requisitos físicos.
+        """
         
     # Limites
     KT_min = 2000.0   # Rigidez torcional mínima (N·m/deg)
     KF_min = 1.0e6    # Rigidez flexional mínima (N/m)
-    massa_min, massa_max = 20.0, 25.0  # faixa aceitável (kg)
+    massa_min, massa_max = 22.0, 25.0  # faixa aceitável (kg)
     tensao_adm = 250.0e6 # Tensão admissível do material (Pa)
     
     # Fatores de penalidade
-    alpha_exp = 2.0  # Fator de sensibilidade exponencial, ajustado para ser mais agressivo
+    alpha_exp = 4.0  # Fator de sensibilidade exponencial, ajustado para ser mais agressivo
     beta_log = 5.0   # Fator de escala logarítmica
       
     # Parâmetros de Frequência
@@ -1118,34 +1423,41 @@ def penalidade_chassi(KT, KF, massa, tensoes, frequencias,W_RIGIDEZ = 1.5,W_MASS
     return fitness
 
 if __name__ == "__main__":
-    nodes = np.array([[-0.181,  0.000,  0.360],             #00
-    [-0.181,  0.000,  0.050],                               #01
-    [-0.280,  0.275,  0.240],                               #02
-    [-0.285,  0.495,  0.045],                               #03
-    [-0.285,  0.555,  0.270],                               #04
-    [-0.212,  0.555,  0.550],                               #05
-    [-0.293,  1.370,  0.250],                               #06
-    [-0.268,  1.350,  0.000],                               #07
-    [-0.268,  1.495,  0.015],                               #08
-    [-0.302,  1.670,  0.240],                               #09
-    [-0.271,  1.665,  0.030],                               #10
-    [-0.271,  1.835,  0.070],                               #11
-    [-0.183,  2.015,  0.285],                               #12
-    [-0.183,  2.015,  0.060],                               #13
-    [-0.170,  1.400,  0.965],                               #14                 
-    [-0.293,  1.950,  0.250],                               #15 antigo 16
-    [-0.275,  0.270,  0.045],                               #16 antigo 17
-    [ 0.000,  1.410,  1.105],                               #17 antigo 15
-    [0.000,  0.555,  0.550]                                 #18
-    ])                             
+    nodes = np.array([
+        [-0.160, -0.10,   0.350],   # 00 (Antigo 00)
+        [-0.160, -0.10,   0.000],   # 01 (Antigo 01)
+        [-0.245,  0.275,  0.220],   # 02 (Antigo 02)
+        [-0.245,  0.605,  0.000],   # 03 (Antigo 03)
+        [-0.245,  0.255,  0.000],   # 04 (Antigo 04)
+        [-0.245,  0.585,  0.220],   # 05 (Antigo 05)
+        [-0.210,  0.555,  0.500],   # 06 (Antigo 06)
+        [-0.290,  1.370,  0.250],   # 07 (Antigo 07)
+        [-0.268,  1.350,  0.000],   # 08 (Antigo 08)
+        [-0.250,  1.670,  0.240],   # 09 (Antigo 09)
+        [-0.250,  1.665,  0.030],   # 10 (Antigo 10)
+        [-0.200,  1.950,  0.030],   # 11 (Antigo 11)
+        [-0.200,  2.230,  0.250],   # 12 (Antigo 12)
+        [-0.200,  2.230,  0.030],   # 13 (Antigo 13)
+        [-0.170,  1.400,  0.965],   # 14 (Antigo 14)
+        [-0.200,  1.950,  0.250],   # 15 (Antigo 15)
+        [-0.200,  0.420,  0.469],   # 16 (Antigo 18)
+        [-0.200,  2.090,  0.250],   # 17
+        [ 0.000,  1.410,  1.105],   # 18 (Antigo 16) 
+        [ 0.000,  0.555,  0.550],   # 19 (Antigo 17) 
+    ])
 
-    connections = [(0,1)  ,(0,2)  ,(1,2)  ,(0,5)  ,(2,5)  ,(2,4)  ,(2,3)  ,(1,16)  ,(2,16),
-    (3,7)  ,(3,4)  ,(4,7)  ,(4,6)  ,(5,6)  ,(7,6)  ,(7,8)  ,(6,8)  ,(3,16),
-    (6,9)  ,(8,9)  ,(8,10) ,(9,10) ,(9,11) ,(10,11),(11,15),(15,13),
-    (11,12),(11,13),(12,13),(12,15),(15,14),(14,17),(14,6) ,(9,15) ,
-    (4,5), (5, 18)]
+    # ============================================================
+    # CONEXÕES ORIGINAIS
+    # ============================================================
+    connections = [
+    (0, 1), (0, 2), (0, 16),(6,16), (1, 2), (1, 4), (2, 3), (2, 4), (2, 5), (2, 6),
+    (3, 4), (3, 5), (3, 8), (5, 6), (5, 7), (5, 8), (6, 7), (6, 19), (7, 8),
+    (7, 9), (8, 9), (7, 14), (8, 10), (9, 10), (9, 15), (10, 11), (9, 11),
+    (11, 15), (11, 13), (12, 13), (12, 17),(15,17), (11, 12), (14, 18), (14, 15)]
 
-    indices = [0,1,3,4,5,6,7,8,11,16,17,18]
+    indices = [0,1,6,7,8,14]
+
+    indices_suspensao = [2, 3, 4, 5, 11, 12, 13, 15 ,16 , 17]
 
     tubos_fixos = {
 #    0: 'Tubo A',
@@ -1157,7 +1469,7 @@ if __name__ == "__main__":
 #    'espelho_5': 'Tubo C',
 }
     
-    connect_with_mirror = [0,1,3,5,6,7,8,10,11,12,13]
+    connect_with_mirror = [0,1,3,8,7,11,12,13,16,17]
 
     #Criando mapeamento do chassi completo base para análise (uma vez para ser aplicado em todos os indivíduos)
     mapeamento_chassi = {
@@ -1190,12 +1502,13 @@ if __name__ == "__main__":
 
     # Criar diretório para resultados
     timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    max_gen = 100
+    max_gen = 300
     pop_size = 50
     otimizador = ChassisDEOptimizer(
         base_nodes=nodes,
         base_connections=connections,
         mandatory_indices=indices,
+        fixed_nodes=indices_suspensao,
         pop_size=pop_size,
         max_generations=max_gen,
         use_parallel=False,                         # ou False, se quiser forçar modo serial
