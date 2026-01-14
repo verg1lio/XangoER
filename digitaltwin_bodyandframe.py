@@ -404,6 +404,53 @@ class Estrutura:
 
         return kappa
 
+    def compute_Kf_Kt(self, lfNode, lrNode, rfNode, rrNode, lcNode, rcNode):
+            """
+            Calculates
+            Inputs:
+            - lfNode: Left front suspension node index
+            - lrNode: Left rear suspension node index
+            - rfNode: Right front suspension node index
+            - rrNode: Right rear suspension node index
+            - lcNode: Left central node index
+            - rcNode: Right central node index
+            Outputs:
+            - Kt: Torsional stiffness of the chassis
+            - Kf: Beaming stiffness of the chassis
+            """
+            #Start Kt simulation
+            F_global_1 = np.zeros(self.K_global.shape[0])
+            F_global_1[2+lfNode*6] = 250                                                                  #Forças aplicadas nos nós onde estaria a suspensão dianteira (nodes 8 e 9)
+            F_global_1[2+rfNode*6] = -250                                                                #Mesmo módulo para gerar um torque no eixo longitudinal do chassi
+            
+            fixed_nodes_1=[lrNode, rrNode]                                                                #Fixação dos nós onde estaria a suspensão traseira
+            fixed_dofs_1=[(node*6+i) for node in fixed_nodes_1 for i in range(6)]                           #Lista com os dofs fixados
+            
+            displacements = self.static_analysis( F_global_1, fixed_dofs_1)                                 #Calcula os displacements com as condições de contorno aplicadas acima
+            mi1=np.abs(displacements[lfNode*6+2])                                                       #displacement do nó 9 em módulo
+            mi2=np.abs(displacements[rfNode*6+2])                                                            #displacement do nó 8 em módulo
+            L = np.abs(self.nodes[lfNode][0] - self.nodes[rfNode][0])                                   #Distancia entre o nó 8 e 9
+            alpha= np.degrees(np.atan((mi1+mi2)/(L)))                                                   #Ângulo de torção do chassi após aplicação do torque
+            tau = (np.abs(F_global_1[2+rfNode*6]))*(L)                                                    #Cálculo do torque aplicado
+            
+            Kt = tau/alpha
+
+            #Start Kf simulation
+            F_global = np.zeros(self.K_global.shape[0])
+            F = 5000                                                                                #Módulo da força que vai gerar a flexão
+            F_global[2+lcNode*6] = -F/2                                                             #Força distribuída nos nós centrais do chassi (nodes 22 e 23)
+            F_global[2+rcNode*6] = -F/2                                                             #Sinal negativo por conta da direção de aplicação da força
+            
+            fixed_nodes=[rfNode, lfNode, rrNode, lrNode]                                            #Fixação dos nós onde estaria a suspensão dianteira e traseira
+            fixed_dofs=[(node*6+i) for node in fixed_nodes for i in range(6)]                       #Lista com os dofs fixados
+            
+            displacements = self.static_analysis(F_global, fixed_dofs)                              #Calcula os displacements com as condições de contorno aplicadas acima
+            dY=np.abs(displacements[2+lcNode*6])                                                    #Deslocamento em Y de um dos nós onde foi aplicado a força
+
+            Kf=F/dY
+
+            return Kt, Kf
+   
 # ---------------------
 # FUNÇÕES PRNICIPAIS
 # ---------------------
