@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib.lines import Line2D
 from scipy.linalg import eigh
-#import cadquery as cq
-#from cadquery import exporters
+import cadquery as cq
+from cadquery import exporters
 from matplotlib.widgets import Button
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import eigsh
@@ -1240,7 +1240,7 @@ class Estrutura:
 # ---------------------
 # DEFS DE EXPORTAÇÃO
 # ---------------------
-'''
+
     def tubo_oco(self, p1, p2, tube_type):
             """
             Create a hollow tube using cadquerry commands
@@ -1476,7 +1476,7 @@ class Estrutura:
             geo_file.write('Mesh.Format = 1;\n')
 
         print(f'O arquivo foi salvo em: {filepath}, basta abrir o GMSH, e abrir o arquivo')
-'''
+
 
 # THE EXAMPLE FUN STARTS HERE, JUST RUN IN INTERACTIVE WINDOW
 
@@ -1651,4 +1651,5 @@ Referências
 [9] ZIENKIEWICZ, O. C.; TAYLOR, R. L.; ZHU, J. Z. The Finite Element Method for Solid and Structural Mechanics. 6. ed. Oxford: Butterworth-Heinemann, 2005.
 
 [10] EER, Ferdinand P.; JOHNSTON Jr., E. Russell; DEWOLF, John T.; MAZUREK, David F. Resistência dos Materiais. 7. ed. São Paulo: McGraw-Hill Brasil, 2016.
+
 """
