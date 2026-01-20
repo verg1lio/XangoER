@@ -35,7 +35,8 @@ class Estrutura:
             - Larissa Pereira Leanor;
             - Alexandre Duque Gondim Pires;
             - Arthur Miguel Costa Pimentel Brandão;
-            - Enzo De Andrade Magalhães
+            - Enzo De Andrade Magalhães;
+            - João Felipe Sanders Pinto;
             - Vergílio Torezan Silingardi Del Claro.
         """
         self.elements = elements                                             #Matriz de elementos conectados
