@@ -34,6 +34,7 @@ class Estrutura:
             - Antônio Marcos Lopes Brito Junior; 
             - Larissa Pereira Leanor;
             - Alexandre Duque;
+            - Arthur Miguel Costa Pimentel Brandão;
             - Vergílio Torezan Silingardi Del Claro.
         """
         self.elements = elements                                             #Matriz de elementos conectados
