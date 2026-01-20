@@ -30,7 +30,7 @@ class Estrutura:
         Code authors: 
             - Patrícia Nascimento Vaccarezza; 
             - Eduardo Almeida Menezes; 
-            - Cayque Lemos; 
+            - Cayque Lemos Souza; 
             - Antônio Marcos Lopes Brito Junior; 
             - Larissa Pereira Leanor;
             - Alexandre Duque;
