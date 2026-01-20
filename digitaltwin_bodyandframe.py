@@ -33,7 +33,7 @@ class Estrutura:
             - Cayque Lemos Souza; 
             - Antônio Marcos Lopes Brito Junior; 
             - Larissa Pereira Leanor;
-            - Alexandre Duque;
+            - Alexandre Duque Gondim Pires;
             - Arthur Miguel Costa Pimentel Brandão;
             - Vergílio Torezan Silingardi Del Claro.
         """
