@@ -40,9 +40,13 @@ class Estrutura:
             - Cayque Lemos Souza; 
             - Antônio Marcos Lopes Brito Junior; 
             - Larissa Pereira Leanor;
-            - Alexandre Duque;
+            - Alexandre Duque Gondim Pires;
+            - Arthur Miguel Costa Pimentel Brandão;
+            - Enzo De Andrade Magalhães;
+            - João Felipe Sanders Pinto;
             - Vergílio Torezan Silingardi Del Claro.
         """
+        
         self.elements = sorted(elements)                                                        #Matriz de elementos conectados
         self.num_elements = len(elements)                                                       #Número de elementos
         self.planilha = planilha
