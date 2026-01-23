@@ -1,3 +1,32 @@
+# ---------------------
+# Objetivo e Funcionalidades
+# ---------------------
+#
+# Objetivo:
+# Este código implementa um Digital Twin de um powertrain elétrico para fins
+# de simulação dinâmica, análise de desempenho e visualização interativa,
+# permitindo estudar o comportamento integrado de motor, inversor, bateria,
+# transmissão, pneu e veículo ao longo do tempo.
+#
+# Funcionalidades principais:
+# - Configuração paramétrica de subsistemas do veículo elétrico:
+#   motor elétrico, inversor, bateria, transmissão, pneu e veículo.
+# - Execução de simulação temporal da dinâmica eletromecânica e veicular.
+# - Interface gráfica interativa desenvolvida em Dash, com sidebar de controle.
+# - Atualização dinâmica de parâmetros via interface do usuário.
+# - Geração e armazenamento de múltiplas visualizações da simulação, incluindo:
+#   * Velocidade e torque do motor
+#   * Correntes e tensões elétricas
+#   * Fluxos magnéticos e temperatura
+#   * Sinais de controle (FOC)
+#   * Desempenho do veículo (velocidade, aceleração e forças)
+#   * Desempenho do pneu (slip ratio e força longitudinal)
+#   * Estado da bateria (tensão, corrente e SoC)
+# - Alternância entre diferentes gráficos sem necessidade de nova simulação.
+# - Estrutura modular que facilita extensões futuras do modelo e da interface.
+#
+# ---------------------
+
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
