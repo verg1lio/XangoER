@@ -14,7 +14,6 @@ from models.Vehicle import Vehicle
 from models.Motor import Motor
 from typing import Optional, Dict, Any
 
-
 class Simulation:
     """Vehicle + motor + battery + inverter simulation orchestrator using PID controllers."""
 
