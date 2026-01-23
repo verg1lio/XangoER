@@ -2420,4 +2420,4 @@ BrakeSystem.brake_system_example()
 Kinematics.kinematics_example()
 Tire.tire_example()
 
-#Autores do código: João Victor Dias França; Marco Affonso de Carvalho Santos; Catarina Eduarda Santos Gomes; Lucca Matheus Silva Macêdo; Ruan Felipe França Lutigards; Kevin Johnny Silva da Mata; Flávio Gabriel Gonzaga Leitão; Silas Levi Brum Melo; Rafhael Moreira de Oliveira; Igor Maia Sento Sé Matos Azevedo  
+#Autores do código: João Victor Dias França; Marco Affonso de Carvalho Santos; Catarina Eduarda Santos Gomes; Lucca Matheus Silva Macêdo; Ruan Felipe França Lutigards; Kevin Johnny Silva da Mata; Flávio Gabriel Gonzaga Leitão; Silas Levi Brum Melo; Rafhael Moreira de Oliveira; Igor Maia Sento Sé Matos Azevedo; Washington Luiz dos Santos Filho  
