@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.optimize import differential_evolution
 from matplotlib.animation import FuncAnimation
-from IPython.display import HTML, display
 
 # ==============================================================================
 # VARIÁVEIS GLOBAIS DE SUPORTE (Para manter compatibilidade com métodos originais)
