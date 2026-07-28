@@ -1,3 +1,29 @@
+# -*- coding: utf-8 -*-
+"""
+Motor.py — Motor síncrono de ímãs permanentes (PMSM) — EMRAX 228
+=================================================================
+
+Contêiner de parâmetros elétricos, mecânicos e térmicos do motor, mais as
+transformações de coordenadas (Park inversa e dq→abc) usadas para logging.
+
+DIVISÃO DE RESPONSABILIDADES (importante):
+  • Motor.py NÃO possui dinâmica nem estado de controlador. Ele apenas
+    ARMAZENA parâmetros (Rs, Ld, Lq, λm, p, limites térmicos, ...) e
+    fornece funções puras de transformação de coordenadas.
+  • Toda a dinâmica (equações dq, temperatura, RK4) e todo o controle
+    (PIs de corrente, field weakening, limitadores) vivem em
+    Simulation/Simulation.py, que LÊ os parâmetros deste objeto no
+    __init__ via getattr.
+
+Convenção de referencial (crítica para consistência):
+  O projeto usa a transformada de Park INVARIANTE EM AMPLITUDE — a
+  amplitude de pico da corrente de fase é igual a |i_dq|. Consequências:
+    • Torque: T = 1.5 · p · λm · iq   (o fator 1.5 vem dessa convenção);
+    • max_current é AMPLITUDE DE PICO de fase (= √2 · I_rms);
+    • As transformações abaixo não usam o fator √(2/3) da forma
+      invariante em potência.
+"""
+
 import sys
 import os
 
@@ -7,65 +33,88 @@ from Constants.constants import PI23, SQRT3_2
 
 
 class Motor:
-    """Permanent Magnet Synchronous Motor (PMSM) — parameter & coordinate-transform model.
+    """PMSM — contêiner de parâmetros + transformações de coordenadas.
 
-    This class is a stateless container of PMSM electrical/mechanical/thermal
-    parameters plus the Park/Clarke transformations used by the simulation
-    logger. The actual control loops (FOC, current PIs, speed PI) and the
-    plant ODE live in :class:`Simulation.Simulation` — Motor does not own any
-    controller state or dynamics.
+    Esta classe é um contêiner SEM ESTADO de parâmetros elétricos,
+    mecânicos e térmicos do PMSM, mais as transformações Park/Clarke
+    usadas pelo logger da simulação. As malhas de controle (FOC, PIs de
+    corrente) e a ODE da planta vivem em :class:`Simulation.Simulation` —
+    Motor não possui nenhum estado de controlador ou dinâmica.
 
     Parameters
     ----------
     rs : float
-        Stator resistance [Ω].
+        Resistência de estator por fase [Ω], medida a T_ref (a simulação
+        aplica a lei Rs(T) = rs·[1 + α·(T − T_ref)] a partir deste valor).
     ld, lq : float
-        Direct- and quadrature-axis inductances [H].
+        Indutâncias de eixo direto e de quadratura [H]. Para o EMRAX 228
+        (rotor de ímãs superficiais) Ld ≈ Lq — sem torque de relutância.
     jm : float
-        Rotor inertia [kg·m²].
+        Inércia do rotor [kg·m²].
     kf : float
-        Viscous friction coefficient [N·m·s].
+        Coeficiente de atrito viscoso [N·m·s] (rolamentos + ventilação).
+        Atenção: valores altos dupla-contariam as perdas no ferro, que já
+        são modeladas separadamente (calibrado em 0.005 no projeto).
     lambda_m : float
-        Permanent magnet flux linkage [Wb].
+        Fluxo concatenado dos ímãs permanentes λm [Wb]. Define a constante
+        de torque Kt = 1.5·p·λm e o back-EMF ωe·λm.
     p : int
-        Number of pole pairs.
+        Número de PARES de polos (EMRAX 228: 10).
     valor_mu : float
-        Modulation index for inverter voltage scaling (0–1).
+        Índice de modulação do inversor (0–1) para escala de tensão.
     speed_ref : float, optional
-        Reference rotor speed [rad/s] for the over-speed soft limiter.
-        Default 0.0.
+        Velocidade de referência do rotor [rad/s] usada pelo limitador
+        suave de sobre-rotação da simulação (fade de iq entre 90 % e
+        100 % deste valor). Default 0.0.
     k_h_iron : float, optional
-        Hysteresis iron-loss coefficient [W/Hz]. Loss ≈ k_h·|f_elec|.
-        Default 0.9 — calibrated so iron loss ≈ 600 W at 670 Hz (EMRAX 228
-        @ 4000 RPM, 60/40 hysteresis/eddy split per datasheet).
+        Coeficiente de perdas por HISTERESE [W/Hz]: P_h ≈ k_h·|f_elec|.
+        Default 0.9 — calibrado para perda ≈ 600 W a 670 Hz (EMRAX 228
+        @ 4000 RPM, divisão 60/40 histerese/Foucault do datasheet).
     k_e_iron : float, optional
-        Eddy-current iron-loss coefficient [W/Hz²]. Loss ≈ k_e·f_elec².
-        Default 9e-4 — pairs with k_h above to give ~1 kW total iron loss
-        at 4000 RPM. Tune lower for low-iron motors (PCB stators, etc.).
+        Coeficiente de perdas por CORRENTES DE FOUCAULT [W/Hz²]:
+        P_e ≈ k_e·f_elec². Default 9e-4 — junto com k_h dá ~1 kW total
+        de perdas no ferro a 4000 RPM. Reduzir para motores de baixo
+        ferro (estator PCB etc.).
     alpha_cu : float, optional
-        Copper temperature coefficient [1/K] for Rs(T) = Rs0·[1+α·(T−T_ref)].
-        Default 0.00393 (annealed copper).
+        Coeficiente térmico do cobre [1/K] para Rs(T) = Rs0·[1+α·(T−T_ref)].
+        Default 0.00393 (cobre recozido — resistência sobe ~0.4 %/K).
     T_ref : float, optional
-        Reference temperature [°C] at which Rs0 was measured. Default 25.
+        Temperatura de referência [°C] na qual rs foi medida. Default 25.
     T_alarm, T_max : float, optional
-        Thermal derating thresholds [°C]. Below T_alarm: no derating.
-        Above T_max: zero current. Linear ramp in between. Defaults
-        130 / 160 °C (typical winding insulation class H limits).
+        Limiares do derate térmico [°C]. Abaixo de T_alarm: sem redução.
+        Acima de T_max: corrente zero. Rampa linear no intervalo.
+        Defaults 130 / 160 °C (limites típicos de isolamento classe H).
+    h_cool : float, optional
+        Coeficiente de convecção [W/(m²·K)] do modelo de resfriamento
+        P_cool = h·A·(T − T_amb). Default 10 (convecção natural).
+        Referências: ar forçado ≈ 50–200; líquido forçado ≈ 500–2000.
+    A_cool : float, optional
+        Área efetiva de troca térmica [m²]. Default 0.15 (carcaça EMRAX).
+    T_ambient : float, optional
+        Temperatura ambiente [°C] do resfriamento. Default 25.
+    max_current : float, optional
+        Amplitude de PICO máxima da corrente de fase [A]. Se None, usa
+        300·√2 ≈ 424 A. O projeto passa 323 A → torque de pico
+        1.5·10·0.04748·323 ≈ 230 N·m (datasheet EMRAX 228).
 
     Attributes
     ----------
     pi23 : float
-        Constant 2π/3 used for phase transformations.
+        Constante 2π/3 (defasagem de 120° entre fases).
+    rs0 : float
+        Rs nominal a T_ref — referência IMUTÁVEL da lei Rs(T).
+    rs : float
+        Rs efetiva na temperatura corrente (atualizada pela simulação).
     m, C : float
-        Thermal mass [kg] and copper specific heat [J/(kg·K)] used by the
-        winding thermal ODE (defaults EMRAX 228 LC: 13.5 kg, 385 J/(kg·K)).
+        Massa térmica [kg] e calor específico do cobre [J/(kg·K)] usados
+        pela ODE térmica do enrolamento (defaults EMRAX 228 LC: 13.5 kg,
+        385 J/(kg·K)).
     max_current : float
-        Maximum phase current amplitude [A] (peak, = √2·I_rms) used by
-        Simulation as the upper bound on iq_ref. Configurable via the
-        ``max_current`` kwarg; default 300·√2 A.
+        Amplitude máxima de pico da corrente de fase [A] — teto de iq_ref
+        na simulação.
     Vdc : float
-        DC-link voltage [V] used as the default DC voltage when no battery
-        model is provided. Default 600 V.
+        Tensão DC de fallback [V] usada quando nenhum modelo de bateria é
+        fornecido à simulação. Default 600 V.
     """
 
     def __init__(self, rs, ld, lq, jm, kf, lambda_m, p, valor_mu, speed_ref=0.0,
@@ -76,10 +125,11 @@ class Motor:
                  max_current=None):
         self.pi23 = PI23
 
-        # Electrical / mechanical parameters
-        # rs0 = nominal Rs at T_ref (immutable reference for Rs(T) law).
-        # rs    = effective Rs at current temperature (updated by Simulation
-        # each step). Tools that need the cold-resistance use rs0.
+        # ── Parâmetros elétricos / mecânicos ─────────────────────────────
+        # rs0 = Rs nominal a T_ref (referência imutável da lei Rs(T)).
+        # rs  = Rs efetiva na temperatura corrente (atualizada pela
+        # Simulation a cada passo). Ferramentas que precisam da
+        # resistência "fria" devem usar rs0.
         self.rs0 = rs
         self.rs = rs
         self.ld = ld
@@ -90,11 +140,13 @@ class Motor:
         self.p = p
         self.valor_mu = valor_mu
 
-        # Thermal model — EMRAX 228 LC defaults
-        self.m = 13.5      # thermal mass [kg]
-        self.C = 385.0     # specific heat (copper) [J/(kg·K)]
+        # ── Modelo térmico — defaults EMRAX 228 LC ───────────────────────
+        # Massa térmica concentrada (lumped): todo o calor gerado aquece
+        # uma única massa equivalente m com calor específico C.
+        self.m = 13.5      # massa térmica [kg]
+        self.C = 385.0     # calor específico (cobre) [J/(kg·K)]
 
-        # Operational limits
+        # ── Limites operacionais ─────────────────────────────────────────
         # max_current é a AMPLITUDE de pico da corrente de fase [A]
         # (frame dq amplitude-invariante: iq = √2·I_rms).  O teto de torque
         # resultante é T = 1.5·p·λm·max_current — escolha o valor que
@@ -106,67 +158,87 @@ class Motor:
             self.max_current = 300.0 * np.sqrt(2)
         self.Vdc = 600.0
 
-        # Reference speed (used by the simulation's soft over-speed limiter)
+        # Velocidade de referência (usada pelo limitador suave de
+        # sobre-rotação da simulação — NÃO é setpoint de malha fechada)
         self.speed_ref = speed_ref
 
-        # Iron losses (Steinmetz form, separated terms)
+        # ── Perdas no ferro (forma de Steinmetz, termos separados) ───────
+        # P_iron = k_h·|f_e| (histerese) + k_e·f_e² (Foucault),
+        # com f_e = frequência elétrica em Hz. Avaliadas na ODE da simulação.
         self.k_h_iron = float(k_h_iron)
         self.k_e_iron = float(k_e_iron)
 
-        # Temperature compensation
+        # ── Compensação de temperatura Rs(T) ─────────────────────────────
         self.alpha_cu = float(alpha_cu)
         self.T_ref    = float(T_ref)
 
-        # Thermal derating thresholds
+        # ── Limiares de derate térmico ───────────────────────────────────
         self.T_alarm = float(T_alarm)
         self.T_max   = float(T_max)
 
-        # Cooling model — convective: P_cool = h_cool · A_cool · (T − T_ambient)
-        # EMRAX 228 LC defaults: natural convection (h≈10), surface ≈0.15 m²
-        # For forced liquid: h ≈ 500–2000 W/(m²·K); for forced air: h ≈ 50–200
+        # ── Modelo de resfriamento convectivo ────────────────────────────
+        # P_cool = h_cool · A_cool · (T − T_ambient)
+        # Defaults EMRAX 228 LC: convecção natural (h≈10), superfície ≈0.15 m²
+        # Para líquido forçado: h ≈ 500–2000 W/(m²·K); ar forçado: h ≈ 50–200
         self.h_cool    = float(h_cool)
         self.A_cool    = float(A_cool)
         self.T_ambient = float(T_ambient)
 
     def inverse_park_transform(self, vd, vq, theta_e):
-        """Inverse Park transform: dq voltages → abc phase voltages.
+        """Transformada inversa de Park: tensões dq → tensões de fase abc.
+
+        Duas etapas encadeadas (ambas invariantes em amplitude):
+          1. Rotação dq → αβ pelo ângulo elétrico θe (Park inversa);
+          2. Projeção αβ → abc (Clarke inversa): fase a alinhada com α,
+             fases b/c defasadas ±120° via os fatores −1/2 e ±√3/2.
+
+        Usada apenas para LOGGING das tensões de fase que o inversor
+        aplicaria — não realimenta a dinâmica (a ODE trabalha direto em dq).
 
         Parameters
         ----------
         vd, vq : float
-            Direct- and quadrature-axis voltages [V].
+            Tensões de eixo direto e de quadratura [V] (comandos do FOC).
         theta_e : float
-            Electrical rotor angle [rad].
+            Ângulo elétrico do rotor [rad] (= p · θ_mecânico).
 
         Returns
         -------
         (vs1, vs2, vs3, 0.0) : tuple of float
-            Three-phase voltages [V]. The trailing 0.0 is kept for
-            backwards-compatible unpacking in :mod:`Simulation`.
+            Tensões trifásicas [V]. O 0.0 final é mantido para
+            desempacotamento retrocompatível em :mod:`Simulation`.
         """
         cos_theta = np.cos(theta_e)
         sin_theta = np.sin(theta_e)
+        # Park inversa: rotaciona o vetor (vd, vq) do referencial girante
+        # para o referencial estacionário αβ
         valpha = vd * cos_theta - vq * sin_theta
         vbeta  = vd * sin_theta + vq * cos_theta
+        # Clarke inversa (amplitude-invariante): αβ → abc
         vs1 = valpha
         vs2 = -0.5 * valpha + SQRT3_2 * vbeta
         vs3 = -0.5 * valpha - SQRT3_2 * vbeta
         return vs1, vs2, vs3, 0.0
 
     def abc_currents_from_dq(self, isd, isq, theta_e, flux_d):
-        """Compute abc phase currents from dq currents (amplitude-invariant).
+        """Correntes de fase abc a partir das correntes dq (amplitude-invariante).
 
-        The torque model uses ``Kt = 1.5·p·λm``, which is consistent with the
-        amplitude-invariant inverse Park used here (no √(2/3) scaling).
+        Projeção direta de cada fase: i_k = isd·cos(θe − φk) − isq·sin(θe − φk),
+        com φk ∈ {0, +2π/3, −2π/3}. O modelo de torque usa Kt = 1.5·p·λm,
+        consistente com esta forma amplitude-invariante (sem fator √(2/3)).
+
+        Também é função exclusiva de LOGGING (aba "Correntes" do dashboard) —
+        a dinâmica elétrica evolui inteiramente no referencial dq.
 
         Parameters
         ----------
         isd, isq : float
-            Direct- and quadrature-axis currents [A].
+            Correntes de eixo direto e de quadratura [A].
         theta_e : float
-            Electrical rotor angle [rad].
+            Ângulo elétrico do rotor [rad].
         flux_d : float
-            Flux linkage along d-axis [Wb] (passed through unchanged for logging).
+            Fluxo concatenado no eixo d [Wb] — repassado sem alteração no
+            retorno, apenas por conveniência do logger.
 
         Returns
         -------
