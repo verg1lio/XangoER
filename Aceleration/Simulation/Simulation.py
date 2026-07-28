@@ -1,6 +1,41 @@
+# -*- coding: utf-8 -*-
 """
-Simulation.py — Digital-Twin Powertrain Xangô-E.Racing
-=======================================================
+Simulation.py — Motor de simulação do DigitalTwin Aceleration (Xangô E-Racing)
+===============================================================================
+
+Este módulo é o CORAÇÃO do digital twin: ele conecta todos os modelos
+(Motor, Vehicle, Transmission, BatteryPack, Tire, Pedal, PIDController),
+possui TODO o estado dinâmico e o avança no tempo com um integrador RK4 de
+passo fixo a 10 kHz (hp = 1e-4 s).
+
+Visão geral da arquitetura
+--------------------------
+Os modelos em ``Models/`` são contêineres de parâmetros sem estado próprio.
+A Simulation lê os parâmetros deles no __init__ e monta:
+
+  • o VETOR DE ESTADO de 11 variáveis:
+        [isd, isq, iso,   → correntes dq0 do motor [A]
+         wm, theta_m,     → velocidade [rad/s] e ângulo mecânico [rad]
+         temp,            → temperatura do enrolamento [°C]
+         vv, vp,          → velocidade [m/s] e posição [m] do veículo
+         soc, Iast, tacc] → estados da bateria
+  • a ODE física pura (_physics_ode) — sem controladores, sem side-effects;
+  • o loop de controle FOC executado UMA vez por passo, ANTES do RK4, com
+    as saídas (vd, vq, I_bat) congeladas durante as 4 avaliações do RK4.
+
+Modelo de dois corpos (motor ↔ veículo)
+---------------------------------------
+Motor e veículo são corpos dinâmicos separados, acoplados só pelo pneu:
+
+    J_eff × dω/dt = T_em − T_carga − kf·ω − T_ferro     (rotacional)
+    m     × dv/dt = F_tração − F_resistência             (translacional)
+
+onde T_carga = F_tração_limitada · r / (N·η) é a reação da força de tração
+no eixo do motor, e F_tração é SATURADA pelo máximo que o pneu transmite
+(Magic Formula) — é daí que surge o comportamento de wheelspin.
+
+J_eff contém APENAS inércias rotacionais (rotor + pinhão + lado lento/N²);
+a massa translacional fica na equação do veículo (sem dupla contagem).
 
 Histórico de correções
 -----------------------
@@ -8,8 +43,8 @@ v1  (original)  — PIDs dentro da ODE + cl errado + double-append + post-proc P
 v2  (anterior)  — PIDs separados da ODE via RK4 fixo, cl corrigido
 v3  (este)      — Corrente da bateria calculada corretamente (BUG RAIZ)
 
-BUG RAIZ — corrente incorreta para o modelo de bateria
--------------------------------------------------------
+BUG RAIZ — corrente incorreta para o modelo de bateria (NÃO REGREDIR)
+----------------------------------------------------------------------
 Versões anteriores passavam `abs(isq)` como corrente para calcular_tensao() e
 calcular_derivadas(). isq é a corrente no eixo q do referencial dq rotativo —
 ela NÃO é a corrente DC do banco de baterias.
@@ -29,10 +64,10 @@ Isso provoca em cascata:
   • Perdas cobre = 1.5 × rs × (isd² + isq²) ≈ 15,800 W → temperatura → 4000 °C
   • Tensão da bateria oscila entre -4000 V e +100 V
 
-CORREÇÃO:
+CORREÇÃO (mantida nesta versão):
   A corrente DC extraída da bateria relaciona-se com a potência elétrica consumida:
-      P_ac = 1.5 × (vd × isd + vq × isq)    [W] — potência AC no frame dq
-      I_bat = P_ac / V_nominal                [A] — corrente DC no barramento
+      P_ac = potência mecânica / η_drive          [W]
+      I_bat = P_ac / V_nominal                    [A] — corrente DC no barramento
 
   I_bat é calculada UMA VEZ por passo a partir dos estados e comandos congelados,
   e passada como parâmetro fixo tanto para calcular_tensao() quanto para a ODE
@@ -58,17 +93,32 @@ from typing import Optional, Dict, Any
 class Simulation:
     """Digital-twin do powertrain — PMSM + veículo + bateria + pneu.
 
-    Arquitetura de controle (correta)
-    ----------------------------------
+    Arquitetura de controle (sequência por passo)
+    ---------------------------------------------
     Loop RK4 de passo fixo hp. A cada passo k:
-      1. Desempacota x[k].
-      2. Calcula corrente DC da bateria por balanço de potência.
-      3. Obtém tensão terminal Vdc com a corrente correta.
-      4. Executa PIDs (1 vez) → vd, vq congelados.
+      1. Desempacota o estado x[k].
+      2. Calcula a corrente DC da bateria por balanço de potência.
+      3. Obtém a tensão terminal Vdc da bateria com a corrente correta.
+      4. Monta iq_ref (pedal → limitadores) e id_ref (field weakening),
+         executa os PIs de corrente (1 vez) → vd, vq congelados.
       5. Integra _physics_ode com vd, vq, I_bat fixos (RK4, 4 avaliações puras).
-      6. Loga x[k] e sinais de controle.
+      6. Loga x[k] e os sinais de controle.
 
-    _physics_ode é função pura: sem estado interno, sem PIDs.
+    _physics_ode é função pura: sem estado interno, sem PIDs — isso é o que
+    torna o RK4 matematicamente correto (as 4 avaliações veem a mesma
+    entrada de controle, como um ZOH real de 10 kHz).
+
+    Controle de torque em malha aberta (decisão de projeto)
+    -------------------------------------------------------
+    Não há PI de velocidade: iq_ref vem direto do pedal
+    (iq_ref = max_current × posição), passando por três protetores:
+      • limitador SUAVE de sobre-rotação (smoothstep 1→0 entre 90 % e
+        100 % de speed_ref);
+      • teto de potência DC (FSAE EV.4.1: 80 kW);
+      • derate térmico (rampa linear entre T_alarm e T_max).
+    Um PI de velocidade saturaria o integrador durante toda a aceleração
+    (erro grande) e oscilaria ao alcançar a referência — o pedal em malha
+    aberta reproduz melhor o carro real e evita esse windup.
 
     Acoplamento motor–veículo (dois corpos dinâmicos separados)
     -----------------------------------------------------------
@@ -81,7 +131,9 @@ class Simulation:
     (sem massa translacional do veículo — evita dupla contagem).
     """
 
-    HP: float = 1e-4  # passo de integração / controle [s]
+    # Passo de integração E de controle [s] — 1e-4 s = 10 kHz. Fixo: passo
+    # variável quebraria a premissa de controladores discretos com Ts fixo.
+    HP: float = 1e-4
 
     def __init__(self,
                  motor: Optional[Motor] = None,
@@ -95,6 +147,8 @@ class Simulation:
                  steps: int = 12000,
                  p_max_dc: Optional[float] = 80e3):
 
+        # Referências aos modelos (todos opcionais — subsistemas ausentes
+        # são simplesmente pulados na ODE e no vetor de estado)
         self.motor        = motor
         self.vehicle      = vehicle
         self.transmission = transmission
@@ -115,6 +169,8 @@ class Simulation:
         self.eta_drive = 0.90
 
         # ── Parâmetros do motor ──────────────────────────────────────────────
+        # Copiados do objeto Motor via getattr (com defaults seguros) para
+        # acesso rápido como atributos locais no caminho quente do loop.
         self.p        = getattr(motor, 'p',        1)
         self.ld       = getattr(motor, 'ld',       1.0)
         self.lq       = getattr(motor, 'lq',       1.0)
@@ -128,18 +184,19 @@ class Simulation:
         self.jm       = getattr(motor, 'jm',       1.0)
         self.kf       = getattr(motor, 'kf',       0.0)
 
-        # Iron losses (Steinmetz lumped: P_iron = k_h·|f_e| + k_e·f_e²)
+        # Perdas no ferro (Steinmetz concentrado: P_iron = k_h·|f_e| + k_e·f_e²)
         self.k_h_iron = getattr(motor, 'k_h_iron', 0.0)
         self.k_e_iron = getattr(motor, 'k_e_iron', 0.0)
         # Coeficientes para Rs(T)
         self.alpha_cu = getattr(motor, 'alpha_cu', 0.0)
         self.T_ref    = getattr(motor, 'T_ref',   25.0)
-        # Derating térmico do iq_pedal (linear entre T_alarm e T_max)
+        # Derate térmico do iq_pedal (rampa linear entre T_alarm e T_max)
         self.T_alarm  = getattr(motor, 'T_alarm', 1e6)   # default = sem derate
         self.T_max    = getattr(motor, 'T_max',   1e6)
         # Piso de velocidade para converter P_iron → torque sem singularidade
         self.wm_floor = 1.0   # [rad/s]
 
+        # Constante de torque (convenção amplitude-invariante) e limites
         self.Kt          = 1.5 * self.p * self.lambda_m       # [N·m/A]
         self.max_current = getattr(motor, 'max_current', np.inf)
         self.Vdc_default = getattr(motor, 'Vdc',         600.0)
@@ -149,7 +206,8 @@ class Simulation:
         # ── Inércia efetiva no eixo do motor ─────────────────────────────────
         # J_total de calculate_reflected_inertia inclui J_translação = m(r/N)².
         # Esse termo pertence à equação do veículo (corpo separado) → removemos
-        # para evitar dupla contagem.
+        # para evitar dupla contagem.  O max(..., jm) garante J_eff ≥ J_rotor
+        # mesmo com parâmetros degenerados.
         if vehicle is not None and transmission is not None:
             j_all         = vehicle.calculate_reflected_inertia(transmission)
             r, N          = vehicle.wheel_radius, transmission.final_drive_ratio
@@ -158,19 +216,23 @@ class Simulation:
         else:
             self.j_eff = self.jm
 
-        # Pré-computados
+        # Inversos pré-computados — troca divisão por multiplicação no loop
+        # de 10 kHz (a ODE é chamada 4× por passo).
         self.inv_ld  = 1.0 / self.ld  if self.ld  > 0 else 0.0
         self.inv_lq  = 1.0 / self.lq  if self.lq  > 0 else 0.0
         self.inv_jm  = 1.0 / self.j_eff if self.j_eff > 0 else 0.0
+        # Indutância de sequência zero (não fornecida pelo datasheet):
+        # aproximada como 10 % da média de Ld/Lq — iso decai e não afeta torque.
         self.L0      = max(0.1 * (self.ld + self.lq) / 2.0, 1e-6)
 
-        # Tensão nominal da bateria (para balanço de potência)
+        # Tensão nominal da bateria (denominador do balanço de potência)
         if battery is not None:
             self.Vdc_nominal = battery.calcular_tensao_nominal()
         else:
             self.Vdc_nominal = self.Vdc_default
 
         # Piso de tensão: protege contra Vdc negativo por parâmetros extremos
+        # (o colapso de barramento descrito no BUG RAIZ do cabeçalho)
         self.Vdc_floor = 0.3 * self.Vdc_nominal
 
         # Filtro passa-baixa em wm para o limitador suave de sobre-rotação.
@@ -180,7 +242,8 @@ class Simulation:
         # ciclo-limite na transição do limitador.
         self.tau_wm = 5e-3
 
-        # Térmico
+        # ── Térmico ──────────────────────────────────────────────────────────
+        # Modelo de massa concentrada: dT/dt = (P_ger − P_dissip)/(m·C)
         m_th = getattr(motor, 'm', 22.0)
         C_th = getattr(motor, 'C', 385.0)   # J/(kg·K) — calor específico do cobre
         self.inv_mC = 1.0 / (m_th * C_th) if m_th * C_th > 0 else 0.0
@@ -193,10 +256,13 @@ class Simulation:
 
         # ── Controladores PI de corrente ─────────────────────────────────────
         #
-        # Cancelamento de polo (bandwidth alvo 500 Hz):
-        #   τe = ld/rs  →  kp = ωc·ld,  ki = ωc·rs   (ki/kp = rs/ld)
-        # Os ganhos são calculados a partir dos parâmetros REAIS do motor,
-        # garantindo tuning consistente quando o usuário troca o motor.
+        # Sintonia por cancelamento de polo (bandwidth alvo 500 Hz):
+        #   a planta elétrica de cada eixo é 1ª ordem com τe = L/Rs;
+        #   escolhendo kp = ωc·L e ki = ωc·Rs, o zero do PI (ki/kp = Rs/L)
+        #   cancela o polo da planta e a malha fechada vira 1ª ordem com
+        #   banda ωc.  Os ganhos são calculados dos parâmetros REAIS do
+        #   motor, garantindo tuning consistente quando o usuário troca o
+        #   motor no dashboard.
         wc_curr = 2.0 * np.pi * 500.0     # [rad/s]
         kp_curr = wc_curr * self.ld
         ki_curr = wc_curr * self.rs
@@ -231,6 +297,12 @@ class Simulation:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _reset_ic(self):
+        """Define as condições iniciais de todos os estados.
+
+        Carro parado, motor parado, correntes nulas, enrolamento a 25 °C.
+        Os estados da bateria são herdados do objeto BatteryPack (permite
+        iniciar com SoC < 1 para estudos de fim de prova).
+        """
         self.isd0 = self.isq0 = self.iso0 = 0.0
         self.wm0  = self.theta_m0 = 0.0
         self.temp0 = 25.0
@@ -246,7 +318,9 @@ class Simulation:
 
     # Lista canônica das variáveis temporais armazenadas pelo loop.
     # Centralizar evita drift entre _init_storage, o slice final e o dict
-    # de retorno em simulate().
+    # de retorno em simulate().  ATENÇÃO: os nomes internos self.* diferem
+    # das chaves do dict de retorno (ex.: 'corrented' → chave 'isd') — o
+    # dashboard usa os self.*; consumidores externos devem usar o dict.
     _LOG_FIELDS = (
         'tempo', 'corrented', 'correnteq',
         'corrente1', 'corrente2', 'corrente3',
@@ -279,6 +353,14 @@ class Simulation:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_x0(self) -> np.ndarray:
+        """Monta o vetor de estado inicial x0.
+
+        O vetor é montado por blocos condicionais — subsistemas ausentes
+        (sem veículo ou sem bateria) simplesmente não entram no vetor:
+            [isd, isq, iso, wm, theta_m, temp]           sempre (6)
+            + [vv, vp]            se veículo+transmissão  (8)
+            + [soc, Iast, tacc]   se bateria             (11)
+        """
         x = [self.isd0, self.isq0, self.iso0,
              self.wm0, self.theta_m0, self.temp0]
         if self.vehicle and self.transmission:
@@ -288,6 +370,12 @@ class Simulation:
         return np.array(x, dtype=float)
 
     def _unpack(self, x: np.ndarray):
+        """Desempacota o vetor de estado na mesma ordem de _build_x0.
+
+        Devolve SEMPRE a tupla completa de 11 valores — estados de
+        subsistemas ausentes recebem defaults neutros (vv=vp=0, soc=1).
+        Isso mantém a ODE e o logger independentes da composição do vetor.
+        """
         isd, isq, iso, wm, theta_m, temp = x[0], x[1], x[2], x[3], x[4], x[5]
         i = 6
         if self.vehicle and self.transmission:
@@ -308,7 +396,17 @@ class Simulation:
     def _physics_ode(self, _t: float, x: np.ndarray,
                      vd: float, vq: float, I_bat: float,
                      telemetry: Optional[dict] = None) -> np.ndarray:
-        """Derivadas físicas com entradas de controle congeladas.
+        """Derivadas físicas dx/dt com entradas de controle congeladas.
+
+        Blocos avaliados em sequência:
+          1. Rs(T) — resistência do cobre na temperatura DESTE estado;
+          2. Dinâmica elétrica dq (equações do PMSM em referencial rotórico);
+          3. Acoplamento pneu–veículo (slip → Magic Formula → tração
+             saturada → torque de carga + aceleração do carro);
+          4. Perdas no ferro (Steinmetz) → torque de freio + calor;
+          5. Dinâmica mecânica do eixo do motor;
+          6. Dinâmica térmica do enrolamento;
+          7. Derivadas da bateria (SoC/Iast) com I_bat congelado.
 
         I_bat é a corrente DC estimada do banco de baterias, calculada por
         balanço de potência antes desta chamada.  Ela é fixa durante as 4
@@ -323,6 +421,7 @@ class Simulation:
         isd, isq, iso, wm, theta_m, temp, vv, vp, soc, Iast, tacc = (
             self._unpack(x))
 
+        # Velocidade elétrica = pares de polos × velocidade mecânica
         we = self.p * wm
 
         # ── Rs(T): cobre aquece, resistência sobe (~0.4 %/K) ────────────────
@@ -332,6 +431,10 @@ class Simulation:
         rs_eff = self.rs0 * (1.0 + self.alpha_cu * (temp - self.T_ref))
 
         # ── Dinâmica elétrica dq ─────────────────────────────────────────────
+        # Equações clássicas do PMSM em referencial síncrono:
+        #   Ld·d(isd)/dt = vd − Rs·isd + ωe·Lq·isq          (acoplamento +q→d)
+        #   Lq·d(isq)/dt = vq − Rs·isq − ωe·(Ld·isd + λm)   (acopl. −d→q + bEMF)
+        #   L0·d(iso)/dt = −Rs·iso                          (seq. zero decai)
         d_isd = (vd - rs_eff*isd + we*self.lq*isq) * self.inv_ld
         d_isq = (vq - rs_eff*isq - we*(self.ld*isd + self.lambda_m)) * self.inv_lq
         d_iso = (-rs_eff * iso) / self.L0
@@ -348,17 +451,22 @@ class Simulation:
                 r   = self.vehicle.wheel_radius
                 m   = self.vehicle.mass
 
+                # Força que o MOTOR pede no contato pneu-solo
+                # (torque em roda / raio) — ainda sem limite de aderência
                 Tmotor_roda   = self.transmission.motor_to_wheel_torque(self.Kt * isq)
                 Ftração_ideal = Tmotor_roda / r
 
+                # Slip ratio entre a roda (ω_motor/N) e o carro (vv)
                 omega_roda = self.transmission.motor_to_wheel_speed(wm)
                 slip       = Tire.SlipRatio(omega_roda, r, vv)
                 Fresist    = self.vehicle.calculate_resistance_forces(vv)
 
-                # Loop algébrico 2 iterações.  vv é passado a load_transfer
-                # para que o termo aerodinâmico ½ρCl·A·v² seja incluído na
-                # carga vertical da roda traseira (aumenta Fz_max → mais
-                # tração disponível em alta velocidade).
+                # Loop algébrico de 2 iterações (ponto fixo): Fz depende da
+                # aceleração (transferência de carga) e a aceleração depende
+                # de Fz (teto de tração).  vv é passado a load_transfer para
+                # que o termo aerodinâmico ½ρCl·A·v² seja incluído na carga
+                # vertical da roda traseira (aumenta Fz_max → mais tração
+                # disponível em alta velocidade).
                 #
                 # Fz é POR RODA (load_transfer divide o eixo por 2) e a Magic
                 # Formula retorna Fx de UM pneu — o teto de tração do eixo é
@@ -366,18 +474,24 @@ class Simulation:
                 # simétrica as duas rodas motrizes contribuem igualmente.
                 n_drv = getattr(self.vehicle, 'n_driven_wheels', 2)
 
+                # Iteração 0: Fz com a=0 → tração saturada → aceleração a0
                 Fz0 = self.vehicle.calculate_load_transfer(0.0, vv)
                 Fx0 = self.tire.Tire_forces(Fz0, slip) * n_drv
                 Ft0 = np.sign(Ftração_ideal) * min(abs(Ftração_ideal), abs(Fx0))
                 a0  = (Ft0 - Fresist) / m
 
+                # Iteração 1: Fz refinado com a0 → tração final Ft
                 Fz     = self.vehicle.calculate_load_transfer(a0, vv)
                 Fx_max = self.tire.Tire_forces(Fz, slip) * n_drv
                 Ft     = np.sign(Ftração_ideal) * min(abs(Ftração_ideal), abs(Fx_max))
 
                 # Torque de carga no motor = reação da força de tração
+                # refletida pela transmissão (r/N com perda η)
                 Tcarga = Ft * r / (N * eta)
 
+                # Equação translacional do veículo; a condição vv<0.01
+                # impede o carro de "andar para trás" parado no grid
+                # quando a resistência excede a tração inicial.
                 Fr   = Ft - Fresist
                 d_vv = 0.0 if (vv < 0.01 and Fr < 0) else Fr / m
 
@@ -396,12 +510,15 @@ class Simulation:
         T_iron_brake = (P_iron / wm_safe) * np.sign(wm) if wm != 0.0 else 0.0
 
         # ── Dinâmica mecânica do eixo do motor ───────────────────────────────
+        # J_eff·dω/dt = T_em − T_carga − atrito viscoso − freio de ferro
         Ce      = self.Kt * isq
         d_wm    = (Ce - Tcarga - self.kf * wm - T_iron_brake) * self.inv_jm
         d_theta = wm
 
         # ── Dinâmica térmica ─────────────────────────────────────────────────
         # Balanço: dT/dt = (P_gerado − P_dissipado) / (m·C)
+        # P_cu = 1.5·Rs·(isd²+isq²) — perdas Joule trifásicas na convenção
+        #        amplitude-invariante (o 1.5 é o mesmo do Kt)
         # P_cool = h_cool · A_cool · (T − T_ambient)  — convecção (natural ou forçada)
         # h_cool = 0 → adiabático (padrão sem resfriamento configurado)
         P_cu   = 1.5 * rs_eff * (isd**2 + isq**2)
@@ -427,7 +544,9 @@ class Simulation:
             telemetry['Tcarga']  = float(Tcarga)
             telemetry['d_vv']    = float(d_vv)
 
-        # ── Monta vetor de derivadas ─────────────────────────────────────────
+        # ── Monta vetor de derivadas (mesma ordem de _build_x0) ─────────────
+        # Nota: a derivada da POSIÇÃO é a velocidade vv (estado), por isso
+        # o par [d_vv, vv].
         dx = [d_isd, d_isq, d_iso, d_wm, d_theta, d_temp]
         if self.vehicle and self.transmission:
             dx += [d_vv, vv]
@@ -442,7 +561,14 @@ class Simulation:
     def _rk4(self, t: float, x: np.ndarray,
               vd: float, vq: float, I_bat: float, dt: float,
               telemetry: Optional[dict] = None) -> np.ndarray:
-        """RK4 com vd, vq, I_bat fixos — ODE é avaliada 4× sem side-effects.
+        """Um passo de Runge-Kutta clássico de 4ª ordem.
+
+        x[k+1] = x[k] + (dt/6)·(k1 + 2·k2 + 2·k3 + k4)
+
+        vd, vq, I_bat ficam FIXOS nas 4 avaliações — fisicamente isso
+        representa o zero-order-hold do controlador digital de 10 kHz, e
+        matematicamente garante que a ODE seja pura (mesma entrada em
+        todos os estágios).
 
         ``telemetry``, se fornecido, é repassado APENAS ao k1 — captura os
         intermediários físicos avaliados em x[k] (estado pré-passo) para o
@@ -460,19 +586,30 @@ class Simulation:
 
     def simulate(self, t0: float = 0.0,
                  tf: Optional[float] = None) -> Dict[str, Any]:
-        """Executa a simulação com RK4 de passo fixo.
+        """Executa a simulação completa com RK4 de passo fixo.
 
         Critério de parada (o que ocorrer primeiro):
           • posição do veículo >= dmax  [m]  — critério principal
+            (75 m = distância da prova de Acceleration da FSAE)
           • tempo >= tmax               [s]  — limite de segurança
 
-        Sequência por passo:
-          1. Calcula I_bat via balanço de potência (corrige o bug raiz).
-          2. Obtém Vdc terminal com I_bat correto.
-          3. Executa PIDs (1 chamada cada).
-          4. Integra física com RK4 usando vd, vq, I_bat congelados.
-          5. Loga estado anterior.
-          6. Verifica critério de parada por distância.
+        Sequência por passo (detalhada nos comentários numerados abaixo):
+          1. Desempacota o estado atual x[k].
+          2. Calcula I_bat via balanço de potência (correção do bug raiz).
+          3. Obtém Vdc terminal da bateria com I_bat correto.
+          4. Monta as referências de corrente (pedal → iq_ref com
+             limitadores; field weakening → id_ref).
+          5. Executa os PIs de corrente com desacoplamento (1 chamada cada).
+          6. Integra a física com RK4 usando vd, vq, I_bat congelados.
+          7. Loga o estado ANTERIOR ao passo + sinais de controle.
+          8. Verifica o critério de parada por distância.
+
+        Returns
+        -------
+        dict
+            28 séries temporais com chaves públicas ('t', 'isd', 'soc',
+            'vehicle_velocity', ...). Consumidores externos devem usar
+            este dict; o dashboard usa os atributos self.* diretamente.
         """
         if tf is None:
             tf = self.tmax
@@ -487,6 +624,8 @@ class Simulation:
               f"J_eff={self.j_eff:.4f} kg·m²  "
               f"Vdc_nom={self.Vdc_nominal:.1f} V")
 
+        # Prepara armazenamento e zera controladores — execuções repetidas
+        # de simulate() partem sempre do mesmo estado.
         self._init_storage(N)
         self.id_ctrl.reset()
         self.iq_ctrl.reset()
@@ -497,32 +636,34 @@ class Simulation:
 
         for _ in range(N):
 
-            # 1. Estado atual
+            # ── 1. Estado atual ─────────────────────────────────────────────
             (isd, isq, iso, wm, theta_m, temp,
              vv, vp, soc, Iast, tacc) = self._unpack(x)
 
-            theta_e = self.p * theta_m
-            we      = self.p * wm
+            theta_e = self.p * theta_m     # ângulo elétrico
+            we      = self.p * wm          # velocidade elétrica
 
             # ── 2. Corrente DC por balanço de potência (CORREÇÃO PRINCIPAL) ──
             #
-            # P_ac = 1.5 × (vd×isd + vq×isq)   [W - potência elétrica AC/dq]
-            # I_bat = P_ac / V_nominal            [A - corrente DC no banco]
+            # P_mec = Ce × wm            [W - potência mecânica no eixo]
+            # P_ac  = P_mec / η_drive    [W - potência elétrica consumida]
+            # I_bat = P_ac / V_nominal   [A - corrente DC no banco]
             #
             # Usa V_nominal (circuito aberto) no denominador para evitar
-            # referência circular (tensão terminal depende de I_bat).
+            # referência circular (a tensão terminal depende de I_bat).
             # Apenas potência positiva é extraída da bateria (sem regeneração
             # neste modelo simplificado).
             #
             # Na iteração inicial (isd=isq=0), I_bat=0 e Vdc = Voc nominal.
-            #
-            # P_mec = Ce × wm  com Ce = Kt × isq
             Ce_now = self.Kt * isq
             P_mec  = Ce_now * wm
             P_ac   = max(P_mec / self.eta_drive, 0.0)
             I_bat  = P_ac / max(self.Vdc_nominal, 1.0)
 
             # ── 3. Tensão terminal da bateria ────────────────────────────────
+            # Vdc define o limite de tensão ±Vlim dos comandos do inversor
+            # neste passo — sob carga pesada a bateria "afunda" e o FOC
+            # perde margem de tensão (motivando o field weakening abaixo).
             if self.battery is not None and 0.0 < soc <= 1.0:
                 try:
                     Vdc = self.battery.calcular_tensao(I_bat, soc, Iast, tacc)
@@ -540,7 +681,7 @@ class Simulation:
             #   • Pedal → iq_ref = max_current × pedal_pos  (controle de torque)
             #   • Limitador proporcional suave quando wm > speed_ref (sem integral)
             #
-            # Não usa o PI de velocidade para gerar iq_ref: evita o problema de
+            # Não usa PI de velocidade para gerar iq_ref: evita o problema de
             # windup zero — o anti-windup congela o integrador durante a aceleração
             # inteira (erro grande → saturação), de modo que quando wm alcança
             # speed_ref a saída do PI cai abruptamente para zero, causando oscilação.
@@ -550,7 +691,7 @@ class Simulation:
                 pedal_pos = 1.0
             effective_speed_ref = self.speed_ref
 
-            # Derating térmico: reduz iq_max linearmente entre T_alarm e T_max.
+            # Derate térmico: reduz iq_max linearmente entre T_alarm e T_max.
             # Acima de T_max → corrente zero (proteção de isolamento).  Para
             # T_max = T_alarm = 1e6 (defaults) o fator é sempre 1 e nada muda.
             if temp >= self.T_max:
@@ -564,9 +705,10 @@ class Simulation:
             iq_pedal = self.max_current * pedal_pos * thermal_derate
 
             # Filtro LP de 1ª ordem em wm (τ=tau_wm) — usado APENAS pelo
-            # limitador suave. Atenua o ripple numérico de torque que
-            # realimentava em iq_ref e disparava ciclo-limite no joelho da
-            # rampa. Não filtra wm na dinâmica do motor (que continua exata).
+            # limitador suave e pelo teto de potência. Atenua o ripple
+            # numérico de torque que realimentava em iq_ref e disparava
+            # ciclo-limite no joelho da rampa. Não filtra wm na dinâmica
+            # do motor (que continua exata).
             _alpha_wm = dt / (self.tau_wm + dt)
             self.wm_filt += _alpha_wm * (wm - self.wm_filt)
 
@@ -584,6 +726,8 @@ class Simulation:
 
             # Limitador de potência DC (FSAE EV.4.1: P_dc ≤ p_max_dc).
             #   P_dc ≈ P_mec/η = Kt·iq·wm/η  →  iq_max = P_max_dc·η/(Kt·wm)
+            # Produz o perfil clássico: torque constante até a velocidade-
+            # base, potência constante (torque ∝ 1/ω) acima dela.
             # Usa wm_filt pela mesma razão do limitador de rotação: evita
             # realimentar ripple numérico de torque no comando de corrente.
             if self.p_max_dc is not None and self.Kt > 0.0:
@@ -593,12 +737,13 @@ class Simulation:
             else:
                 iq_from_power = self.max_current
 
+            # iq_ref final = o MAIS RESTRITIVO dos três limites
             iq_ref = float(np.clip(min(iq_pedal, iq_from_speed, iq_from_power),
                                    0.0, self.max_current))
             sp_err = effective_speed_ref - wm   # logado apenas para diagnóstico
 
-            # ── Field weakening ───────────────────────────────────────────────
-            # Velocidade base: ωe_base = Vlim / λm  (ponto onde back-EMF
+            # ── Field weakening (enfraquecimento de campo) ────────────────────
+            # Velocidade base: ωe_base = Vlim / λm  (ponto onde o back-EMF
             # no eixo q (ωe·λm) atinge o limite de tensão com id=0).
             # Acima da velocidade base, injetamos id_ref < 0 para reduzir
             # o fluxo efetivo λd = λm + Ld·id, liberando margem de tensão
@@ -607,6 +752,8 @@ class Simulation:
             # Fórmula: id_fw = (fw_limit / ωe − λm) / Ld   (negativo acima da base)
             # fw_limit = 0.90·Vlim — operamos dentro de 90% do limite para
             # deixar margem ao PI de corrente.
+            # id_fw é limitado a −0.5·max_current (proteção contra
+            # desmagnetização e sobrecorrente de eixo d).
             we_abs = abs(we)
             id_ref = 0.0
             if (we_abs > self.wm_floor * self.p
@@ -617,13 +764,19 @@ class Simulation:
                     id_fw  = (fw_limit / we_abs - self.lambda_m) / self.ld
                     id_ref = float(np.clip(id_fw, -self.max_current * 0.5, 0.0))
 
-            # ── 5. PIDs de corrente → comandos de tensão ─────────────────────
+            # ── 5. PIs de corrente → comandos de tensão ──────────────────────
+            #
+            # vd = PI_d(id_ref − isd) − ωe·Lq·isq            (desacoplamento)
+            # vq = PI_q(iq_ref − isq) + ωe·(Ld·isd + λm)     (desac. + bEMF)
+            #
+            # Os termos de desacoplamento (feedforward) cancelam o
+            # acoplamento cruzado das equações dq, deixando para cada PI
+            # uma planta de 1ª ordem independente.
             #
             # Anti-windup em DOIS estágios:
             #  (a) Interno ao PID: saturação ao próprio limit (Vdc_nominal) com
             #      back-calculation automática em update().
-            #  (b) Externo: a saída do PID é somada ao termo de desacoplamento
-            #      (feedforward de back-EMF) e depois cortada a ±Vlim, que pode
+            #  (b) Externo: a soma PI+desacoplamento é cortada a ±Vlim, que pode
             #      ser MENOR que Vdc_nominal sob carga (queda interna na bateria).
             #      Se a soma exceder ±Vlim, devolvemos o excesso ao integrador
             #      via back_calculate() para evitar windup silencioso.
@@ -661,7 +814,8 @@ class Simulation:
             wt_log      = (self.transmission.motor_to_wheel_torque(Ce_now)
                            if self.transmission is not None else 0.0)
 
-            # abc e inversor (best-effort)
+            # Correntes de fase abc para o dashboard (best-effort — se o
+            # motor não fornecer a transformação, loga zeros)
             try:
                 is1, is2, is3, *_ = self.motor.abc_currents_from_dq(
                     isd, isq, theta_e, self.ld*isd + self.lambda_m)
@@ -723,11 +877,12 @@ class Simulation:
 
             t += dt
 
-            # ── Critério de parada por distância ─────────────────────────────
+            # ── 8. Critério de parada por distância ──────────────────────────
             if self.dmax is not None and vp >= self.dmax:
                 break
 
-        # Trunca arrays para o tamanho efetivamente preenchido.
+        # Trunca arrays para o tamanho efetivamente preenchido (a parada
+        # por distância normalmente encerra antes de N passos).
         n_used = self.k_log
         for _name in self._LOG_FIELDS:
             setattr(self, _name, getattr(self, _name)[:n_used])
@@ -738,6 +893,8 @@ class Simulation:
               f"SoC final={self.soc_hist[-1]:.3f}  "
               f"Vdc final={self.battery_voltage_hist[-1]:.1f} V")
 
+        # Dict de retorno com CHAVES PÚBLICAS (nomes ≠ atributos internos).
+        # Consumidores externos (otimizador, scripts) devem usar estas chaves.
         return {
             't':                      np.array(self.tempo),
             'isd':                    np.array(self.corrented),
