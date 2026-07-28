@@ -1,3 +1,43 @@
+# -*- coding: utf-8 -*-
+"""
+main.py — Dashboard web (Dash) do DigitalTwin Aceleration — Xangô E-Racing
+===========================================================================
+
+Projeto : DigitalTwin Aceleration  ·  v0.1.5
+Autor   : Marco Affonso de Carvalho Santos
+
+Interface gráfica interativa do digital twin. Rodar com ``python main.py``
+e abrir http://127.0.0.1:8050/.
+
+Arquitetura do aplicativo
+-------------------------
+  • SIDEBAR (esquerda, recolhível): editor de parâmetros em 7 cartões
+    accordion — Veículo, Transmissão, Aerodinâmica, Motor, Bateria,
+    Pneu (PAC2002) e Simulação — mais o botão "Executar Simulação".
+  • ÁREA PRINCIPAL: 10 abas de visualização (9 de gráficos + Histórico).
+  • STORES (dcc.Store — estado no navegador, sem backend de sessão):
+      - parameters-store : último conjunto de parâmetros usado
+      - stored-figures   : as 9 figuras serializadas da última execução
+      - sim-history      : lista de execuções (tempo, distância, diffs)
+      - last-params      : parâmetros da execução anterior (para o diff)
+      - sidebar-state    : sidebar visível/oculta
+
+Fluxo de dados
+--------------
+  inputs da sidebar ──(clique em "Executar Simulação")──▶
+  run_simulation_once():
+      lê todos os States → instancia Transmission/Vehicle/BatteryPack/
+      Tire/Motor/Pedal → cria Simulation → sim.simulate() →
+      gera as 9 figuras → grava tudo em stored-figures ──▶
+  render_active_tab():
+      exibe a figura correspondente à aba ativa (ou a tabela de
+      histórico na aba 📋).
+
+Convenção importante: as funções create_*_plot recebem o OBJETO Simulation
+(não o dict retornado por simulate()) e leem os atributos internos
+``sim.tempo``, ``sim.velocidade``, ``sim.conjugado`` etc. diretamente.
+"""
+
 import dash
 import numpy as np
 from dash import dcc, html
@@ -9,7 +49,8 @@ from Models import BatteryPack, Tire, Transmission, Vehicle, Motor, Pedal
 from Simulation.Simulation import Simulation
 
 # ---------------------
-# Dash app com layout modificado
+# Aplicativo Dash — folhas de estilo externas (ícones FontAwesome, fonte
+# Roboto, reset CSS do Dash e tema Bootstrap para os componentes dbc.*)
 # ---------------------
 external_stylesheets = [
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
@@ -19,13 +60,17 @@ external_stylesheets = [
 ]
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app.title = 'DigitalTwin Aceleration'   # título da aba do navegador
 server = app.server
 
-# Layout principal com sidebar
+# Layout principal: stores de estado + botão de toggle + sidebar + área de abas
 app.layout = html.Div([
     dcc.Store(id='simulation-data'),
-    
-    # 1. ATUALIZAÇÃO NO STORE: Adicionados L, h, dist_cg
+
+    # Store central de parâmetros — valores DEFAULT do projeto.
+    # Estes defaults devem permanecer sincronizados com SIM_CONFIG do
+    # otimizador (Otimizador/otimizador.py); refletem a revisão física
+    # 2026-06 (EMRAX 228, 144S5P, Hoosier 20.5x7.0-13, 80 kW FSAE).
     dcc.Store(id='parameters-store', data={
         'vehicle': {
             'mass': 240,
@@ -64,6 +109,8 @@ app.layout = html.Div([
             'camber': 0.0,
         }
     }),
+    # Stores auxiliares: visibilidade da sidebar, figuras da última run,
+    # flag de execução, histórico de runs e parâmetros da run anterior.
     dcc.Store(id='sidebar-state', data={'visible': True}),
     dcc.Store(id='stored-figures', data={}),
     dcc.Store(id='simulation-run-flag', data={'run': False}),
@@ -71,7 +118,7 @@ app.layout = html.Div([
     dcc.Store(id='last-params', data=None),
 
     html.Div([
-        # Botão vertical fino
+        # Botão vertical fino que mostra/oculta a sidebar de parâmetros
         html.Button(
             id='sidebar-toggle',
             children=html.I(className='fas fa-chevron-right'),
@@ -97,11 +144,11 @@ app.layout = html.Div([
             }
         ),
 
-        # Sidebar com controles
+        # Sidebar com os 7 cartões accordion de parâmetros + botão Executar
         html.Div([
             html.Div([
                 html.H4("Parâmetros", style={'margin': '0', 'color': '#2c3e50', 'fontWeight': '600'}),
-                html.Small("Digital-Twin Xangô-E.Racing",
+                html.Small("DigitalTwin Aceleration",
                            style={'color': '#6c757d', 'fontSize': '11px'}),
             ], style={'padding': '10px 4px 16px 32px', 'borderBottom': '1px solid #dee2e6',
                       'marginBottom': '12px'}),
@@ -375,7 +422,7 @@ app.layout = html.Div([
         # Área principal com tabs e gráfico
         html.Div([
             html.Div([
-                html.H1("Digital-Twin de Powertrain — Xangô-E.Racing",
+                html.H1("DigitalTwin Aceleration — Xangô E-Racing",
                         style={'color': '#2c3e50', 'margin': '0', 'fontSize': '22px',
                                'fontWeight': '600'}),
                 html.Small("Simulação PMSM + Veículo + Bateria + Pneu",
@@ -425,9 +472,21 @@ app.layout = html.Div([
 ])
 
 # ---------------------
-# Funções de plotagem (definidas globalmente)
+# Funções de plotagem
+# ---------------------
+# Todas recebem o OBJETO Simulation após sim.simulate() e leem os arrays
+# de log internos (sim.tempo, sim.velocidade, ...) diretamente — ver a
+# lista _LOG_FIELDS em Simulation.py para o catálogo completo de sinais.
+# Cada função devolve uma figura Plotly que o callback serializa com
+# .to_dict() para o store 'stored-figures'.
 # ---------------------
 def create_velocity_torque_plot(sim):
+    """Aba 'Velocidade & Torque': RPM do motor + torques elétrico/carga.
+
+    Linha 1: velocidade mecânica do motor [RPM].
+    Linha 2: torque eletromagnético Kt·iq vs. torque de carga refletido
+             (a diferença entre as curvas é o torque que acelera o rotor).
+    """
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Velocidade Mecânica", "Torque do Motor"), vertical_spacing=0.1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.velocidade, name='Velocidade'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.conjugado, name='Torque Elétrico'), row=2, col=1)
@@ -439,6 +498,12 @@ def create_velocity_torque_plot(sim):
     return fig
 
 def create_currents_plot(sim):
+    """Aba 'Correntes': correntes dq (referencial rotórico) + fases abc.
+
+    Id ≠ 0 indica field weakening ativo; Iq é proporcional ao torque.
+    As fases abc são reconstruídas pela transformação inversa apenas para
+    visualização (a dinâmica evolui em dq).
+    """
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Correntes dq", "Correntes de Fase"), vertical_spacing=0.1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.corrented, name='Id'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.correnteq, name='Iq'), row=1, col=1)
@@ -449,6 +514,11 @@ def create_currents_plot(sim):
     return fig
 
 def create_voltages_plot(sim):
+    """Aba 'Tensões': comandos vd/vq do FOC + tensões de fase abc.
+
+    vd/vq saturando no nível da tensão da bateria indica que o FOC ficou
+    sem margem de tensão (região de field weakening).
+    """
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Tensões de Controle dq", "Tensões de Fase"), vertical_spacing=0.1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.tensaosd, name='Vd'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vd_real, name='Vd real'), row=1, col=1)
@@ -461,6 +531,11 @@ def create_voltages_plot(sim):
     return fig
 
 def create_flux_temp_plot(sim):
+    """Aba 'Fluxo & Temp.': fluxos concatenados dq + temperatura do enrolamento.
+
+    Fluxo d = Ld·isd + λm (cai com field weakening); fluxo q = Lq·isq.
+    A temperatura vem da ODE térmica (perdas cobre + ferro − resfriamento).
+    """
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Fluxos Magnéticos", "Temperatura do sim"), vertical_spacing=0.1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.fluxosd, name='Fluxo d'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.fluxosq, name='Fluxo q'), row=1, col=1)
@@ -469,6 +544,11 @@ def create_flux_temp_plot(sim):
     return fig
 
 def create_control_plot(sim):
+    """Aba 'Controle FOC': saídas vd/vq dos PIs + erro de velocidade.
+
+    O 'erro de velocidade' (speed_ref − wm) é apenas diagnóstico — não há
+    malha fechada de velocidade; o controle é de torque via pedal.
+    """
     fig = make_subplots(rows=2, cols=1, subplot_titles=("Sinais de Controle FOC", "Erro de Velocidade"), vertical_spacing=0.1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vd_control, name='Vd control'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vq_control, name='Vq control'), row=1, col=1)
@@ -477,6 +557,9 @@ def create_control_plot(sim):
     return fig
 
 def create_complete_plot(sim):
+    """Aba 'Visão Completa': painel 3×2 com os sinais elétricos principais
+    (velocidade, torques, correntes dq/abc, tensões dq/abc) numa tela só.
+    """
     fig = make_subplots(rows=3, cols=2, subplot_titles=(
         "Velocidade Mecânica", "Torque do sim", "Correntes", "Correntes de Fase", "Tensões de Controle", "Tensões de Fase"
     ), vertical_spacing=0.08, horizontal_spacing=0.1)
@@ -499,12 +582,17 @@ def create_complete_plot(sim):
     return fig
 
 def create_vehicle_plot(sim):
+    """Aba 'Veículo': desempenho longitudinal do carro.
+
+    Velocidade [km/h], aceleração [m/s²], força trativa vs. resistiva [N]
+    (o cruzamento das duas define a velocidade terminal) e torque na roda.
+    """
     fig = make_subplots(
-        rows=2, cols=2, 
-        subplot_titles=("Velocidade (km/h)", "Aceleração (m/s²)", "Forças (N)", "Torque na Roda (Nm)"), 
+        rows=2, cols=2,
+        subplot_titles=("Velocidade (km/h)", "Aceleração (m/s²)", "Forças (N)", "Torque na Roda (Nm)"),
         vertical_spacing=0.15, horizontal_spacing=0.1
     )
-    velocity_kmh = [v * 3.6 for v in sim.vehicle_velocity]
+    velocity_kmh = [v * 3.6 for v in sim.vehicle_velocity]   # m/s → km/h
     fig.add_trace(go.Scatter(x=sim.tempo, y=velocity_kmh, name='Velocidade'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.vehicle_acceleration, name='Aceleração'), row=1, col=2)
     
@@ -517,7 +605,14 @@ def create_vehicle_plot(sim):
     fig.update_yaxes(title_text="Força (N)", row=2, col=1)
     return fig
 def create_tire_plot(sim):
-    # Alterado para 2 linhas x 2 colunas para acomodar os novos gráficos
+    """Aba 'Pneu': análise do contato pneu-solo em 4 painéis.
+
+    1. Slip ratio κ vs. tempo (pico na largada = wheelspin);
+    2. Curva TEÓRICA de Pacejka Fx(κ) avaliada no Fz médio da operação;
+    3. Carga normal dinâmica Fz vs. tempo (estático + transferência + asa);
+    4. Velocidade angular da roda vs. tempo (RPM motor / N → rad/s).
+    """
+    # Grade 2×2 para acomodar os quatro painéis
     fig = make_subplots(
         rows=2, cols=2, 
         subplot_titles=(
@@ -540,9 +635,9 @@ def create_tire_plot(sim):
 
     # --- Gráfico 2: Curva do Pneu (Fx vs slip) ---
     # Curva TEÓRICA do Pacejka avaliada num Fz fixo (média da operação).
-    # Substitui o sort+drop_duplicates do código original, que costurava
-    # pontos de instantes diferentes (cada um com seu Fz) numa linha só,
-    # gerando o aspecto serrilhado pós-pico.
+    # Nota histórica: substituiu um sort+drop_duplicates dos pontos
+    # simulados, que costurava instantes diferentes (cada um com seu Fz)
+    # numa linha só e gerava aspecto serrilhado pós-pico.
     if len(sim.slip_ratio_hist) > 0 and sim.tire is not None:
         slip_arr = np.asarray(sim.slip_ratio_hist)
         fz_arr   = np.asarray(sim.fz_hist)
@@ -595,6 +690,11 @@ def create_tire_plot(sim):
     return fig
 
 def create_battery_plot(sim):
+    """Aba 'Bateria': tensão terminal, corrente DC (balanço de potência) e SoC.
+
+    A corrente exibida é a corrente DC real do barramento (I_bat = P/V),
+    NÃO a corrente isq do motor — ver invariante em Simulation.py.
+    """
     fig = make_subplots(rows=3, cols=1, subplot_titles=("Tensão do Banco (V)", "Corrente (A)", "SoC"), vertical_spacing=0.12)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.battery_voltage_hist, name='Tensão Banco'), row=1, col=1)
     fig.add_trace(go.Scatter(x=sim.tempo, y=sim.battery_current_hist, name='Corrente'), row=2, col=1)
@@ -606,7 +706,7 @@ def create_battery_plot(sim):
     return fig
 
 # ---------------------
-# Callback para mostrar/esconder la sidebar
+# Callback: mostrar/esconder a sidebar
 # ---------------------
 @app.callback(
     [Output('sidebar', 'style'),
@@ -617,6 +717,12 @@ def create_battery_plot(sim):
     [State('sidebar-state', 'data')]
 )
 def toggle_sidebar(n_clicks, sidebar_state):
+    """Alterna a visibilidade da sidebar deslizando-a para fora da tela.
+
+    A sidebar é movida via CSS ``left: 0 ↔ -320px`` e a margem do conteúdo
+    principal acompanha, com transição animada. O estado persiste no store
+    'sidebar-state' para sobreviver a novos cliques.
+    """
     base_sidebar = {'width': '320px', 'backgroundColor': '#ffffff',
                     'height': '100vh', 'overflowY': 'auto', 'position': 'fixed',
                     'transition': 'left 0.3s ease',
@@ -642,7 +748,12 @@ def toggle_sidebar(n_clicks, sidebar_state):
     return sidebar_style, content_style, icon, {'visible': visible}
 
 # ---------------------
-# Helper: nomes amigáveis para o diff de parâmetros
+# Helpers do diff de parâmetros (aba Histórico)
+# ---------------------
+# A aba 📋 Histórico mostra, para cada execução, QUAIS parâmetros mudaram
+# em relação à execução anterior. O mecanismo: achatar os dicts de
+# parâmetros (_flatten), comparar chave a chave (_diff_params) e exibir
+# com rótulos amigáveis (_PARAM_LABELS) e formatação compacta (_fmt_val).
 # ---------------------
 _PARAM_LABELS = {
     'vehicle.mass': 'Massa', 'vehicle.wheel_radius': 'Raio Roda',
@@ -672,6 +783,7 @@ _PARAM_LABELS = {
 }
 
 def _flatten(d, prefix=''):
+    """Achata dict aninhado em chaves pontilhadas: {'a': {'b': 1}} → {'a.b': 1}."""
     out = {}
     for k, v in (d or {}).items():
         key = f"{prefix}.{k}" if prefix else k
@@ -682,9 +794,13 @@ def _flatten(d, prefix=''):
     return out
 
 def _diff_params(old, new):
-    """Retorna lista [(label, old_val, new_val)] de parâmetros alterados.
+    """Retorna lista [(label, old_val, new_val)] de parâmetros alterados
+    entre duas execuções.
 
-    Skips 'inversor' (não usado) e PAC2002 coefs internos (ruído visual)."""
+    ``old`` = None (primeira execução) devolve o sentinela [('—', None,
+    None)], que _summarize_changes traduz para "primeira simulação".
+    Ignora 'inversor.*' (parâmetros não usados pela simulação) e os
+    coeficientes internos PAC2002 (ruído visual na tabela)."""
     if old is None:
         return [('—', None, None)]
     old_flat, new_flat = _flatten(old), _flatten(new)
@@ -699,6 +815,7 @@ def _diff_params(old, new):
     return changes
 
 def _fmt_val(v):
+    """Formata um valor de parâmetro para exibição ('—' para None)."""
     if v is None:
         return '—'
     if isinstance(v, float):
@@ -706,6 +823,7 @@ def _fmt_val(v):
     return str(v)
 
 def _summarize_changes(changes):
+    """Resume a lista de mudanças em uma linha: '1º parâmetro: a → b (+n)'."""
     if not changes:
         return html.Span('— (sem alteração)', style={'color': '#6c757d'})
     if changes[0][0] == '—' and changes[0][1] is None:
@@ -718,7 +836,11 @@ def _summarize_changes(changes):
     return text
 
 # ---------------------
-# Callback unificado: lê inputs, atualiza store, roda simulação, gera figuras
+# Callback principal: lê inputs, atualiza store, roda simulação, gera figuras
+# ---------------------
+# Disparado APENAS pelo clique em "Executar Simulação" (único Input).
+# Todos os campos da sidebar entram como State — seus valores são lidos no
+# momento do clique, sem re-executar a simulação a cada tecla digitada.
 # ---------------------
 @app.callback(
     [Output('stored-figures', 'data'),
@@ -799,6 +921,21 @@ def run_simulation_once(n_clicks,
                         tire_PEX1, tire_PEX2, tire_PEX3, tire_PEX4,
                         tire_PKX1, tire_PKX2,
                         current_params, history, last_params):
+    """Executa uma simulação completa e regenera todas as figuras.
+
+    Etapas:
+      1. Monta os dicts de parâmetros a partir dos valores da sidebar;
+      2. Instancia os modelos (Transmission, Vehicle, BatteryPack, Tire,
+         Motor) e o Pedal com perfil smoothstep até t_pico;
+      3. Cria a Simulation (80 kW FSAE, dmax da sidebar) e roda simulate();
+      4. Gera as 9 figuras e serializa em 'stored-figures';
+      5. Calcula o diff de parâmetros vs. execução anterior e acrescenta a
+         entrada ao histórico.
+
+    Retorna: figuras, flag de execução, parâmetros novos, texto de status,
+    histórico atualizado e os parâmetros para o próximo diff.
+    """
+    # Carga inicial da página (sem clique): não roda nada
     if n_clicks is None or n_clicks == 0:
         return (dash.no_update, {'run': False}, current_params, "",
                 history or [], last_params)
@@ -941,6 +1078,11 @@ def run_simulation_once(n_clicks,
 # Render do histórico em tabela
 # ---------------------
 def _render_history_table(history):
+    """Monta a tabela da aba 📋 Histórico a partir do store 'sim-history'.
+
+    Cada linha = uma execução: número, tempo final, distância e o resumo
+    dos parâmetros alterados vs. a execução anterior (mais recentes no topo).
+    """
     if not history:
         return html.Div(
             "Nenhuma simulação executada ainda.",
@@ -1004,6 +1146,13 @@ _GRAPH_STYLE_HIDDEN = {'display': 'none'}
      Input('sim-history', 'data')],
 )
 def render_active_tab(active_tab, stored_figures, history):
+    """Alterna o conteúdo exibido conforme a aba ativa.
+
+    • Aba 'history' → oculta o gráfico e mostra a tabela de histórico;
+    • Sem figuras ainda → placeholder pedindo para executar a simulação;
+    • Demais abas → busca a figura serializada correspondente no store.
+    Trocar de aba NÃO roda simulação — só troca a figura já armazenada.
+    """
     if active_tab == 'history':
         return (go.Figure(), _GRAPH_STYLE_HIDDEN,
                 _render_history_table(history or []),
@@ -1034,6 +1183,11 @@ def render_active_tab(active_tab, stored_figures, history):
      Input('final-drive-ratio', 'value')],
 )
 def update_ratio_display(z1, z2, ratio_manual):
+    """Exibe ao vivo a relação N calculada dos dentes (ou a manual).
+
+    Mesma regra de precedência do Transmission: Z₂/Z₁ vence a relação
+    manual quando ambos os campos de dentes estão preenchidos.
+    """
     if z1 and z2 and int(z1) > 0:
         n = int(z2) / int(z1)
         return f"Relação calculada: {n:.3f} (Z₂/Z₁ = {int(z2)}/{int(z1)})"
@@ -1055,6 +1209,10 @@ def update_ratio_display(z1, z2, ratio_manual):
      Input('wing-area-rear', 'value')],
 )
 def update_wing_ui(has_wing, cl_front, area_front, cl_rear, area_rear):
+    """Oculta os parâmetros de asa quando o switch está desligado e mostra
+    uma prévia do downforce total (½ρ·ΣCl·A·v²) a 60/80/100 km/h, com o
+    percentual traseiro a 80 km/h — feedback imediato sem rodar simulação.
+    """
     style = {} if has_wing else {'display': 'none'}
     if not has_wing or None in (cl_front, area_front, cl_rear, area_rear):
         return style, ""
@@ -1073,6 +1231,10 @@ def update_wing_ui(has_wing, cl_front, area_front, cl_rear, area_rear):
     return style, msg
 
 
+# ---------------------
+# Entry point: sobe o servidor de desenvolvimento do Dash em
+# http://127.0.0.1:8050/ (debug=True ativa hot-reload ao salvar arquivos)
+# ---------------------
 if __name__ == '__main__':
     print("")
     app.run(debug=True)
