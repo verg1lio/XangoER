@@ -1,86 +1,116 @@
+# -*- coding: utf-8 -*-
 """
 Vehicle.py — Modelo longitudinal do veículo Fórmula SAE
+========================================================
+
+Modela o carro como um corpo em translação pura, respondendo a três
+perguntas para a Simulation a cada passo:
+
+  1. Quais forças RESISTEM ao movimento?  (calculate_resistance_forces:
+     arrasto aerodinâmico + rolamento dependente de velocidade + rampa)
+  2. Quanta carga vertical Fz há na roda motriz?  (calculate_load_transfer:
+     peso estático + transferência longitudinal m·a·h/L + downforce traseiro)
+     — é o Fz que alimenta a Magic Formula do pneu.
+  3. Qual a inércia do trem de força vista pelo eixo do motor?
+     (calculate_reflected_inertia — usada para montar J_eff da equação
+     rotacional em Simulation.__init__)
+
+Modelo de DOIS CORPOS (contexto essencial para a inércia refletida)
+-------------------------------------------------------------------
+Motor e veículo são corpos dinâmicos SEPARADOS na Simulation, acoplados
+apenas pelo escorregamento do pneu:
+
+    J_eff × dω/dt = T_em − T_carga − kf·ω − T_ferro     (rotacional, motor)
+    m     × dv/dt = F_tração − F_resistência             (translacional, carro)
+
+Para a equação do MOTOR, J_eff deve conter SOMENTE inércias rotacionais:
+    J_eff = J_rotor + J_pinhão + (J_rodas + J_semi-eixos + J_diff + J_coroa)/N²
+
+A massa translacional refletida m·(r/N)² pertence à equação do VEÍCULO e
+NÃO pode entrar em J_eff (seria dupla contagem). Porém,
+calculate_reflected_inertia() RETORNA o total incluindo m·(r/N)² — para
+compatibilidade com modelos de corpo único (acoplamento rígido). A
+Simulation compensa subtraindo o termo translacional, e este módulo também
+disponibiliza as parcelas separadas nos atributos ``j_rot_reflected`` e
+``j_translational`` após cada chamada.
 
 Histórico de correções
 -----------------------
 v2 (este):
   Bug latente corrigido em calculate_reflected_inertia():
-    ANTES: j_translation = mass × r²  depois divide tudo por N²
-           → resulta em mass × r²/N² = mass × (r/N)²  ← correto por acidente
-           → mas a função retorna J_wrong se chamada isoladamente
-           → Simulation.py compensava com uma subtração separada
-    DEPOIS: formula diretamente correta, sem compensação externa necessária:
-           j_translation = mass × (r/N)²  (reflexão direta para o motor)
-           j_rot_roda+tx refletidas = J_slow / N²
-           j_total = j_motor_side (não incluído aqui) + j_rot_refl + j_transl
-
-  Adicionado: J_sprocket (inércia do sprocket/coroa no lado do motor).
-    Componentes no lado de ALTA VELOCIDADE (motor) somam-se DIRETAMENTE
-    ao rotor — sem reflexão por N².
-    Exemplo: sprocket de alumínio FSAE (m≈0.3 kg, r_ext≈55 mm)
-             J ≈ 0.5 × 0.3 × 0.055² ≈ 0.0005 kg·m²
-    Se desconhecido, use 0.0 e o modelo ainda é conservador.
-
-Equação de inércia refletida (dois corpos separados — ver Simulation.py):
-  ─────────────────────────────────────────────────────────────────────
-  Para a equação do MOTOR (J_eff):
-    J_eff = J_motor + J_sprocket + J_rot_refletida
-  Para a equação do VEÍCULO (Newton translacional):
-    m × dv/dt = F_tração − F_resistência
-  ─────────────────────────────────────────────────────────────────────
-  Isso evita dupla contagem da massa translacional m×(r/N)².
-  calculate_reflected_inertia() retorna J_rot_refletida + J_translacional
-  para uso em modelos de CORPO ÚNICO (acoplamento rígido). Para o modelo
-  de dois corpos de Simulation.py, apenas J_rot_refletida é usada —
-  o campo j_rot_reflected é disponibilizado separadamente.
+    ANTES: j_translation = mass × r² e depois dividia tudo por N²
+           → resultava em mass × (r/N)²  ← correto por acidente
+           → mas a função retornava valor errado se chamada isoladamente
+    DEPOIS: fórmula diretamente correta j_translation = mass × (r/N)².
+  Adicionado: sprocket_inertia (pinhão no lado do motor) somado DIRETO,
+  sem reflexão por N², pois gira em velocidade de motor.
 """
 
 import numpy as np
 
 
 class Vehicle:
-    """Vehicle model for longitudinal dynamic simulation.
+    """Modelo do veículo para simulação dinâmica longitudinal.
 
-    Models aerodynamic drag, rolling resistance, road grade, load
-    transfer, and drivetrain inertia reflected to the motor shaft.
+    Modela arrasto aerodinâmico, resistência ao rolamento dependente de
+    velocidade, inclinação de pista, transferência de carga dinâmica,
+    downforce com asas dianteira/traseira separadas e a inércia do trem
+    de força refletida ao eixo do motor.
 
     Parameters
     ----------
     mass : float
-        Total vehicle mass (includes driver) [kg].
+        Massa total do veículo (piloto incluso) [kg].
     wheel_radius : float
-        Effective rolling radius of the tyre [m].
+        Raio efetivo de rolamento do pneu [m].
     wheel_mass : float
-        Mass of one wheel+tyre assembly [kg].
+        Massa de UM conjunto roda+pneu [kg] (usada na inércia das rodas).
     drag_coeff : float
-        Aerodynamic drag coefficient (Cd).
+        Coeficiente de arrasto aerodinâmico (Cd).
     frontal_area : float
-        Vehicle frontal area [m²].
+        Área frontal do veículo [m²].
     rolling_resistance : float
-        Rolling resistance coefficient (Cr).
+        Coeficiente base de resistência ao rolamento Cr0 — o efetivo
+        cresce com a velocidade: Cr(v) = Cr0·(1 + v/v_ref).
     road_grade : float, optional
-        Road slope angle [rad]. Default 0.
+        Ângulo de inclinação da pista [rad]. Default 0 (pista plana).
     environment_density : float, optional
-        Air density [kg/m³]. Default 1.225.
+        Densidade do ar [kg/m³]. Default 1.225 (nível do mar, 15 °C).
     L : float, optional
-        Wheelbase [m].
+        Entre-eixos [m]. Se None (junto com h e dist_cg), a transferência
+        de carga usa um fallback de 50 % do peso por eixo.
     h : float, optional
-        Height of centre of gravity [m].
+        Altura do centro de gravidade [m] — controla a transferência
+        longitudinal m·a·h/L.
     dist_cg : float, optional
-        Longitudinal distance from the FRONT (non-driven) axle to the CG [m].
-        Used as ``a`` in Fz_rear = m·g·a/L (moment about front axle → rear load).
-        For typical FSAE RWD with dist_cg=0.6 m, L=1.5 m: 40 % weight on rear.
+        Distância longitudinal do eixo DIANTEIRO (não-motriz) ao CG [m].
+        Usada como ``a`` em Fz_traseiro = m·g·a/L (momento em torno do
+        eixo dianteiro → carga no traseiro). Para um FSAE RWD típico com
+        dist_cg=0.6 m e L=1.5 m: 40 % do peso no eixo traseiro.
     n_driven_wheels : int, optional
-        Number of driven (powered) wheels. Default 2 (rear-wheel drive).
-    lift_coeff : float, optional
-        Aerodynamic vertical-force coefficient (Cl). Positive Cl = downforce
-        (force pointing down, increasing tyre load). Default 2.0 for a
-        full-aero FSAE package; use 0.0 for cars without wings.
-    lift_area : float, optional
-        Reference area for Cl [m²]. Default 0.7 m² (typical FSAE wing area).
-    downforce_balance_rear : float, optional
-        Fraction of total downforce applied to the rear axle (0–1).
-        Default 0.6 (slight rear bias typical of FSAE acceleration setups).
+        Número de rodas motrizes. Default 2 (tração traseira).
+    rolling_resistance_v_ref : float, optional
+        Velocidade de referência [m/s] da lei Cr(v). Default 150
+        (→ +13 % de rolamento a 72 km/h).
+    has_wing : bool, optional
+        Se False, todo o downforce é zerado (carro sem asas).
+    lift_coeff_front, area_front : float, optional
+        Cl e área de referência [m²] da asa DIANTEIRA. O downforce
+        dianteiro carrega o eixo dianteiro (não-motriz) — aumenta arrasto
+        induzido implícito no Cd, mas não a tração.
+    lift_coeff_rear, area_rear : float, optional
+        Cl e área de referência [m²] da asa TRASEIRA. O downforce traseiro
+        soma-se ao Fz da roda motriz → mais tração em alta velocidade.
+
+    Attributes
+    ----------
+    lift_coeff, lift_area, downforce_balance_rear : float
+        Agregados de retrocompatibilidade calculados a partir das asas
+        individuais (Cl total, área total e fração do downforce no
+        traseiro, respectivamente).
+    j_rot_reflected, j_translational : float
+        Preenchidos por calculate_reflected_inertia(): parcela rotacional
+        (para o modelo de dois corpos) e parcela translacional m·(r/N)².
     """
 
     def __init__(self,
@@ -118,17 +148,20 @@ class Vehicle:
         self.n_driven_wheels    = int(n_driven_wheels)
 
         # Cr(v) = Cr0 · (1 + v / v_ref) — velocidade de referência para
-        # variação da resistência ao rolamento. 150 m/s ≈ +13% a 72 km/h.
+        # variação da resistência ao rolamento. Com v_ref=150 m/s o efeito
+        # é suave: +13 % de rolamento a 72 km/h.
         self.rolling_resistance_v_ref = float(rolling_resistance_v_ref)
 
-        # Aerodinâmica vertical — asas dianteira e traseira separadas
+        # Aerodinâmica vertical — asas dianteira e traseira separadas.
+        # Só o downforce TRASEIRO entra no Fz da roda motriz (RWD).
         self.has_wing         = bool(has_wing)
         self.lift_coeff_front = float(lift_coeff_front)
         self.area_front       = float(area_front)
         self.lift_coeff_rear  = float(lift_coeff_rear)
         self.area_rear        = float(area_rear)
 
-        # Atributos agregados para retrocompatibilidade (calculados dos componentes)
+        # Atributos agregados para retrocompatibilidade com código que
+        # usava asa única (calculados a partir dos componentes).
         self.lift_coeff   = self.lift_coeff_front + self.lift_coeff_rear
         self.lift_area    = self.area_front + self.area_rear
         _df_front = self.lift_coeff_front * self.area_front
@@ -137,6 +170,7 @@ class Vehicle:
         self.downforce_balance_rear = _df_rear / _df_total if _df_total > 0 else 0.5
 
         self.g        = 9.81
+        # ½ρ pré-computado — aparece em todas as fórmulas aerodinâmicas
         self.half_rho = 0.5 * self.environment_density
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -144,13 +178,18 @@ class Vehicle:
     # ─────────────────────────────────────────────────────────────────────────
 
     def calculate_resistance_forces(self, velocity: float) -> float:
-        """Total longitudinal resistance force [N].
+        """Força de resistência longitudinal total [N].
 
-        Includes aerodynamic drag, velocity-dependent rolling resistance,
-        and road grade.
+        Soma três parcelas:
+          • Arrasto aerodinâmico:  F_aero  = ½ρ·Cd·A·v²
+          • Rolamento:             F_roll  = Cr(v)·m·g·cos(θ), com
+                                   Cr(v) = Cr0·(1 + v/v_ref)
+                                   (+6.7 % @ 10 m/s, +13 % @ 20 m/s,
+                                    +20 % @ 30 m/s para v_ref=150)
+          • Rampa:                 F_grade = m·g·sin(θ)
 
-        Rolling resistance: Cr(v) = Cr0 · (1 + v / v_ref)
-        At v_ref=150 m/s: +6.7% @ 10 m/s, +13% @ 20 m/s, +20% @ 30 m/s.
+        O valor retornado é subtraído da força de tração na equação
+        translacional do veículo (m·dv/dt = F_tração − F_resist).
         """
         v      = abs(float(velocity))
         Cr_v   = self.rolling_resistance * (1.0 + v / self.rolling_resistance_v_ref)
@@ -160,7 +199,13 @@ class Vehicle:
         return Faero + Froll + Fgrade
 
     def calculate_load_torque(self, velocity: float, transmission) -> float:
-        """Motor-equivalent torque to overcome vehicle resistance [N·m]."""
+        """Torque equivalente no MOTOR para vencer a resistência do veículo [N·m].
+
+        Converte a força resistiva em torque de roda (F·r) e reflete ao
+        eixo do motor dividindo por N·η. Função de conveniência para
+        análises isoladas — a Simulation calcula o torque de carga pelo
+        caminho completo do pneu (com saturação de tração).
+        """
         F_resist     = self.calculate_resistance_forces(velocity)
         wheel_torque = F_resist * self.wheel_radius
         return transmission.wheel_to_motor_torque(wheel_torque)
@@ -170,11 +215,13 @@ class Vehicle:
     # ─────────────────────────────────────────────────────────────────────────
 
     def calculate_downforce(self, velocity: float) -> float:
-        """Aerodynamic downforce [N] — TOTAL (front + rear), positive = down.
+        """Downforce aerodinâmico TOTAL [N] (dianteira + traseira), positivo = para baixo.
 
         F_down = ½ρ·(Cl_front·A_front + Cl_rear·A_rear)·v²
 
-        Returns 0 when has_wing=False (car without wings).
+        Retorna 0 quando has_wing=False (carro sem asas). Usada para
+        diagnóstico/exibição; a Simulation usa apenas a parcela traseira,
+        via calculate_load_transfer.
         """
         if not self.has_wing:
             return 0.0
@@ -184,25 +231,38 @@ class Vehicle:
         return F_front + F_rear
 
     def calculate_load_transfer(self, a: float, velocity: float = 0.0) -> float:
-        """Dynamic normal force on the driven (rear) axle, PER WHEEL [N].
+        """Força normal dinâmica no eixo motriz (traseiro), POR RODA [N].
 
-        Aggregates three contributions:
-          • Static weight on rear axle (from CG location)
-          • Longitudinal load transfer (m·a·h/L) during acceleration
-          • Aerodynamic downforce on rear (½ρCl·A·v² · balance_rear)
+        Soma três contribuições e divide o total do eixo por 2:
+
+          • Peso estático no traseiro:  m·g·dist_cg/L
+            (momento em torno do eixo dianteiro)
+          • Transferência longitudinal: m·a·h/L
+            (acelerar "senta" o carro na traseira → mais Fz → mais tração;
+            é por isso que o Fz cresce durante a largada)
+          • Downforce traseiro:         ½ρ·Cl_rear·A_rear·v²
+            (cresce com v² → recupera tração em alta velocidade)
+
+        O resultado alimenta a Magic Formula do pneu (que trabalha POR
+        pneu) — a Simulation multiplica a força do pneu por
+        n_driven_wheels para obter o teto de tração do eixo.
 
         Parameters
         ----------
         a : float
-            Longitudinal vehicle acceleration [m/s²].
+            Aceleração longitudinal do veículo [m/s²]. Como Fz depende de
+            ``a`` e ``a`` depende de Fz, a Simulation resolve esse loop
+            algébrico com 2 iterações de ponto fixo.
         velocity : float, optional
-            Vehicle longitudinal speed [m/s]. Default 0 (static).
+            Velocidade longitudinal [m/s]. Default 0 (estático).
 
         Returns
         -------
         float
-            Normal force per rear wheel [N] (axle total / 2).
+            Força normal por roda traseira [N] (total do eixo / 2).
         """
+        # Fallback sem geometria: 50 % do peso + downforce traseiro,
+        # dividido por roda (sem transferência longitudinal).
         if self.L is None or self.h is None or self.dist_cg is None:
             base = self.mass * self.g * 0.5
             F_down_rear = (self.half_rho * self.lift_coeff_rear * self.area_rear
@@ -216,56 +276,61 @@ class Vehicle:
         return (Fz_static + load_transfer + F_down_rear) / 2.0
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Inércia refletida — FÓRMULA CORRETA
+    # Inércia refletida ao eixo do motor
     # ─────────────────────────────────────────────────────────────────────────
 
     def calculate_reflected_inertia(self, transmission) -> float:
-        """Total drivetrain inertia reflected to the motor shaft [kg·m²].
+        """Inércia total do trem de força refletida ao eixo do motor [kg·m²].
 
-        Computes the equivalent rotational inertia seen by the motor,
-        following the kinetic-energy equivalence method:
+        Calcula a inércia rotacional equivalente vista pelo motor pelo
+        método de equivalência de energia cinética:
 
             J_reflected = J_motor_side
                         + J_slow_side / N²
                         + m_vehicle × (r/N)²
 
-        where:
-          J_motor_side   = sprocket_inertia  (rotates at motor speed)
-          J_slow_side    = J_wheels + J_axles + J_differential
-                           (rotate at wheel speed ω_wheel = ω_motor / N)
-          m × (r/N)²     = translational mass reflected to motor shaft
-                           (r/N is wheel radius as seen from the motor)
+        onde:
+          J_motor_side   = sprocket_inertia (pinhão — gira em vel. de motor,
+                           soma direto, SEM reflexão)
+          J_slow_side    = J_rodas + J_semi-eixos + J_diferencial + J_coroa
+                           (giram em vel. de roda ω_roda = ω_motor/N →
+                           refletidas por 1/N²)
+          m × (r/N)²     = massa translacional refletida ao eixo do motor
+                           (r/N é o raio da roda "visto" pelo motor)
 
-        Note on the two-body model (used in Simulation.py)
-        ---------------------------------------------------
-        When motor and vehicle are modelled as separate dynamic bodies
-        (Newton eq. for each), the translational term m×(r/N)² belongs
-        to the vehicle equation, NOT to the motor equation.  In that
-        case use only:
-            J_eff_motor = J_motor (from Motor.jm) + J_motor_side (sprocket)
+        Nota sobre o modelo de DOIS CORPOS (usado em Simulation.py)
+        -----------------------------------------------------------
+        Quando motor e veículo são corpos dinâmicos separados (uma equação
+        de Newton para cada), o termo translacional m×(r/N)² pertence à
+        equação do VEÍCULO, NÃO à do motor. Nesse caso use apenas:
+
+            J_eff_motor = J_rotor (Motor.jm) + J_motor_side (pinhão)
                         + J_slow_side / N²
 
-        This value is available as ``j_rot_reflected`` attribute after
-        calling this method.
+        Essa parcela fica disponível no atributo ``j_rot_reflected`` após
+        chamar este método (e ``j_translational`` guarda m×(r/N)²).
+        A Simulation usa o retorno completo e subtrai o termo
+        translacional — as duas rotas dão o mesmo J_eff.
 
         Parameters
         ----------
         transmission : Transmission
-            Must have attributes: final_drive_ratio, efficiency,
-            axle_inertia, diff_inertia.
+            Deve ter os atributos: final_drive_ratio, axle_inertia,
+            diff_inertia (sprocket_inertia e coroa_inertia são lidos com
+            getattr e default 0).
 
         Returns
         -------
         float
-            Total inertia reflected to motor shaft [kg·m²], including
-            the translational mass term (for rigid single-body models).
+            Inércia total refletida ao eixo do motor [kg·m²], INCLUINDO o
+            termo translacional (para modelos rígidos de corpo único).
         """
         N = transmission.final_drive_ratio
         r = self.wheel_radius
 
         # ── Lado lento (velocidade da roda) ───────────────────────────────
-        # Fator de forma k para conjunto pneu+aro:
-        #   k = 0.80 para rodas com raio interno moderado (fórmula student típica)
+        # Fator de forma k para o conjunto pneu+aro (J = k·m·r²):
+        #   k = 0.80 para rodas com raio interno moderado (Formula Student típica)
         #   k → 1.0  para anel fino; k → 0.5 para disco sólido
         k = 0.80
         j_wheel_single     = k * self.wheel_mass * r**2
@@ -275,7 +340,7 @@ class Vehicle:
         j_axles            = self.n_driven_wheels * transmission.axle_inertia
         j_differential     = transmission.diff_inertia
 
-        # Coroa (lado do diferencial — baixa velocidade) refletida por N²
+        # Coroa (lado do diferencial — baixa velocidade) — também refletida por N²
         j_coroa            = getattr(transmission, 'coroa_inertia', 0.0)
         j_slow_total       = j_all_wheels + j_axles + j_differential + j_coroa
 
@@ -285,13 +350,14 @@ class Vehicle:
         j_slow_reflected   = j_slow_total / (N ** 2)
 
         # ── Lado rápido (velocidade do motor) ────────────────────────────
-        # Sprocket/coroa — parâmetro da transmissão, soma DIRETAMENTE (sem reflexão)
+        # Pinhão/sprocket — parâmetro da transmissão, soma DIRETAMENTE
+        # (já gira na velocidade do motor, não há reflexão)
         j_motor_side       = getattr(transmission, 'sprocket_inertia', 0.0)
 
         # ── Massa translacional do veículo refletida ──────────────────────
-        # A roda "vê" ω_roda = v / r, e o motor vê ω_motor = v / (r/N)
+        # A roda "vê" ω_roda = v/r, e o motor vê ω_motor = v/(r/N).
         # Energia cinética translacional: ½ m v² = ½ m (r/N)² ω_motor²
-        # Portanto a inércia equivalente no motor é:
+        # Portanto a inércia equivalente no eixo do motor é:
         #   J_transl = m × (r/N)²     ← CORRETO
         # (erro clássico: usar m × r², que é N² vezes maior)
         j_translational    = self.mass * (r / N) ** 2
@@ -299,12 +365,9 @@ class Vehicle:
         # ── Total refletido (modelo de corpo único) ───────────────────────
         j_total_reflected  = j_motor_side + j_slow_reflected + j_translational
 
-        # Disponibiliza componentes separados para Simulation.py
-        # (dois corpos: motor + veículo)
+        # Disponibiliza as parcelas separadas para Simulation.py
+        # (modelo de dois corpos: motor + veículo)
         self.j_rot_reflected  = j_motor_side + j_slow_reflected  # sem massa transl.
         self.j_translational  = j_translational
 
         return j_total_reflected
-
-
-  
